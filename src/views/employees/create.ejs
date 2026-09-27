@@ -1,0 +1,306 @@
+<%- include('../partials/header') %>
+
+    <div class="page-header">
+        <div class="header-title-area">
+            <h1 class="page-title">Créer un nouveau salarié</h1>
+            <p class="page-subtitle">Renseignez la fiche individuelle et contractuelle de l'employé</p>
+        </div>
+        <div class="header-actions">
+            <a href="/employees" class="btn-secondary">Annuler</a>
+        </div>
+    </div>
+
+    <% if (typeof error !=='undefined' && error) { %>
+        <div class="alert alert-error">
+            <%= error %>
+        </div>
+        <% } %>
+
+            <form action="/employees/create" method="POST" enctype="multipart/form-data" class="enterprise-form">
+                <!-- Section 1: Informations Personnelles -->
+                <div class="form-section">
+                    <h2 class="section-title">1. État Civil & Identité</h2>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="nom">Nom <span style="color:red;">*</span></label>
+                            <input type="text" id="nom" name="nom" class="form-input" required placeholder="ex: Alami">
+                        </div>
+                        <div class="form-group">
+                            <label for="prenom">Prénom <span style="color:red;">*</span></label>
+                            <input type="text" id="prenom" name="prenom" class="form-input" required
+                                placeholder="ex: Hassan">
+                        </div>
+                        <div class="form-group">
+                            <label for="cin">CIN <span style="color:red;">*</span></label>
+                            <input type="text" id="cin" name="cin" class="form-input" required
+                                placeholder="ex: AB123456">
+                        </div>
+                    </div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="dateNaissance">Date de Naissance <span style="color:red;">*</span></label>
+                            <input type="date" id="dateNaissance" name="dateNaissance" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="sexe">Sexe <span style="color:red;">*</span></label>
+                            <select id="sexe" name="sexe" class="form-input" required>
+                                <option value="M">Masculin (M)</option>
+                                <option value="F">Féminin (F)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="situationFam">Situation Familiale <span style="color:red;">*</span></label>
+                            <select id="situationFam" name="situationFam" class="form-input" required>
+                                <option value="CELIBATAIRE">Célibataire</option>
+                                <option value="MARIE">Marié(e)</option>
+                                <option value="DIVORCE">Divorcé(e)</option>
+                                <option value="VEUF">Veuf/Veuve</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label for="nbPersonacharge">Personnes à charge (IR cap 6)</label>
+                            <input type="number" id="nbPersonacharge" name="nbPersonacharge" class="form-input" min="0"
+                                max="6" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="nbEnfantCharge">Enfants à charge</label>
+                            <input type="number" id="nbEnfantCharge" name="nbEnfantCharge" class="form-input" min="0"
+                                value="0">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Poste & Contrat -->
+                <div class="form-section">
+                    <h2 class="section-title">2. Emploi & Contrat</h2>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="matricule">Matricule (Auto si vide)</label>
+                            <input type="text" id="matricule" name="matricule" class="form-input"
+                                placeholder="ex: EMP-001">
+                        </div>
+                        <div class="form-group">
+                            <label for="fonction">Fonction / Poste</label>
+                            <input type="text" id="fonction" name="fonction" class="form-input"
+                                placeholder="ex: Comptable Senior">
+                        </div>
+                        <div class="form-group">
+                            <label for="codeService">Code Service / Département</label>
+                            <input type="text" id="codeService" name="codeService" class="form-input"
+                                placeholder="ex: RH-01">
+                        </div>
+                    </div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="dateEmbauche">Date d'embauche <span style="color:red;">*</span></label>
+                            <input type="date" id="dateEmbauche" name="dateEmbauche" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="statut">Statut Employé</label>
+                            <select id="statut" name="statut" class="form-input">
+                                <option value="TITULAIRE">Titulaire</option>
+                                <option value="NON_TITULAIRE">Non Titulaire</option>
+                                <option value="VACATAIRE">Vacataire</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="natureEmploi">Nature de l'emploi</label>
+                            <select id="natureEmploi" name="natureEmploi" class="form-input"
+                                onchange="toggleContractFields(this.value)">
+                                <option value="PERMANENT">Permanent (CDI)</option>
+                                <option value="OCCASIONNEL">Occasionnel (CDD)</option>
+                                <option value="STAGIAIRE">Stagiaire</option>
+                                <option value="EXONERE">Exonéré</option>
+                                <option value="DOCTORANT">Doctorant</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-grid-3">
+
+                    </div>
+                    <div class="form-grid-2" id="contract-fields" hidden>
+                        <div class="form-group">
+                            <label for="contratDateDebut">Contrat du</label>
+                            <input type="date" id="contratDateDebut" name="contratDateDebut" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="contratDateFin">Contrat au</label>
+                            <input type="date" id="contratDateFin" name="contratDateFin" class="form-input">
+                        </div>
+                    </div>
+                    <div class="form-grid-3">
+
+
+                    </div>
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label for="adresse">Adresse complète</label>
+                            <input type="text" id="adresse" name="adresse" class="form-input"
+                                placeholder="ex: 15 Bd Zerktouni">
+                        </div>
+                        <div class="form-group">
+                            <label for="ville">Ville</label>
+                            <input type="text" id="ville" name="ville" class="form-input" placeholder="ex: Casablanca">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Remunération & Banque -->
+                <div class="form-section">
+                    <h2 class="section-title">3. Salaire de Base & Coordonnées Bancaires</h2>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="baseSalary">Salaire de Base (DH) <span style="color:red;">*</span></label>
+                            <input type="number" step="0.01" id="baseSalary" name="baseSalary" class="form-input"
+                                required placeholder="ex: 8500.00">
+                            <button type="button" id="net-to-base-open" class="btn-secondary net-to-base-open">Net à
+                                payer → Salaire de base</button>
+                            <p id="net-to-base-form-state" class="net-to-base-form-state" role="status"></p>
+                        </div>
+                        <div class="form-group">
+                            <label for="cimrRate">Taux CIMR (ex: 0.06 pour 6%)</label>
+                            <input type="number" step="0.0001" min="0" max="0.2" id="cimrRate" name="cimrRate"
+                                class="form-input" placeholder="0.06">
+                        </div>
+                        <div class="form-group">
+                            <label for="numeroCNSS">N° Immatriculation CNSS</label>
+                            <input type="text" id="numeroCNSS" name="numeroCNSS" class="form-input"
+                                placeholder="ex: 123456789">
+                        </div>
+
+                    </div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="modePaiement">Mode de paiement</label>
+                            <select id="modePaiement" name="modePaiement" class="form-input">
+                                <option value="VIREMENT">Virement Bancaire</option>
+                                <option value="CHEQUE">Chèque</option>
+                                <option value="ESPECE">Espèces</option>
+                            </select>
+                        </div>
+
+                    </div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="banque">Banque</label>
+                            <input type="text" id="banque" name="banque" class="form-input"
+                                placeholder="ex: Attijariwafa Bank">
+                        </div>
+                        <div class="form-group">
+                            <label for="agence">Agence</label>
+                            <input type="text" id="agence" name="agence" class="form-input"
+                                placeholder="ex: Agence Central">
+                        </div>
+                        <div class="form-group">
+                            <label for="rib">RIB (24 chiffres)</label>
+                            <input type="text" id="rib" name="rib" class="form-input"
+                                placeholder="ex: 225330000000000000000000">
+                        </div>
+                    </div>
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label for="pieceJointe">Pièce jointe</label>
+                            <input type="file" id="pieceJointe" name="pieceJointe" class="form-input"
+                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp">
+                        </div>
+                        <div class="form-group">
+                            <label for="image">Photo du salarié</label>
+                            <input type="file" id="image" name="image" class="form-input"
+                                accept=".jpg,.jpeg,.png,.webp">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 4: Primes & Indemnités non-imposables récurrentes -->
+                <div class="form-section">
+                    <h2 class="section-title">4. Primes & Indemnités non-imposables (Fixes mensuelle)</h2>
+                    <p style="font-size: 13px; color: var(--color-text-subtle); margin-bottom: 16px;">
+                        Sélectionnez les primes/indemnités <strong>exonérées</strong> attribuées à cet employé avec un
+                        montant spécifique.
+                        Ces primes apparaîtront automatiquement sur chaque bulletin mensuel.
+                        Vous pouvez aussi créer une nouvelle prime qui sera réutilisable pour d'autres employés.
+                    </p>
+
+                    <!-- Existing catalog bonuses -->
+                    <div id="bonus-list-container"
+                        style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                        <% if (typeof bonusTypes !=='undefined' && bonusTypes && bonusTypes.length> 0) { %>
+                            <% bonusTypes.forEach(function(bt) { %>
+                                <div class="bonus-row"
+                                    style="display: flex; align-items: center; gap: 16px; background: rgba(255,255,255,0.6); padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border);">
+                                    <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
+                                        <input type="checkbox" name="bonusIds" value="<%= bt.id %>" id="bt-<%= bt.id %>"
+                                            style="width: 18px; height: 18px; accent-color: var(--color-primary);"
+                                            onchange="this.closest('.bonus-row').querySelector('.bonus-amt').required = this.checked; this.closest('.bonus-row').querySelector('.bonus-amt').disabled = !this.checked;">
+                                        <label for="bt-<%= bt.id %>" style="font-weight: 600; cursor: pointer;">
+                                            <%= bt.name %>
+                                                <span class="badge badge-actif"
+                                                    style="margin-left: 8px; font-size: 11px;">Exonéré</span>
+                                        </label>
+                                    </div>
+                                    <div style="width: 220px; display: flex; align-items: center; gap: 8px;">
+                                        <input type="number" step="0.01" name="bonusAmounts" id="amt-<%= bt.id %>"
+                                            class="form-input bonus-amt" placeholder="Montant (DH)"
+                                            style="padding: 6px 12px;" disabled>
+                                        <span style="font-weight: 600; color: var(--color-text-muted);">DH</span>
+                                    </div>
+                                </div>
+                                <% }); %>
+                                    <% } %>
+                    </div>
+
+                    <!-- New bonus creation area -->
+                    <div style="border-top: 1px dashed var(--color-border); padding-top: 16px;">
+                        <p
+                            style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--color-text-muted);">
+                            ➕ Créer une nouvelle prime (sera sauvegardée dans le catalogue de l'entreprise)
+                        </p>
+                        <div id="new-bonus-rows">
+                            <!-- Injected by JS -->
+                        </div>
+                        <button type="button" onclick="addNewBonusRow()" class="btn-secondary"
+                            style="margin-top: 10px; font-size: 13px;">
+                            + Ajouter une nouvelle prime
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Submit Bar -->
+                <div class="form-actions-bar">
+                    <button type="submit" class="btn-primary" style="min-width: 200px;">
+                        Enregistrer le salarié
+                    </button>
+                </div>
+            </form>
+
+            <script>
+                function toggleContractFields(nature) {
+                    const contractFields = document.getElementById('contract-fields');
+                    const contractInputs = contractFields.querySelectorAll('input');
+                    const isCdd = nature === 'OCCASIONNEL';
+                    contractFields.hidden = !isCdd;
+                    contractInputs.forEach(input => {
+                        input.disabled = !isCdd;
+                    });
+                }
+
+                toggleContractFields(document.getElementById('natureEmploi').value);
+
+                function addNewBonusRow() {
+                    const container = document.getElementById('new-bonus-rows');
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:10px;';
+                    row.innerHTML = `
+        <input type="text" name="customBonusNames" class="form-input" placeholder="Nom de la prime (ex: Indemnité de Logement)" style="flex:1;">
+        <input type="number" step="0.01" name="customBonusAmounts" class="form-input" placeholder="Montant (DH)" style="width:180px;">
+        <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:#c00;cursor:pointer;font-size:18px;padding:4px 8px;">✕</button>
+    `;
+                    container.appendChild(row);
+                }
+            </script>
+
+            <%- include('net-to-base') %>
+
+                <%- include('../partials/footer') %>

@@ -1,0 +1,1047 @@
+<%- include('../partials/header') %>
+<% if (typeof bulletinPeriodMessage !== 'undefined' && bulletinPeriodMessage) { %>
+    <div role="alert" id="bulletin-period-message" class="bulk-summary"><%= bulletinPeriodMessage %></div>
+<% } %>
+
+<link rel="stylesheet" href="/css/bulletin-print.css">
+<style>.employee-edit{width:70px;border:0;border-bottom:1px solid #777;background:transparent;font:inherit;color:inherit}.employee-edit:focus{outline:0;border-bottom-color:#111}.salary-edit{display:block;width:110px;margin-top:5px;padding:4px 6px;border:1px solid #999;border-radius:4px;background:#fff;text-align:right;font:inherit}.salary-edit:focus{outline:2px solid #555}.pay-table input[type=number]{max-width:120px;text-align:right}.pay-table .prime-row input,.pay-table .prime-line input{min-height:32px;padding:6px 8px;border:1px solid #999;border-radius:4px;background:#fff;font:inherit}.pay-table .prime-row input[name="primesLabels"],.pay-table .prime-line input[name="primesLabels"]{width:100%;min-width:190px;text-align:left}.pay-table .prime-row input[name="primesAmounts"],.pay-table .prime-line input[name="primesAmounts"]{width:120px;text-align:right}.pay-table .prime-row input:focus,.pay-table .prime-line input:focus{outline:2px solid #555;outline-offset:1px}.pay-table .prime-row input::placeholder,.pay-table .prime-line input::placeholder{color:#777;opacity:1}.pay-table .prime-line .remove-prime{margin-left:6px}.prime-dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;width:min(420px,calc(100% - 32px));border:0;border-radius:8px;padding:0;box-shadow:0 18px 55px rgba(0,0,0,.25)}.prime-dialog::backdrop{background:rgba(0,0,0,.45)}.prime-dialog-content{padding:22px;background:#fff}.prime-dialog h2{margin:0 0 5px;font-size:18px}.prime-dialog p{margin:0 0 18px;color:#666;font-size:13px}.prime-dialog-fields{display:grid;gap:12px}.prime-dialog-fields label{display:grid;gap:5px;color:#444;font-size:12px;font-weight:700}.prime-dialog-fields input{width:100%;box-sizing:border-box;border:1px solid #999;border-radius:4px;padding:10px;font:inherit}.prime-dialog-fields input:focus{outline:2px solid #555}.prime-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.prime-dialog-actions button{border:1px solid #555;background:#fff;padding:9px 13px;cursor:pointer;font:600 12px Arial,sans-serif}.prime-dialog-actions .confirm{background:#222;color:#fff}</style>
+<style>
+    .payroll-print {
+        --ink: #17202a;
+        --muted: #66727e;
+        --line: #d8dee5;
+        --soft: #f4f7f9;
+        --accent: #176b5b;
+        --accent-dark: #0f5145;
+        --danger: #b42318;
+        max-width: 1120px;
+        margin: 32px auto;
+        padding: 32px;
+        border: 1px solid #cbd3da;
+        border-radius: 10px;
+        background: #fff;
+        color: var(--ink);
+        box-shadow: 0 12px 30px rgba(23, 32, 42, 0.08);
+    }
+
+    .payroll-print .print-title {
+        margin: 4px 0 28px;
+        color: var(--ink);
+        font-size: 26px;
+        letter-spacing: 0.08em;
+    }
+
+    .payroll-print .bulletin-status {
+        display: grid;
+        gap: 4px;
+        margin: 0 0 20px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        background: var(--soft);
+        color: var(--ink);
+    }
+
+    .payroll-print .bulletin-status span {
+        color: var(--muted);
+        font-size: 15px;
+    }
+
+    .payroll-print .delete-confirm-dialog .delete-confirm-submit {
+        border-color: #b42318;
+        background: #b42318;
+        color: #fff;
+    }
+
+    .payroll-print .delete-confirm-dialog .delete-confirm-submit:hover {
+        background: #8f1d14;
+    }
+
+    .payroll-print .print-actions {
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 18px;
+    }
+
+    .payroll-print .return-action {
+        margin-right: auto;
+    }
+
+    .payroll-print .print-button,
+    .payroll-print .add-prime {
+        border: 1px solid #aeb9c3;
+        border-radius: 6px;
+        background: #fff;
+        color: var(--ink);
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    .payroll-print .print-button:hover,
+    .payroll-print .add-prime:hover {
+        border-color: var(--accent);
+        color: var(--accent-dark);
+        background: #f0f8f5;
+    }
+
+    .payroll-print .print-button:focus-visible,
+    .payroll-print .add-prime:focus-visible,
+    .payroll-print .remove-prime:focus-visible,
+    .payroll-print input:focus-visible {
+        outline: 3px solid rgba(23, 107, 91, 0.24);
+        outline-offset: 2px;
+    }
+
+    .payroll-print .print-button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
+    }
+
+    .payroll-print .print-button.primary:hover {
+        border-color: var(--accent-dark);
+        background: var(--accent-dark);
+    }
+
+    .payroll-print .employee-info {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+    }
+
+    .payroll-print .employee-info .item {
+        min-height: 58px;
+        padding: 11px 13px;
+        border-right: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+    }
+
+    .payroll-print .employee-info .item:nth-child(4n) {
+        border-right: 0;
+    }
+
+    .payroll-print .employee-info .item:nth-last-child(-n + 4) {
+        border-bottom: 0;
+    }
+
+    .payroll-print .employee-info .label {
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+    }
+
+    .payroll-print .employee-edit,
+    .payroll-print .salary-edit,
+    .payroll-print .pay-table input {
+        border-color: #b9c4cc;
+        border-radius: 4px;
+        color: var(--ink);
+    }
+
+    .payroll-print .pay-table {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        border-collapse: separate;
+        border-spacing: 0;
+        box-shadow: 0 3px 10px rgba(23, 32, 42, 0.04);
+    }
+
+    .payroll-print .pay-table th {
+        padding: 10px 9px;
+        border-color: #c5ced6;
+        background: #e9f0f2;
+        color: #26343d;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+    }
+
+    .payroll-print .pay-table td {
+        padding: 9px;
+        border-color: var(--line);
+    }
+
+    .payroll-print .pay-table tbody tr:nth-child(even):not(.gross):not(.net):not(.disabled-row) {
+        background: #fbfcfd;
+    }
+
+    .payroll-print .pay-table .gross {
+        background: #eef5f3;
+        color: #173f37;
+    }
+
+    .payroll-print .pay-table .net,
+    .payroll-print .totals .net {
+        background: #dcefe9;
+        color: #123e34;
+    }
+
+    .payroll-print .pay-table .disabled-row {
+        background: #f7f8f9;
+        color: #5e6972;
+    }
+
+    .payroll-print .pay-table .num,
+    .payroll-print .totals .num {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+    .payroll-print .remove-prime {
+        min-width: 28px;
+        min-height: 28px;
+        margin-left: 6px;
+        border: 1px solid #f0c4c0;
+        border-radius: 50%;
+        background: #fff7f6;
+        color: var(--danger);
+        font-size: 20px;
+        line-height: 1;
+    }
+
+    .payroll-print .remove-prime:hover {
+        border-color: var(--danger);
+        background: #fdecea;
+    }
+
+    .payroll-print .totals {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .payroll-print .totals td {
+        padding: 9px 11px;
+        border-color: var(--line);
+    }
+
+    .payroll-print #calculation-state,
+    .payroll-print #calculation-error {
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 14px;
+    }
+
+    .payroll-print #calculation-error {
+        padding: 10px 12px;
+        border-left: 3px solid var(--danger);
+        background: #fff4f2;
+        color: #8f2118;
+    }
+
+    .payroll-print .prime-dialog {
+        max-width: calc(100% - 32px);
+        border: 1px solid #cbd3da;
+        border-radius: 10px;
+        box-shadow: 0 20px 60px rgba(23, 32, 42, 0.22);
+    }
+
+    .payroll-print .prime-dialog-content {
+        padding: 26px;
+    }
+
+    .payroll-print .prime-dialog h2 {
+        color: var(--ink);
+        font-size: 21px;
+    }
+
+    .payroll-print .prime-dialog p {
+        color: var(--muted);
+        line-height: 1.5;
+    }
+
+    .payroll-print .prime-dialog-fields input {
+        border-color: #b9c4cc;
+        border-radius: 6px;
+    }
+
+    .payroll-print .prime-dialog-actions button {
+        border-radius: 6px;
+    }
+
+    @media (max-width: 760px) {
+        .payroll-print {
+            margin: 12px;
+            padding: 18px;
+            border-radius: 8px;
+        }
+
+        .payroll-print .employee-info {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .payroll-print .employee-info .item:nth-child(4n) {
+            border-right: 1px solid var(--line);
+        }
+
+        .payroll-print .employee-info .item:nth-child(2n) {
+            border-right: 0;
+        }
+
+        .payroll-print .employee-info .item:nth-last-child(-n + 4) {
+            border-bottom: 1px solid var(--line);
+        }
+
+        .payroll-print .employee-info .item:nth-last-child(-n + 2) {
+            border-bottom: 0;
+        }
+
+        .payroll-print .pay-table {
+            display: block;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+    }
+
+    @media print {
+        .payroll-print {
+            max-width: none;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .payroll-print .print-actions,
+        .payroll-print #calculation-state,
+        .payroll-print #calculation-error,
+        .payroll-print dialog {
+            display: none !important;
+        }
+
+        .payroll-print .pay-table,
+        .payroll-print .totals {
+            box-shadow: none;
+        }
+    }
+
+    /* Corporate payroll workspace overrides */
+    .payroll-print {
+        --ink: #17212b;
+        --muted: #687684;
+        --line: #d8e0e7;
+        --soft: #f5f8fa;
+        --accent: #0d6b5d;
+        --accent-dark: #084f46;
+        --danger: #b42318;
+        max-width: 1180px;
+        margin: 24px auto 48px;
+        padding: 28px 32px 34px;
+        border: 1px solid #d6dee5;
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        font-family: "Segoe UI", Arial, sans-serif;
+        box-shadow: 0 14px 34px rgba(23, 33, 43, 0.08);
+    }
+
+    .payroll-print .print-title {
+        margin: 2px 0 22px;
+        color: #17212b;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+    }
+
+    .payroll-print .print-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+    .payroll-print .print-button,
+    .payroll-print .add-prime {
+        min-height: 36px;
+        padding: 8px 13px;
+        border: 1px solid #c4ced7;
+        border-radius: 5px;
+        background: #fff;
+        color: #25313c;
+        font: 600 13px "Segoe UI", Arial, sans-serif;
+        cursor: pointer;
+        transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+    }
+
+    .payroll-print .print-button:hover,
+    .payroll-print .add-prime:hover {
+        border-color: var(--accent);
+        background: #f0f8f6;
+        color: var(--accent-dark);
+    }
+
+    .payroll-print .print-button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
+    }
+
+    .payroll-print .print-button.primary:hover {
+        border-color: var(--accent-dark);
+        background: var(--accent-dark);
+    }
+
+    .payroll-print .employee-info {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+    }
+
+    .payroll-print .employee-info .item {
+        min-height: 62px;
+        padding: 12px 14px;
+        border-right: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        font-size: 15px;
+    }
+
+    .payroll-print .employee-info .label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    .payroll-print .employee-edit {
+        width: 72px;
+        border: 1px solid #b9c6cf;
+        border-radius: 4px;
+        padding: 5px 7px;
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+    }
+
+    .payroll-print .employee-edit:disabled,
+    .payroll-print .pay-table input:disabled {
+        border-color: transparent;
+        background: #f3f6f8;
+        color: #65727e;
+        cursor: not-allowed;
+    }
+
+    .payroll-print .bulletin-status {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        margin: 0 0 20px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 5px;
+        background: var(--soft);
+    }
+
+    .payroll-print .bulletin-status strong {
+        white-space: nowrap;
+    }
+
+    .payroll-print .bulletin-status span {
+        color: var(--muted);
+        font-size: 15px;
+    }
+
+    .payroll-print .pay-table {
+        width: 100%;
+        margin-top: 22px;
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        font-size: 15px;
+    }
+
+    .payroll-print .pay-table th {
+        padding: 11px 10px;
+        border-bottom: 1px solid #c7d2db;
+        background: #edf3f5;
+        color: #43515d;
+        font-size: 12px;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+    }
+
+    .payroll-print .pay-table td {
+        padding: 9px 10px;
+        border-bottom: 1px solid #e5ebef;
+    }
+
+    .payroll-print .pay-table tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .payroll-print .pay-table .gross {
+        background: #f7fafb;
+        color: #263642;
+        font-weight: 700;
+    }
+
+    .payroll-print .pay-table .net,
+    .payroll-print .totals .net {
+        background: #e8f4f0;
+        color: #084f46;
+    }
+
+    .payroll-print .pay-table input {
+        border: 1px solid #c4ced7;
+        border-radius: 4px;
+        padding: 6px 8px;
+        background: #fff;
+        font: inherit;
+    }
+
+    .payroll-print .pay-table input:focus-visible,
+    .payroll-print .employee-edit:focus-visible,
+    .payroll-print .print-button:focus-visible,
+    .payroll-print .add-prime:focus-visible,
+    .payroll-print .remove-prime:focus-visible {
+        outline: 3px solid rgba(13, 107, 93, .2);
+        outline-offset: 2px;
+    }
+
+    .payroll-print .totals {
+        margin-top: 18px;
+        max-width: 460px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .payroll-print .totals td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e5ebef;
+    }
+
+    .payroll-print .totals tr:last-child td {
+        border-bottom: 0;
+    }
+
+        .payroll-print .net-pay-cell {
+            padding: 18px 0 0;
+            border: 0;
+            background: #fff;
+            text-align: right;
+        }
+
+        .payroll-print .net-pay-callout-content {
+            display: inline-block;
+            width: min(360px, 100%);
+            box-sizing: border-box;
+            padding: 14px 18px;
+            border: 2px solid var(--accent);
+            border-radius: 6px;
+            background: #e8f4f0;
+            color: var(--accent-dark);
+            text-align: right;
+        }
+
+        .payroll-print .net-pay-callout-label {
+            display: block;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: .05em;
+        }
+
+        .payroll-print .net-pay-callout-value {
+            display: block;
+            margin-top: 4px;
+            font-size: 26px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+
+    .payroll-print .annual-cumulative {
+        margin-top: 18px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 6px;
+        background: var(--soft);
+    }
+
+    .payroll-print .annual-cumulative-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .payroll-print .annual-cumulative h2 {
+        margin: 0;
+        color: var(--ink);
+        font-size: 17px;
+    }
+
+    .payroll-print .annual-cumulative-note {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+    }
+
+    .payroll-print .annual-cumulative-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 1px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        background: var(--line);
+    }
+
+    .payroll-print .annual-cumulative-item {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+        padding: 10px;
+        background: #fff;
+    }
+
+    .payroll-print .annual-cumulative-item span {
+        color: var(--muted);
+        font-size: 13px;
+    }
+
+    .payroll-print .annual-cumulative-item strong {
+        color: var(--ink);
+        font-size: 16px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .payroll-print .print-button.bulletin-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        text-decoration: none;
+        min-height: 52px;
+        min-width: 140px;
+        padding: 14px 26px;
+        font-size: 19px;
+        font-weight: 700;
+    }
+
+    .payroll-print .print-button.bulletin-action:disabled {
+        opacity: .5;
+        cursor: not-allowed;
+        background: var(--soft);
+        border-color: var(--line);
+        color: var(--muted);
+    }
+
+    @media (max-width: 760px) {
+        .payroll-print {
+            margin: 12px 10px 28px;
+            padding: 18px 14px 22px;
+        }
+
+        .payroll-print .employee-info {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .payroll-print .bulletin-status {
+            display: grid;
+            gap: 5px;
+        }
+
+        .payroll-print .annual-cumulative-header {
+            display: grid;
+        }
+
+        .payroll-print .annual-cumulative-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+</style>
+<%
+    const values = bulletin || previewResult || {};
+    const bulletinStatus = bulletin?.status || 'draft';
+    const locked = Boolean(bulletin && ['validated', 'closed'].includes(bulletinStatus));
+    const closed = bulletinStatus === 'closed';
+    const canManageIndemnity = !bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus);
+    const canEditIndemnityFields = !bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus);
+    const statusLabel = {
+        draft: 'Brouillon',
+        generated: 'Brouillon',
+        validated: 'Validé',
+        closed: 'Clôturé',
+    }[bulletinStatus] || bulletinStatus;
+    const employeeName = `${emp.nom} ${emp.prenom}`;
+    const dateValue = value => value ? new Date(value).toLocaleDateString('fr-MA') : '—';
+    const money = value => `${fmt(value)} DH`;
+    const primes = values.variablePrimes || [];
+    const fixedPrimeKeys = new Set((emp.bonuses || [])
+        .filter(item => item.bonus ? item.bonus.taxable : item.taxable)
+        .map(item => `${String(item.bonus ? item.bonus.name : item.name || '').toLowerCase()}|${Number(item.amount)}`));
+    const nimpLines = bulletin ? (bulletin.fixedNimpLines || []) : (values.nimpLines || []);
+    const monthlyNimpLines = bulletin ? (bulletin.monthlyNimpLines || []) : [];
+    const annual = annualCumulative || values.annualCumulative || {};
+    const totalDeductions = Number(values.cnss || 0)
+        + Number(values.amo || 0)
+        + Number(values.cimr || 0)
+        + Number(values.irNet || 0)
+        + Number(values.avances || 0);
+%>
+
+<div
+    class="payroll-print"
+    data-employee-id="<%= emp.id %>"
+    data-month="<%= month || '' %>"
+    data-year="<%= year || '' %>"
+    data-saved="<%= Boolean(bulletin) %>"
+    data-locked="<%= locked %>">
+    <% if (month && year) {
+    %>
+        <% if (!bulletin) { %>
+            <p class="bulletin-status" role="status">Aucun bulletin enregistré pour cette période. Les montants affichés sont un aperçu calculé avec les données actuelles.</p>
+        <% } %>
+    <% } %>
+    <form id="payroll-form" method="POST" action="/bulletins/<%= emp.id %>/generate">
+        <input type="hidden" name="month" value="<%= month || '' %>">
+        <input type="hidden" name="year" value="<%= year || '' %>">
+
+        <div class="print-actions">
+            <a class="print-button return-action" href="/bulletins">Retour</a>
+            <% if (bulletin && ['draft', 'generated'].includes(bulletinStatus)) { %>
+                <button class="print-button bulletin-action primary" type="submit" formaction="/bulletins/<%= emp.id %>/validate">Valider</button>
+            <% } else if (bulletinStatus === 'validated') { %>
+                <button class="print-button bulletin-action" type="submit" formaction="/bulletins/<%= emp.id %>/draft">Retourner en brouillon</button>
+                <button class="print-button bulletin-action primary close-action" type="submit" formaction="/bulletins/<%= emp.id %>/close" data-confirm="Êtes-vous sûr de vouloir clôturer le bulletin de <%= employeeName %> pour <%= monthName %> <%= year %> ?" data-confirm-title="Clôturer ce bulletin" data-confirm-label="Oui, clôturer" data-confirm-danger="true">Clôturer</button>
+            <% } %>
+            <% if (previousBulletinUrl) { %>
+                <a class="print-button bulletin-action" href="<%= previousBulletinUrl %>" title="Bulletin précédent : <%= previousEmployee.nom %> <%= previousEmployee.prenom %>">Précédents</a>
+            <% } else { %>
+                <button class="print-button bulletin-action" type="button" disabled title="Premier employé de la liste">Précédents</button>
+            <% } %>
+            <% if (nextBulletinUrl) { %>
+                <a class="print-button bulletin-action" href="<%= nextBulletinUrl %>" title="Bulletin suivant : <%= nextEmployee.nom %> <%= nextEmployee.prenom %>">Suivant</a>
+            <% } else { %>
+                <button class="print-button bulletin-action" type="button" disabled title="Dernier employé de la liste">Suivant</button>
+            <% } %>
+        </div>
+
+        <% if (bulletin) { %>
+            <div class="bulletin-status" role="status" aria-live="polite">
+                <strong>Statut : <%= statusLabel %></strong>
+                <% if (bulletinStatus === 'validated') { %>
+                    <span>Bulletin en lecture seule. Retournez en brouillon pour modifier les données de paie.</span>
+                <% } else if (closed) { %>
+                    <span>Bulletin clôturé et verrouillé. Seules les indemnités non imposables peuvent être ajoutées, modifiées ou supprimées.</span>
+                <% } else { %>
+                    <span>Les données du bulletin sont modifiables.</span>
+                <% } %>
+            </div>
+        <% } %>
+
+        <div class="print-title">Traitement De Paie — <%= monthName %> <%= year %></div>
+
+        <div class="employee-info">
+            <div class="item">
+                <span class="label">NOM &amp; PRÉNOM</span>
+                <%= employeeName %>
+            </div>
+            <div class="item">
+                <span class="label">MATRICULE</span>
+                <%= emp.matricule || '—' %>
+            </div>
+            <div class="item">
+                <span class="label">N° CNSS</span>
+                <%= emp.numeroCNSS || '—' %>
+            </div>
+            <div class="item">
+                <span class="label">FONCTION</span>
+                <%= emp.fonction || '—' %>
+            </div>
+            <div class="item">
+                <span class="label">N° CIN</span>
+                <%= emp.cin || '—' %>
+            </div>
+            <div class="item">
+                <span class="label">DATE D'ENTRÉE</span>
+                <%= dateValue(emp.dateEmbauche) %>
+            </div>
+            <div class="item">
+                <span class="label">SITUATION FAMILIALE</span>
+                <%= emp.situationFam || '—' %>
+            </div>
+            <div class="item">
+                <span class="label">NOMBRE DE PERSONNES À CHARGE</span>
+                <%= emp.nbPersonacharge ?? 0 %>
+            </div>
+        </div>
+
+        <br>
+
+        <div class="print-actions">
+            <% if (!locked) { %>
+                <button type="button" class="add-prime" id="add-prime">+ Ajouter une prime imposable</button>
+            <% } %>
+            <% if (canManageIndemnity) { %>
+                <button type="button" class="add-prime" id="add-indemnity">+ Ajouter une indemnité non imposable</button>
+            <% } %>
+        </div>
+
+
+        <table class="pay-table">
+            <thead>
+                <tr>
+                    <th style="width:28%">LIBELLÉS</th>
+                    <th>NBR / BASE</th>
+                    <th>TAUX</th>
+                    <th>GAINS</th>
+                    <th>RETENUES</th>
+                    <th>COTIS. PATR.</th>
+                </tr>
+            </thead>
+            <tbody id="prime-lines">
+                <tr>
+                    <td class="description">Salaire de base</td>
+                    <td class="num">
+                        <input class="employee-edit live-input" name="workedDays" aria-label="Nombre de jours travaillés" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="26" step="1" required value="<%= values.workedDays ?? 26 %>" <%= locked || emp.blocageSaisiePaie ? 'disabled' : '' %>>
+                    </td>
+                    <td class="num">—</td>
+                    <td class="num">
+                        <span data-result="baseSalary"><%= fmt(values.baseSalary ?? emp.baseSalary) %></span>
+                    </td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                </tr>
+                <tr class="seniority-row">
+                    <td class="description">Prime d'ancienneté</td>
+                    <td class="num" data-result="baseSalary"><%= fmt(values.baseSalary ?? emp.baseSalary) %></td>
+                    <td class="num"><%= values.ancienneteRate ? `${fmt(values.ancienneteRate * 100)}%` : '—' %></td>
+                    <td class="num" data-result="primeAnciennete"><%= fmt(values.primeAnciennete) %></td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                </tr>
+                <% primes.forEach(prime => { %>
+                    <% const fixedPrime = fixedPrimeKeys.has(`${String(prime.label).toLowerCase()}|${Number(prime.amount)}`); %>
+                    <tr class="prime-row taxable-prime-line">
+                        <td class="description">
+                            <input name="primesLabels" value="<%= prime.label %>" placeholder="Nom de la prime" <%= locked ? 'disabled' : '' %>>
+                        </td>
+                        <td class="num">—</td>
+                        <td class="num">—</td>
+                        <td class="num">
+                            <input class="live-input" name="primesAmounts" type="number" min="0" step="0.01" value="<%= prime.amount %>" placeholder="Montant DH" <%= locked ? 'disabled' : '' %>>
+                        </td>
+                        <td class="num">—</td>
+                        <td class="num">
+                            <% if (!locked && !fixedPrime) { %>
+                                <button type="button" class="remove-prime" aria-label="Supprimer la prime">×</button>
+                            <% } else { %>
+                                —
+                            <% } %>
+                        </td>
+                    </tr>
+                <% }); %>
+                <tr class="gross">
+                    <td colspan="3" class="description">SALAIRE BRUT IMPOSABLE <br></td>
+                    <td class="num"><span data-result="sbi"><%= fmt(values.sbi) %></span></td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                </tr>
+
+                <tr>
+                    <td class="description">CNSS </td>
+                    <td class="num" data-result="cnssBase"><%= fmt(Math.min(values.sbi, 6000)) %></td>
+                    <td class="num">4,48%</td>
+                    <td class="num">—</td>
+                    <td class="num"><span data-result="cnss"><%= fmt(values.cnss) %></span></td>
+                    <td class="num" data-result="cnssPatronale"><%= fmt(values.cnssPatronale) %></td>
+                </tr>
+                <tr>
+                    <td class="description">AMO </td>
+                    <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
+                    <td class="num">2,26%</td>
+                    <td class="num">—</td>
+                    <td class="num"><span data-result="amo"><%= fmt(values.amo) %></span></td>
+                    <td class="num" data-result="amoPatronale"><%= fmt(values.amoPatronale) %></td>
+                </tr>
+                <tr>
+                    <td class="description">Avance sur salaire</td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                    <td class="num"><%= fmt(values.avances) %></td>
+                    <td class="num">—</td>
+                </tr>
+
+                <tr>
+                    <td class="description" title="Déduction utilisée pour calculer le revenu imposable.">Frais professionnels (déduction fiscale)</td>
+                    <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
+                    <td class="num" data-result="fraisProRate"><%= fmt(Number(values.fraisProRate || 0) * 100) %>%</td>
+                    <td class="num">—</td>
+                    <td class="num" data-result="fraisPro"><%= fmt(values.fraisPro) %></td>
+                    <td class="num">—</td>
+                </tr>
+
+                <tr class="gross">
+                    <td colspan="3" class="description">SALAIRE NET IMPOSABLE (SNI)<br></td>
+                    <td class="num"><span data-result="sni"><%= fmt(values.sni) %></span></td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                </tr>
+                <tr class="gross">
+                    <td colspan="3" class="description">IR<br></td>
+                    <td class="num"></td>
+                    <td class="num"><span data-result="irNet"><%= fmt(values.irNet) %></span></td>
+                    <td class="num">—</td>
+                </tr>
+
+                <% nimpLines.forEach(line => { %>
+                    <tr class="disabled-row">
+                        <td class="description">
+                            <%= line.label %> 
+                            <input type="hidden" name="nimpLabels" value="<%= line.label %>">
+                            <input type="hidden" name="nimpAmounts" value="<%= line.amount %>">
+                        </td>
+                        <td class="num">—</td>
+                        <td class="num">—</td>
+                        <td class="num"><%= fmt(line.amount) %></td>
+                        <td class="num">—</td>
+                        <td class="num">—</td>
+                    </tr>
+                <% }); %>
+                <% monthlyNimpLines.forEach(line => { %>
+                    <tr class="monthly-indemnity-row prime-row monthly-indemnity-line">
+                        <td class="description">
+                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" <%= canEditIndemnityFields ? '' : 'disabled' %>>
+                        </td>
+                        <td class="num">—</td>
+                        <td class="num">—</td>
+                        <td class="num">
+                            <input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" type="number" min="0" step="0.01" value="<%= line.amount %>" placeholder="Montant DH" <%= canEditIndemnityFields ? '' : 'disabled' %>>
+                        </td>
+                        <td class="num">—</td>
+                        <td class="num">
+                            <% if (canManageIndemnity) { %>
+                                <button type="button" class="remove-prime" aria-label="Supprimer l'indemnité">×</button>
+                            <% } else { %>
+                                —
+                            <% } %>
+                        </td>
+                    </tr>
+                <% }); %>
+                <tr class="gross totals-row">
+                    <td colspan="3" class="description">TOTAUX</td>
+                    <td class="num"><span data-result="sbg"><%= money(values.sbg) %></span></td>
+                    <td class="num"><span data-result="deductionsTotal"><%= money(totalDeductions) %></span></td>
+                    <td class="num">—</td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="6" class="net-pay-cell">
+                        <div class="net-pay-callout-content">
+                            <span class="net-pay-callout-label">SALAIRE NET À PAYER</span>
+                            <span class="net-pay-callout-value" data-result="netAPayer"><%= money(values.netAPayer) %></span>
+                        </div>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <section class="annual-cumulative" aria-labelledby="annual-cumulative-title">
+            <div class="annual-cumulative-header">
+                <h2 id="annual-cumulative-title">Cumul annuel <%= year %></h2>
+                <p class="annual-cumulative-note">Bulletin courant inclus · données officielles de l'exercice</p>
+            </div>
+            <div class="annual-cumulative-grid">
+                <div class="annual-cumulative-item" title="Nombre de bulletins cumulés dans l'année, bulletin courant inclus">
+                    <span>Période</span>
+                    <strong data-result="periode"><%= periode %></strong>
+                </div>
+                <div class="annual-cumulative-item">
+                    <span>Jours travaillés</span>
+                    <strong data-result="annualWorkedDays"><%= Number(annual.workedDays || 0).toLocaleString('fr-MA') %></strong>
+                </div>
+                <div class="annual-cumulative-item">
+                    <span>Salaire brut imposable (SBI)</span>
+                    <strong data-result="annualSbi"><%= money(annual.sbi) %></strong>
+                </div>
+                
+                <div class="annual-cumulative-item">
+                    <span>IR </span>
+                    <strong data-result="annualIrNet"><%= money(annual.irNet) %></strong>
+                </div>
+                <div class="annual-cumulative-item">
+                    <span>CNSS salariale</span>
+                    <strong data-result="annualCnss"><%= money(annual.cnss) %></strong>
+                </div>
+                <div class="annual-cumulative-item">
+                    <span>AMO salariale</span>
+                    <strong data-result="annualAmo"><%= money(annual.amo) %></strong>
+                </div>
+            </div>
+        </section>
+
+        <div id="calculation-state" aria-live="polite"></div>
+        <div id="calculation-error" hidden></div>
+
+        <div class="print-note">Document généré automatiquement. SBG - indemnités non imposablesLes montants sont calculés selon les données de l'employé et la période sélectionnée.</div>
+    </form>
+
+    <% if (!locked || canManageIndemnity) { %>
+        <% if (!locked) { %>
+            <dialog class="prime-dialog" id="prime-dialog">
+            <form method="dialog" id="prime-dialog-form" class="prime-dialog-content">
+                <h2>Ajouter une prime imposable</h2>
+                <p>Cette prime sera ajoutée uniquement au bulletin du mois courant.</p>
+                <div class="prime-dialog-fields">
+                    <label>
+                        Nom de la prime
+                        <input id="prime-label-input" required placeholder="Ex. Prime de rendement">
+                
+                    <label>
+                        Montant en DH
+                        <input id="prime-amount-input" required type="number" min="0.01" step="0.01" placeholder="Ex. 1 000,00">
+                    </label>
+                </div>
+                <div class="prime-dialog-actions">
+                    <button type="button" id="prime-dialog-cancel">Annuler</button>
+                    <button class="confirm" value="add" type="submit">Ajouter la prime</button>
+                </div>
+            </form>
+            </dialog>
+        <% } %>
+
+        <dialog class="prime-dialog" id="indemnity-dialog">
+            <form method="dialog" id="indemnity-dialog-form" class="prime-dialog-content">
+                <h2>Ajouter une indemnité non imposable</h2>
+                <p>Elle sera ajoutée uniquement au bulletin du mois courant, après l'IR.</p>
+                <div class="prime-dialog-fields">
+                    <label>
+                        Libellé de l'indemnité
+                        <input id="indemnity-label-input" required placeholder="Ex. Indemnité de transport">
+                    </label>
+                    <label>
+                        Montant en DH
+                        <input id="indemnity-amount-input" required type="number" min="0.01" step="0.01" placeholder="Ex. 500,00">
+                    </label>
+                </div>
+                <div class="prime-dialog-actions">
+                    <button type="button" id="indemnity-dialog-cancel">Annuler</button>
+                    <button class="confirm" value="add" type="submit">Ajouter l'indemnité</button>
+                </div>
+            </form>
+        </dialog>
+
+
+    <% } %>
+</div>
+<script src="/js/show-bulletin.js"></script>
+<%- include('../partials/footer') %>
+                

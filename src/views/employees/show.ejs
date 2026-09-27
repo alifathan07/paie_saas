@@ -1,0 +1,130 @@
+<%- include('../partials/header') %>
+
+    <% /* Ancienneté values computed from payroll engine rules */ const years=(payroll && payroll.ancienneteYears
+        !==undefined) ? payroll.ancienneteYears : 0; const totalMonths=(payroll && payroll.ancienneteMonths
+        !==undefined) ? payroll.ancienneteMonths : 0; const months=totalMonths % 12; const seniorityRate=(payroll &&
+        payroll.ancienneteRate !==undefined) ? Math.round(payroll.ancienneteRate * 100) : 0; %>
+
+        <div class="page-header">
+            <div class="header-title-area ">
+                <h1 class="page-title">
+                    <%= employee.nom %>
+                        <%= employee.prenom %>
+                </h1>
+                <p class="page-subtitle">Matricule: <%= employee.matricule %> | CIN: <%= employee.cin %> | Status: <%=
+                                employee.statut %>
+                </p>
+            </div>
+            <div class="header-actions">
+                <a href="/bulletins/<%= employee.id %>?month=<%= new Date().getMonth() + 1 %>&year=<%= new Date().getFullYear() %>"
+                    class="btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Ouvrir le bulletin
+                </a>
+                <a href="/employees/<%= employee.id %>/edit" class="btn-secondary">Éditer</a>
+                <a href="/employees" class="btn-secondary">Retour</a>
+            </div>
+        </div>
+
+        <div>
+            <!-- Profile & Contract Info Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Information Contractuelle & Civil</h2>
+                    <span class="badge <%= employee.actif ? 'badge-actif' : 'badge-draft' %>">
+                        <%= employee.actif ? 'Actif' : 'Inactif' %>
+                    </span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px;">
+                    <div>
+                        <span style="color: var(--color-text-subtle); display: block;">Fonction / Poste:</span>
+                        <strong>
+                            <%= employee.fonction || 'Non défini' %>
+                        </strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--color-text-subtle); display: block;">Code Service:</span>
+                        <strong>
+                            <%= employee.codeService || 'Non défini' %>
+                        </strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--color-text-subtle); display: block;">Date d'embauche:</span>
+                        <strong>
+                            <%= new Date(employee.dateEmbauche).toLocaleDateString('fr-FR') %>
+                        </strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--color-text-subtle); display: block;">Ancienneté (Calculée):</span>
+                        <strong>
+                            <%= years %> ans <%= months %> mois (<%= seniorityRate %>% taux)
+                        </strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--color-text-subtle); display: block;">Nature d'emploi:</span>
+                        <strong>
+                            <%= employee.natureEmploi %>
+                        </strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--color-text-subtle); display: block;">Situation Familiale:</span>
+                        <strong>
+                            <%= employee.situationFam %> (<%= employee.nbPersonacharge %> p. à charge)
+                        </strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--color-text-subtle); display: block;">Numéro CNSS:</span>
+                        <strong>
+                            <%= employee.numeroCNSS || 'Non affilié' %>
+                        </strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--color-text-subtle); display: block;">Mode de Paiement:</span>
+                        <strong>
+                            <%= employee.modePaiement %>
+                        </strong>
+                    </div>
+                </div>
+
+                <!-- Primes attribuées -->
+                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-border);">
+                    <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px;">Primes & Indemnités attribuées:
+                    </h3>
+                    <% if (employee.bonuses && employee.bonuses.length> 0) { %>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <% employee.bonuses.forEach(function(eb) { %>
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.5); padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px;">
+                                    <div>
+                                        <strong>
+                                            <%= eb.bonus.name %>
+                                        </strong>
+                                        <span class="badge <%= eb.bonus.taxable ? 'badge-draft' : 'badge-actif' %>"
+                                            style="margin-left: 6px; font-size: 10px;">
+                                            <%= eb.bonus.taxable ? 'Imposable' : 'Exonéré' %>
+                                        </span>
+                                    </div>
+                                    <strong style="color: var(--color-primary);">
+                                        <%= Number(eb.amount).toLocaleString('fr-MA', { minimumFractionDigits: 2 }) %>
+                                            DH
+                                    </strong>
+                                </div>
+                                <% }); %>
+                        </div>
+                        <% } else { %>
+                            <p style="font-size: 13px; color: var(--color-text-subtle);">Aucune prime attribuée.</p>
+                            <% } %>
+                </div>
+            </div>
+
+            <!-- Payroll Calculation Projection Card -->
+
+        </div>
+
+        <%- include('../partials/footer') %>

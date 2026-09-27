@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>
+        <%= typeof title !=='undefined' ? title : 'Connexion' %> — Paie Software
+    </title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/css/custom.css">
+    <!-- IBM Plex Sans loaded via custom.css @import -->
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+
+<body class="login-page">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-logo">
+                <div class="logo-placeholder">P</div>
+            </div>
+            <h1 class="login-title">Connexion</h1>
+            <p class="login-subtitle">Connectez-vous à votre espace Paie Software</p>
+
+            <div id="login-error">
+                <% if (typeof error !== 'undefined' && error) { %>
+                    <div class="alert alert-error"><%= error %></div>
+                <% } %>
+            </div>
+
+            <form action="/auth/login" method="POST" hx-post="/auth/login" hx-target="#login-error"
+                hx-swap="innerHTML" hx-indicator="#login-btn">
+                <div class="form-group">
+                    <label for="email">Adresse e-mail</label>
+                    <input type="email" id="email" name="email" class="form-input" placeholder="exemple@paie.ma"
+                        required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password">Mot de passe</label>
+                    <input type="password" id="password" name="password" class="form-input" placeholder="••••••••"
+                        required>
+                </div>
+                <div class="form-row">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="remember" value="1"> Se souvenir de moi
+                    </label>
+                    <a href="#" class="forgot-link">Mot de passe oublié ?</a>
+                </div>
+                <button type="submit" class="btn-primary" id="login-btn">
+                    <span class="btn-text">Se connecter</span>
+                    <span class="htmx-indicator">Connexion en cours…</span>
+                </button>
+            </form>
+        </div>
+        <div class="login-footer">© 2026 Paie Software</div>
+    </div>
+</body>
+
+</html>

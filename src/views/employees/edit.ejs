@@ -1,0 +1,319 @@
+<%- include('../partials/header') %>
+
+<div class="page-header">
+    <div class="header-title-area">
+        <h1 class="page-title">Éditer le salarié: <%= employee.nom %> <%= employee.prenom %></h1>
+        <p class="page-subtitle">Modification des données individuelles et contractuelles</p>
+    </div>
+    <div class="header-actions">
+        <a href="/employees/<%= employee.id %>" class="btn-secondary">Annuler</a>
+    </div>
+</div>
+
+<% if (typeof error !== 'undefined' && error) { %>
+    <div class="alert alert-error"><%= error %></div>
+<% } %>
+
+<form action="/employees/<%= employee.id %>/edit" method="POST" enctype="multipart/form-data" class="enterprise-form">
+    <!-- Section 1: Informations Personnelles -->
+    <div class="form-section">
+        <h2 class="section-title">1. État Civil & Identité</h2>
+        <div class="form-grid-3">
+            <div class="form-group">
+                <label for="nom">Nom <span style="color:red;">*</span></label>
+                <input type="text" id="nom" name="nom" class="form-input" required value="<%= employee.nom %>">
+            </div>
+            <div class="form-group">
+                <label for="prenom">Prénom <span style="color:red;">*</span></label>
+                <input type="text" id="prenom" name="prenom" class="form-input" required value="<%= employee.prenom %>">
+            </div>
+            <div class="form-group">
+                <label for="cin">CIN <span style="color:red;">*</span></label>
+                <input type="text" id="cin" name="cin" class="form-input" required value="<%= employee.cin %>">
+            </div>
+        </div>
+        <div class="form-grid-3">
+            <div class="form-group">
+                <label for="dateNaissance">Date de Naissance <span style="color:red;">*</span></label>
+                <input type="date" id="dateNaissance" name="dateNaissance" class="form-input" required value="<%= new Date(employee.dateNaissance).toISOString().split('T')[0] %>">
+            </div>
+            <div class="form-group">
+                <label for="sexe">Sexe <span style="color:red;">*</span></label>
+                <select id="sexe" name="sexe" class="form-input" required>
+                    <option value="M" <%= employee.sexe === 'M' ? 'selected' : '' %>>Masculin (M)</option>
+                    <option value="F" <%= employee.sexe === 'F' ? 'selected' : '' %>>Féminin (F)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="situationFam">Situation Familiale <span style="color:red;">*</span></label>
+                <select id="situationFam" name="situationFam" class="form-input" required>
+                    <option value="CELIBATAIRE" <%= employee.situationFam === 'CELIBATAIRE' ? 'selected' : '' %>>Célibataire</option>
+                    <option value="MARIE" <%= employee.situationFam === 'MARIE' ? 'selected' : '' %>>Marié(e)</option>
+                    <option value="DIVORCE" <%= employee.situationFam === 'DIVORCE' ? 'selected' : '' %>>Divorcé(e)</option>
+                    <option value="VEUF" <%= employee.situationFam === 'VEUF' ? 'selected' : '' %>>Veuf/Veuve</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-grid-2">
+            <div class="form-group">
+                <label for="nbPersonacharge">Personnes à charge (IR cap 6)</label>
+                <input type="number" id="nbPersonacharge" name="nbPersonacharge" class="form-input" min="0" max="6" value="<%= employee.nbPersonacharge %>">
+            </div>
+            <div class="form-group">
+                <label for="nbEnfantCharge">Enfants à charge</label>
+                <input type="number" id="nbEnfantCharge" name="nbEnfantCharge" class="form-input" min="0" value="<%= employee.nbEnfantCharge %>">
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 2: Poste & Contrat -->
+    <div class="form-section">
+        <h2 class="section-title">2. Emploi & Contrat</h2>
+        <div class="form-grid-3">
+            <div class="form-group">
+                <label for="matricule">Matricule</label>
+                <input type="text" id="matricule" name="matricule" class="form-input" required value="<%= employee.matricule %>">
+            </div>
+            <div class="form-group">
+                <label for="fonction">Fonction / Poste</label>
+                <input type="text" id="fonction" name="fonction" class="form-input" value="<%= employee.fonction || '' %>">
+            </div>
+            <div class="form-group">
+                <label for="codeService">Code Service / Département</label>
+                <input type="text" id="codeService" name="codeService" class="form-input" value="<%= employee.codeService || '' %>">
+            </div>
+        </div>
+        <div class="form-grid-3">
+            <div class="form-group">
+                <label for="dateEmbauche">Date d'embauche <span style="color:red;">*</span></label>
+                <input type="date" id="dateEmbauche" name="dateEmbauche" class="form-input" required value="<%= new Date(employee.dateEmbauche).toISOString().split('T')[0] %>">
+            </div>
+            <div class="form-group">
+                <label for="statut">Statut Employé</label>
+                <select id="statut" name="statut" class="form-input">
+                    <option value="TITULAIRE" <%= employee.statut === 'TITULAIRE' ? 'selected' : '' %>>Titulaire</option>
+                    <option value="NON_TITULAIRE" <%= employee.statut === 'NON_TITULAIRE' ? 'selected' : '' %>>Non Titulaire</option>
+                    <option value="VACATAIRE" <%= employee.statut === 'VACATAIRE' ? 'selected' : '' %>>Vacataire</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="natureEmploi">Nature de l'emploi</label>
+                <select id="natureEmploi" name="natureEmploi" class="form-input" onchange="toggleContractFields(this.value)">
+                    <option value="PERMANENT" <%= employee.natureEmploi === 'PERMANENT' ? 'selected' : '' %>>Permanent (CDI)</option>
+                    <option value="OCCASIONNEL" <%= employee.natureEmploi === 'OCCASIONNEL' ? 'selected' : '' %>>Occasionnel (CDD)</option>
+                    <option value="STAGIAIRE" <%= employee.natureEmploi === 'STAGIAIRE' ? 'selected' : '' %>>Stagiaire</option>
+                    <option value="EXONERE" <%= employee.natureEmploi === 'EXONERE' ? 'selected' : '' %>>Exonéré</option>
+                    <option value="DOCTORANT" <%= employee.natureEmploi === 'DOCTORANT' ? 'selected' : '' %>>Doctorant</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-grid-3">
+           
+        </div>
+        <div class="form-grid-2" id="contract-fields" <%= employee.natureEmploi === 'OCCASIONNEL' ? '' : 'hidden' %>>
+            <div class="form-group">
+                <label for="contratDateDebut">Contrat du</label>
+                <input type="date" id="contratDateDebut" name="contratDateDebut" class="form-input" value="<%= employee.contratDateDebut ? new Date(employee.contratDateDebut).toISOString().split('T')[0] : '' %>">
+            </div>
+            <div class="form-group">
+                <label for="contratDateFin">Contrat au</label>
+                <input type="date" id="contratDateFin" name="contratDateFin" class="form-input" value="<%= employee.contratDateFin ? new Date(employee.contratDateFin).toISOString().split('T')[0] : '' %>">
+            </div>
+        </div>
+        <div class="form-grid-3">
+            <div class="form-group">
+                <label for="dateSortie">Date de sortie</label>
+                <input type="date" id="dateSortie" name="dateSortie" class="form-input" value="<%= employee.dateSortie ? new Date(employee.dateSortie).toISOString().split('T')[0] : '' %>">
+            </div>
+            <div class="form-group" style="display:flex; align-items:center; gap:10px; padding-top:22px;">
+                <input type="checkbox" id="actif" name="actif" value="1" <%= employee.actif ? 'checked' : '' %>>
+                <label for="actif" style="margin:0;">Salarié actif</label>
+            </div>
+        </div>
+        <div class="form-grid-2">
+            <div class="form-group">
+                <label for="adresse">Adresse complète</label>
+                <input type="text" id="adresse" name="adresse" class="form-input" value="<%= employee.adresse || '' %>">
+            </div>
+            <div class="form-group">
+                <label for="ville">Ville</label>
+                <input type="text" id="ville" name="ville" class="form-input" value="<%= employee.ville || '' %>">
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 3: Remunération & Banque -->
+    <div class="form-section">
+        <h2 class="section-title">3. Salaire de Base & Coordonnées Bancaires</h2>
+        <div class="form-grid-3">
+            <div class="form-group">
+                <label for="baseSalary">Salaire de Base (DH) <span style="color:red;">*</span></label>
+                <input type="number" step="0.01" id="baseSalary" name="baseSalary" class="form-input" required value="<%= employee.baseSalary %>">
+                <button type="button" id="net-to-base-open" class="btn-secondary net-to-base-open">Net à payer → Salaire de base</button>
+                <p id="net-to-base-form-state" class="net-to-base-form-state" role="status"></p>
+            </div>
+            <div class="form-group">
+                <label for="cimrRate">Taux CIMR (ex: 0.06 pour 6%)</label>
+                <input type="number" step="0.0001" min="0" max="0.2" id="cimrRate" name="cimrRate" class="form-input" value="<%= employee.cimrRate !== null && employee.cimrRate !== undefined ? employee.cimrRate : '' %>">
+            </div>
+            <div class="form-group">
+                <label for="numeroCNSS">N° Immatriculation CNSS</label>
+                <input type="text" id="numeroCNSS" name="numeroCNSS" class="form-input" value="<%= employee.numeroCNSS || '' %>">
+            </div>
+            <div class="form-group">
+                <label for="dateAffiliationCnss">Date d'affiliation CNSS</label>
+                <input type="date" id="dateAffiliationCnss" name="dateAffiliationCnss" class="form-input" value="<%= employee.dateAffiliationCnss ? new Date(employee.dateAffiliationCnss).toISOString().split('T')[0] : '' %>">
+            </div>
+        </div>
+        <div class="form-grid-3">
+            <div class="form-group">
+                <label for="modePaiement">Mode de paiement</label>
+                <select id="modePaiement" name="modePaiement" class="form-input">
+                    <option value="VIREMENT" <%= employee.modePaiement === 'VIREMENT' ? 'selected' : '' %>>Virement Bancaire</option>
+                    <option value="CHEQUE" <%= employee.modePaiement === 'CHEQUE' ? 'selected' : '' %>>Chèque</option>
+                    <option value="ESPECE" <%= employee.modePaiement === 'ESPECE' ? 'selected' : '' %>>Espèces</option>
+                </select>
+            </div>
+           
+            <div class="form-group" style="display:flex; align-items:center; gap:10px; padding-top: 22px;">
+                <input type="checkbox" id="blocageSaisiePaie" name="blocageSaisiePaie" value="1" <%= employee.blocageSaisiePaie ? 'checked' : '' %>>
+                <label for="blocageSaisiePaie" style="margin:0;">Bloquer la saisie de paie</label>
+            </div>
+        </div>
+        <div class="form-grid-3">
+            <div class="form-group">
+                <label for="banque">Banque</label>
+                <input type="text" id="banque" name="banque" class="form-input" value="<%= employee.banque || '' %>">
+            </div>
+            <div class="form-group">
+                <label for="agence">Agence</label>
+                <input type="text" id="agence" name="agence" class="form-input" value="<%= employee.agence || '' %>">
+            </div>
+            <div class="form-group">
+                <label for="rib">RIB (24 chiffres)</label>
+                <input type="text" id="rib" name="rib" class="form-input" value="<%= employee.rib || '' %>">
+            </div>
+        </div>
+        <div class="form-grid-2">
+            <div class="form-group">
+                <label for="pieceJointe">Pièce jointe</label>
+                <input type="file" id="pieceJointe" name="pieceJointe" class="form-input" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp">
+                <% if (employee.pieceJointeUrl) { %>
+                    <a href="<%= employee.pieceJointeUrl %>" target="_blank" rel="noopener">Voir la pièce jointe actuelle</a>
+                <% } %>
+            </div>
+            <div class="form-group">
+                <label for="image">Photo du salarié</label>
+                <input type="file" id="image" name="image" class="form-input" accept=".jpg,.jpeg,.png,.webp">
+                <% if (employee.image) { %>
+                    <img src="<%= employee.image %>" alt="Photo actuelle" style="display:block; width:80px; height:80px; object-fit:cover; margin-top:8px; border-radius:6px;">
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 4: Primes & Indemnités non-imposables (Fixes mensuelles) -->
+    <div class="form-section">
+        <h2 class="section-title">4. Primes & Indemnités non-imposables (Fixes mensuelles)</h2>
+        <p style="font-size: 13px; color: var(--color-text-subtle); margin-bottom: 16px;">
+            Sélectionnez les primes/indemnités <strong>exonérées</strong> attribuées à cet employé et modifiez leur montant spécifique.
+            Ces primes apparaîtront automatiquement sur chaque bulletin mensuel.
+            Vous pouvez aussi créer une nouvelle prime qui sera réutilisable pour d'autres employés.
+        </p>
+
+        <!-- Existing catalog bonuses -->
+        <div id="bonus-list-container" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+            <% if (typeof bonusTypes !== 'undefined' && bonusTypes && bonusTypes.length > 0) { %>
+                <% bonusTypes.forEach(function(bt) {
+                    const assigned = employee.bonuses.find(eb => eb.bonusId === bt.id);
+                %>
+                    <div class="bonus-row" style="display: flex; align-items: center; gap: 16px; background: rgba(255,255,255,0.6); padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border); <%= assigned ? 'border-color: var(--color-primary); background: rgba(220, 240, 255, 0.5);' : '' %>">
+                        <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" name="bonusIds" value="<%= bt.id %>" id="bt-<%= bt.id %>"
+                                <%= assigned ? 'checked' : '' %>
+                                style="width: 18px; height: 18px; accent-color: var(--color-primary);"
+                                onchange="
+                                    const amt = this.closest('.bonus-row').querySelector('.bonus-amt');
+                                    amt.required = this.checked;
+                                    amt.disabled = !this.checked;
+                                ">
+                            <label for="bt-<%= bt.id %>" style="font-weight: 600; cursor: pointer;">
+                                <%= bt.name %>
+                                <span class="badge badge-actif" style="margin-left: 8px; font-size: 11px;">Exonéré</span>
+                            </label>
+                        </div>
+                        <div style="width: 220px; display: flex; align-items: center; gap: 8px;">
+                            <input type="number" step="0.01" name="bonusAmounts" id="amt-<%= bt.id %>"
+                                class="form-input bonus-amt"
+                                placeholder="Montant (DH)"
+                                value="<%= assigned ? Number(assigned.amount) : '' %>"
+                                style="padding: 6px 12px;"
+                                <%= assigned ? '' : 'disabled' %>>
+                            <span style="font-weight: 600; color: var(--color-text-muted);">DH</span>
+                        </div>
+                    </div>
+                <% }); %>
+            <% } else { %>
+                <p style="font-size: 13px; color: var(--color-text-subtle); padding: 12px;">
+                    Aucune prime dans le catalogue. Créez-en une ci-dessous.
+                </p>
+            <% } %>
+        </div>
+
+        <!-- New bonus creation area -->
+        <div style="border-top: 1px dashed var(--color-border); padding-top: 16px;">
+            <p style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--color-text-muted);">
+                ➕ Créer une nouvelle prime (sera sauvegardée dans le catalogue de l'entreprise)
+            </p>
+            <div id="new-bonus-rows">
+                <!-- Injected by JS -->
+            </div>
+            <button type="button" onclick="addNewBonusRow()" class="btn-secondary" style="margin-top: 10px; font-size: 13px;">
+                + Ajouter une nouvelle prime
+            </button>
+        </div>
+    </div>
+
+    <!-- Submit Bar -->
+    <div class="form-actions-bar">
+        <button type="submit" class="btn-primary" style="min-width: 200px;">
+            Mettre à jour le salarié
+        </button>
+    </div>
+</form>
+
+<script>
+function toggleContractFields(nature) {
+    const contractFields = document.getElementById('contract-fields');
+    const contractInputs = contractFields.querySelectorAll('input');
+    const isCdd = nature === 'OCCASIONNEL';
+    contractFields.hidden = !isCdd;
+    contractInputs.forEach(input => {
+        input.disabled = !isCdd;
+    });
+}
+
+toggleContractFields(document.getElementById('natureEmploi').value);
+
+// Enable/disable amount fields for pre-checked bonuses on page load
+document.querySelectorAll('.bonus-row input[type="checkbox"]').forEach(cb => {
+    const amt = cb.closest('.bonus-row').querySelector('.bonus-amt');
+    if (amt) amt.disabled = !cb.checked;
+});
+
+function addNewBonusRow() {
+    const container = document.getElementById('new-bonus-rows');
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:10px;';
+    row.innerHTML = `
+        <input type="text" name="customBonusNames" class="form-input" placeholder="Nom de la prime (ex: Indemnité de Logement)" style="flex:1;">
+        <input type="number" step="0.01" name="customBonusAmounts" class="form-input" placeholder="Montant (DH)" style="width:180px;">
+        <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:#c00;cursor:pointer;font-size:18px;padding:4px 8px;">✕</button>
+    `;
+    container.appendChild(row);
+}
+</script>
+
+<%- include('net-to-base') %>
+
+<%- include('../partials/footer') %>

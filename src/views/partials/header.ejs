@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>
+        <%= typeof title !== 'undefined' ? title : 'Paie Software' %> — Paie Software
+    </title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/css/custom.css">
+    <link rel="stylesheet" href="/css/show-bulletin.css">
+    <link rel="stylesheet" href="/css/dialogs.css">
+    <script src="/js/dialogs.js" defer></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+
+<body>
+
+    <%- include('./sidebar') %>
+
+    <div class="main-wrapper">
+        <%- include('./navbar') %>
+
+        <main class="page-content">
+  

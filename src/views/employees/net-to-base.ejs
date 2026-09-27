@@ -1,0 +1,57 @@
+<link rel="stylesheet" href="/css/net-to-base.css">
+<dialog id="net-to-base-dialog" class="net-to-base-dialog" aria-labelledby="net-to-base-title"
+    data-employee-id="<%= typeof employee !== 'undefined' && employee ? employee.id : '' %>"
+    data-cimr-reduction="<%= typeof employee !== 'undefined' && employee ? Boolean(employee.cimrReduitBaseImposable) : false %>">
+    <form id="net-to-base-form">
+        <h2 id="net-to-base-title">Net à payer → Salaire de base</h2>
+        <p id="net-to-base-assumptions"></p>
+        <p class="net-to-base-note">Estimation sur 26 jours, sans heures supplémentaires, avances ni régularisation IR des mois précédents. Le net d'un bulletin réel peut donc varier.</p>
+        <label for="net-to-base-target">Net à payer souhaité, indemnités comprises (DH)</label>
+        <input id="net-to-base-target" class="form-input" type="number" min="0" max="9999999999.99" step="0.01" required>
+        <h3>Indemnités non imposables</h3>
+        <div id="net-to-base-lines"></div>
+        <div class="net-to-base-add-actions">
+            <button type="button" class="btn-secondary" id="net-to-base-add">+ Choisir une indemnité</button>
+            <button type="button" class="btn-secondary" id="net-to-base-create">+ Créer une indemnité</button>
+        </div>
+        <p id="net-to-base-taxable" class="net-to-base-note" hidden></p>
+        <p id="net-to-base-error" class="net-to-base-error" role="alert" hidden></p>
+        <p id="net-to-base-state" role="status" aria-live="polite"></p>
+        <section id="net-to-base-result" hidden aria-label="Résultat du calcul">
+            <dl>
+                <div><dt>Salaire de base proposé</dt><dd data-net-result="baseSalary"></dd></div>
+                <div><dt>Indemnités non imposables</dt><dd data-net-result="indemnities"></dd></div>
+                <div><dt>Net calculé</dt><dd data-net-result="net"></dd></div>
+                <div><dt>Écart avec le net souhaité</dt><dd data-net-result="difference"></dd></div>
+            </dl>
+            <p id="net-to-base-rounding"></p>
+            <details>
+                <summary>Détail du calcul</summary>
+                <dl>
+                    <div><dt>Prime d'ancienneté</dt><dd data-net-result="primeAnciennete"></dd></div>
+                    <div><dt>Brut imposable</dt><dd data-net-result="sbi"></dd></div>
+                    <div><dt>CNSS</dt><dd data-net-result="cnss"></dd></div>
+                    <div><dt>AMO</dt><dd data-net-result="amo"></dd></div>
+                    <div><dt>CIMR</dt><dd data-net-result="cimr"></dd></div>
+                    <div><dt>Frais professionnels</dt><dd data-net-result="fraisPro"></dd></div>
+                    <div><dt>Net imposable</dt><dd data-net-result="sni"></dd></div>
+                    <div><dt>IR</dt><dd data-net-result="irNet"></dd></div>
+                </dl>
+            </details>
+        </section>
+        <p class="net-to-base-note">Appliquer calcule le salaire de base et le recopie dans la fiche, sans enregistrer le salarié.</p>
+        <div class="net-to-base-actions">
+            <button type="button" class="btn-secondary" id="net-to-base-cancel">Annuler</button>
+            <button type="submit" class="btn-secondary" id="net-to-base-calculate">Calculer</button>
+            <button type="button" class="btn-primary" id="net-to-base-apply">Appliquer</button>
+        </div>
+    </form>
+</dialog>
+<template id="net-to-base-catalog">
+    <select>
+        <% (typeof bonusTypes !== 'undefined' ? bonusTypes : []).forEach(bonus => { %>
+            <option value="<%= bonus.id %>" data-name="<%= bonus.name %>" data-taxable="<%= Boolean(bonus.taxable) %>"><%= bonus.name %></option>
+        <% }); %>
+    </select>
+</template>
+<script src="/js/net-to-base.js" defer></script>

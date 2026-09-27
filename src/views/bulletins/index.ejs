@@ -1,0 +1,208 @@
+<%- include('../partials/header') %>
+<% if (typeof bulletinPeriodMessage !== 'undefined' && bulletinPeriodMessage) { %>
+    <div role="alert" id="bulletin-period-message" class="bulk-summary"><%= bulletinPeriodMessage %></div>
+<% } %>
+
+
+<div class="page-header">
+    <div class="header-title-area">
+        <h1 class="page-title">Traitement de paie</h1>
+        <p class="page-subtitle">Gestion et génération des bulletins de salaire par période</p>
+    </div>
+    <div class="header-actions">
+            <% if (employees.some(emp => emp.bulletin && emp.bulletin.status !== 'closed')) { %>
+            <button type="submit" class="btn-primary close-action" form="period-form" formmethod="POST" formaction="/bulletins/close-bulk" data-confirm="Êtes-vous sûr de vouloir clôturer tous les bulletins de <%= monthName %> <%= year %> ?" data-confirm-title="Clôturer le mois" data-confirm-label="Oui, clôturer" data-confirm-danger="true">Clôturer le mois</button>
+            <% } %>
+    </div>
+</div>
+
+<% if (bulkResult) { %>
+<div class="bulk-summary">
+    <div class="bulk-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+        </svg>
+    </div>
+    <div>
+        Génération terminée —
+        <strong><%= bulkResult.created %> bulletin<%= bulkResult.created > 1 ? 's' : '' %> créé<%= bulkResult.created > 1 ? 's' : '' %></strong>
+        <% if (bulkResult.skipped > 0) { %>
+            · <strong><%= bulkResult.skipped %></strong> ignoré<%= bulkResult.skipped > 1 ? 's' : '' %> (bulletin déjà existant)
+        <% } %>
+        <% if (bulkResult.errors && bulkResult.errors.length > 0) { %>
+            · <strong style="color:#8b1a1a;"><%= bulkResult.errors.length %> erreur<%= bulkResult.errors.length > 1 ? 's' : '' %></strong>
+        <% } %>
+    </div>
+</div>
+<% } %>
+
+<% if (typeof validateResult !== 'undefined' && validateResult) { %>
+<div class="bulk-summary" role="status">
+    <% if (validateResult.count > 0) { %>
+        <strong><%= validateResult.count %> bulletin<%= validateResult.count > 1 ? 's' : '' %> validé<%= validateResult.count > 1 ? 's' : '' %> pour <%= monthNames[validateResult.month] %> <%= validateResult.year %>.</strong>
+    <% } else { %>
+        <span>Aucun bulletin à valider pour <%= monthNames[validateResult.month] %> <%= validateResult.year %>.</span>
+    <% } %>
+</div>
+<% } %>
+
+<% if (typeof draftResult !== 'undefined' && draftResult) { %>
+<div class="bulk-summary" role="status">
+    <% if (draftResult.count > 0) { %>
+        <strong><%= draftResult.count %> bulletin<%= draftResult.count > 1 ? 's' : '' %> retourné<%= draftResult.count > 1 ? 's' : '' %> en brouillon pour <%= monthNames[draftResult.month] %> <%= draftResult.year %>.</strong>
+    <% } else { %>
+        <span>Aucun bulletin validé à retourner en brouillon pour <%= monthNames[draftResult.month] %> <%= draftResult.year %>.</span>
+    <% } %>
+</div>
+<% } %>
+
+<% if (closeResult) { %>
+<div class="bulk-summary" role="status">
+    <% if (closeResult.count > 0) { %>
+        <strong><%= closeResult.count %> bulletin<%= closeResult.count > 1 ? 's' : '' %> clôturé<%= closeResult.count > 1 ? 's' : '' %> pour <%= monthNames[closeResult.month] %> <%= closeResult.year %>.</strong>
+    <% } else { %>
+        <span>Aucun bulletin à clôturer pour <%= monthNames[closeResult.month] %> <%= closeResult.year %> : les bulletins sont déjà clôturés ou aucun bulletin n’existe.</span>
+    <% } %>
+</div>
+<% } %>
+
+<!-- Period selector -->
+<div class="card" style="margin-bottom: 20px; padding: 16px 24px;">
+    <form method="GET" action="/bulletins" id="period-form">
+        <div class="period-selector">
+            <span class="period-label">Période :</span>
+            <select name="month" id="sel-month" class="form-input" onchange="this.form.submit()">
+                <% for (let m = 1; m <= 12; m++) { %>
+                    <option value="<%= m %>" <%= m === month ? 'selected' : '' %>><%= monthNames[m] %></option>
+                <% } %>
+            </select>
+            <input type="number" name="year" id="inp-year" class="form-input"
+                value="<%= year %>" min="2020" max="2040" style="width: 90px;"
+                onchange="this.form.submit()">
+            <% if (employees.some(emp => !emp.bulletin)) { %>
+            <button type="submit" id="btn-bulk-generate" class="btn-primary" formmethod="POST" formaction="/bulletins/generate-bulk" data-confirm="Générer les bulletins pour tous les employés actifs qui n’en ont pas encore pour <%= monthName %> <%= year %> ?" data-confirm-title="Générer les bulletins" data-confirm-label="Générer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                    <polyline points="13 2 13 9 20 9"/>
+                    <line x1="9" y1="13" x2="15" y2="13"/>
+                    <line x1="9" y1="17" x2="15" y2="17"/>
+                </svg>
+                Traitement par liste
+            </button>
+            <% } %>
+            <% if (employees.some(emp => ['draft', 'generated'].includes(emp.bulletin?.status))) { %>
+            <button type="submit" class="btn-primary validate-action" formmethod="POST" formaction="/bulletins/validate-bulk" data-confirm="Valider les bulletins en brouillon ou générés des employés actifs pour <%= monthName %> <%= year %> ? Les bulletins validés seront verrouillés." data-confirm-title="Valider par liste" data-confirm-label="Valider">Valider par liste</button>
+            <% } %>
+            <% if (employees.some(emp => emp.bulletin?.status === 'validated')) { %>
+            <button type="submit" class="btn-primary draft-action" formmethod="POST" formaction="/bulletins/draft-bulk" data-confirm="Retourner tous les bulletins validés de <%= monthName %> <%= year %> en brouillon ? Ils pourront à nouveau être modifiés." data-confirm-title="Retourner en brouillon en masse" data-confirm-label="Retourner en brouillon">Retourner en brouillon en masse</button>
+            <% } %>
+
+        </div>
+    </form>
+</div>
+
+<!-- Employees payroll table -->
+<div class="data-table-wrapper">
+    <table class="data-table" id="bulletins-table">
+        <thead>
+            <tr>
+                <th>Salarié</th>
+                <th>Salaire de base</th>
+                <th>Brut imposable</th>
+                <th>Jours travaillés</th>
+                <th>Statut bulletin</th>
+                <th>Net à payer</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% employees.forEach(function(emp) { %>
+                <tr class="bulletin-row" style="cursor: pointer;"
+                    data-href="/bulletins/<%= emp.id %>?month=<%= month %>&year=<%= year %>">
+
+                    <td>
+                        <div style="font-weight: 600;"><%= emp.nom %> <%= emp.prenom %></div>
+                        <div style="font-size: 12px; color: var(--color-text-subtle);"><%= emp.matricule %></div>
+                    </td>
+
+                    <td style="font-weight: 600;">
+                        <%= fmt(emp.baseSalary) %> DH
+                    </td>
+
+                    <td data-payroll-sbi>
+                        <%= emp.bulletin ? fmt(emp.bulletin.sbi) + ' DH' : '—' %>
+                    </td>
+                    <td>
+                        <% if (emp.bulletin && !emp.blocageSaisiePaie && ['draft', 'generated'].includes(emp.bulletin.status)) { %>
+                            <form class="worked-days-form" action="/bulletins/<%= emp.id %>/worked-days" method="POST">
+                                <input type="hidden" name="month" value="<%= month %>">
+                                <input type="hidden" name="year" value="<%= year %>">
+                                <div class="worked-days-controls">
+                                    <input class="form-input" type="number" name="workedDays" min="0" max="26" step="1" required value="<%= emp.bulletin.workedDays %>" aria-label="Jours travaillés de <%= emp.nom %> <%= emp.prenom %>">
+                                </div>
+                                <span class="worked-days-message" role="status" aria-live="polite"></span>
+                            </form>
+                        <% } else { %>
+                            <%= emp.bulletin ? emp.bulletin.workedDays : '—' %>
+                        <% } %>
+                    </td>
+
+                    <td>
+                        <% if (emp.bulletinStatus === 'blocked' || emp.blocageSaisiePaie) { %>
+                            <span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #f87171;">Bloqué </span>
+                        <% } else if (emp.bulletinStatus === 'none') { %>
+                            <span class="badge badge-none">Aucun</span>
+                        <% } else if (emp.bulletinStatus === 'draft') { %>
+                            <span class="badge badge-draft">Brouillon</span>
+                        <% } else if (emp.bulletinStatus === 'generated') { %>
+                            <span class="badge badge-draft">Brouillon</span>
+                        <% } else if (emp.bulletinStatus === 'validated') { %>
+                            <span class="badge badge-actif">Validé</span>
+                        <% } else if (emp.bulletinStatus === 'closed') { %>
+                            <span class="badge badge-actif">Clôturé</span>
+                        <% } else if (emp.bulletinStatus === 'error') { %>
+                            <span class="badge badge-error">Erreur</span>
+                        <% } %>
+                    </td>
+
+                    <td data-payroll-net style="font-variant-numeric: tabular-nums;">
+                        <% if (emp.bulletin && emp.bulletin.netAPayer !== undefined && emp.bulletinStatus !== 'error') { %>
+                            <strong><%= fmt(emp.bulletin.netAPayer) %> DH</strong>
+                        <% } else { %>
+                            <span style="color: var(--color-text-subtle);">—</span>
+                        <% } %>
+                    </td>
+
+                    <td onclick="event.stopPropagation();">
+                        <div class="table-actions">
+                            <% if (!emp.bulletin || emp.bulletinStatus === 'error') { %>
+                                <form method="POST" action="/bulletins/<%= emp.id %>/generate" style="display:inline;">
+                                    <input type="hidden" name="month" value="<%= month %>">
+                                    <input type="hidden" name="year" value="<%= year %>">
+                                    <button type="submit" class="btn-primary" style="padding: 7px 14px; font-size: 13px;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polygon points="5 3 19 12 5 21 5 3"/>
+                                        </svg>
+                                        Générer
+                                    </button>
+                                </form>
+                            <% } else { %>
+                                <a href="/bulletins/<%= emp.id %>?month=<%= month %>&year=<%= year %>"
+                                    class="table-link">Ouvrir →</a>
+                            <% } %>
+                        </div>
+                    </td>
+
+                </tr>
+            <% }); %>
+        </tbody>
+    </table>
+</div>
+
+<script src="/js/bulletins-list.js" defer></script>
+
+<%- include('../partials/footer') %>

@@ -1,0 +1,276 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        Int      @id @default(autoincrement())
+  name      String
+  ice       String?  @unique
+  ifNumber  String?  @unique
+  rc        String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userCompanies UserCompany[]
+  employees     Employee[]
+  bonuses       Bonus[]
+
+  @@map("company")
+}
+
+model Users {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userCompanies UserCompany[]
+
+  @@map("users")
+}
+
+model UserCompany {
+  companyId Int
+  userId    Int
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    Users   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, userId])
+  @@map("userCompanies")
+}
+
+enum Sexe {
+  M
+  F
+}
+
+enum SituationFamiliale {
+  CELIBATAIRE
+  MARIE
+  DIVORCE
+  VEUF
+}
+
+enum StatutEmploye {
+  TITULAIRE // "Oui" in the form
+  NON_TITULAIRE // "Non"
+  VACATAIRE
+}
+
+enum NatureEmploi {
+  PERMANENT
+  OCCASIONNEL
+  STAGIAIRE
+  EXONERE
+  DOCTORANT
+}
+
+enum ModePaiement {
+  VIREMENT
+  CHEQUE
+  ESPECE // keep only if you actually have clients paying cash — otherwise drop it
+}
+
+model Employee {
+  id            Int      @id @default(autoincrement())
+  matricule     String
+  nom           String
+  prenom        String
+  cin           String   @unique
+  dateNaissance DateTime
+  sexe          Sexe
+
+  // --- Employment ---
+  dateEmbauche      DateTime // Dte Embauche
+  dateAnciennete    DateTime? // Dte Ancienneté — separate from hire date (rehires, transferred seniority)
+  dateSortie        DateTime? // Date Sortie
+  fonction          String? // Fonction (job title)
+  codeService       String? // Code Service (department/cost center)
+  statut            StatutEmploye @default(TITULAIRE) // Titulaire: Oui/Non/Vacataire
+  natureEmploi      NatureEmploi  @default(PERMANENT) // gates CNSS/AMO logic — stagiaire/exonere ≠ same contributions
+  contratDateDebut  DateTime? // Contrat Du
+  contratDateFin    DateTime? // Contrat Au (nullable = CDI)
+  pieceJointeUrl    String? // Pièce jointe — store file ref, never a blob
+  blocageSaisiePaie Boolean       @default(false) // locks employee out of active payroll run
+
+  // --- État civil ---
+  situationFam        SituationFamiliale
+  nbPersonacharge     Int                @default(0) // manually updated by RH when a child ages out or new child added
+  nbEnfantCharge      Int                @default(0) // manually updated by RH when a child ages out or new child added
+  // ⚠️ still flagging this: keep these two in sync manually for now, but
+  // build a validation rule so nbPersonacharge is never < nbEnfantCharge, and
+  // never > 6 (legal IR cap). Migrate to a derived EmployeeDependent table
+  // once you have real clients — see earlier discussion.
+  // --- Contact ---
+  adresse             String?
+  ville               String? // Ville
+  image               String?
+  numeroCNSS          String?            @unique
+  dateAffiliationCnss DateTime? // Dte Affiliat. under Caisse Retraite/CNSS block
+
+  // --- Banque ---
+  modePaiement ModePaiement @default(VIREMENT)
+  banque       String?
+  agence       String?
+  rib          String?      @unique
+
+  actif                   Boolean         @default(true)
+  cimrRate                Decimal?        @db.Decimal(6, 4)
+  cimrReduitBaseImposable Boolean         @default(false)
+  bonuses                 EmployeeBonus[]
+  payslips                Payslip[]
+  baseSalary              Decimal         @db.Decimal(12, 2)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  company                 Company         @relation(fields: [companyId], references: [id])
+  companyId               Int
+
+  @@unique([companyId, matricule])
+}
+
+
+model Bonus {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  name      String
+  taxable   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeBonuses EmployeeBonus[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("bonuses")
+}
+
+model EmployeeBonus {
+  employeeId Int
+  bonusId    Int
+  amount     Decimal @db.Decimal(12, 2)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  bonus    Bonus    @relation(fields: [bonusId], references: [id], onDelete: Cascade)
+
+  @@id([employeeId, bonusId])
+  @@map("employee_bonuses")
+}
+
+// ================================
+// PAYSLIP / BULLETIN DE PAIE
+// ================================
+
+model Payslip {
+  id            Int       @id @default(autoincrement())
+  employeeId    Int
+  month         Int // 1 - 12 (Count)
+  year          Int // e.g. 2026 (Count)
+  workedDays    Int       @default(26) // Count
+  status        String    @default("DRAFT") // DRAFT, GENERATED, VALIDATED, CLOSED, ERROR
+  validatedAt   DateTime?
+  validatedById Int?
+
+  // Money amounts: Decimal(12, 2)
+  baseSalary       Decimal @db.Decimal(12, 2)
+  primeAnciennete  Decimal @default(0.00) @db.Decimal(12, 2)
+  bonusesIMP       Decimal @default(0.00) @db.Decimal(12, 2)
+  bonusesNIMP      Decimal @default(0.00) @db.Decimal(12, 2)
+  sbg              Decimal @db.Decimal(12, 2) // Salaire Brut Global
+  sbi              Decimal @db.Decimal(12, 2) // Salaire Brut Imposable
+  cnss             Decimal @db.Decimal(12, 2) // CNSS Salariale
+  amo              Decimal @db.Decimal(12, 2) // AMO Salariale
+  cimr             Decimal @default(0.00) @db.Decimal(12, 2) // CIMR Salariale
+  fraisPro         Decimal @db.Decimal(12, 2) // Frais Professionnels
+  sni              Decimal @db.Decimal(12, 2) // Salaire Net Imposable
+  sniCumule        Decimal @default(0.00) @db.Decimal(14, 2)
+  moisEcoules      Int     @default(1) // Période sauvegardée : bulletins antérieurs validés/clôturés de l'année + bulletin courant
+  sniAnnuelEstime  Decimal @default(0.00) @db.Decimal(14, 2) // SNI annuel estimé
+  irAnnuelEstime   Decimal @default(0.00) @db.Decimal(14, 2) // IR annuel estimé
+  irCumule         Decimal @default(0.00) @db.Decimal(14, 2) // IR cumulé dû jusqu'au mois courant
+  irPrecedent      Decimal @default(0.00) @db.Decimal(14, 2) // IR déjà retenu avant le mois courant
+  irNet            Decimal @default(0.00) @db.Decimal(12, 2)
+  irBrut           Decimal @db.Decimal(12, 2) // IR Brut (après barème)
+  irTheorique      Decimal @default(0.00) @db.Decimal(12, 2) // IR Théorique = SNI × taux
+  sommeADeduire    Decimal @default(0.00) @db.Decimal(12, 2) // Somme à déduire du barème
+  chargesDeFamille Decimal @default(0.00) @db.Decimal(12, 2) // Charges de famille
+  netAPayer        Decimal @db.Decimal(12, 2) // Net à payer
+
+  absenceDays      Int     @default(0)
+  absenceDeduction Decimal @default(0.00) @db.Decimal(12, 2)
+  heuresSup25      Decimal @default(0.00) @db.Decimal(8, 2)
+  heuresSup50      Decimal @default(0.00) @db.Decimal(8, 2)
+  heuresSup100     Decimal @default(0.00) @db.Decimal(8, 2)
+  avances          Decimal @default(0.00) @db.Decimal(12, 2)
+
+  // Rates / Percentages: Decimal(6, 4)
+  cnssRate     Decimal? @db.Decimal(6, 4) // e.g. 0.0448
+  amoRate      Decimal? @db.Decimal(6, 4) // e.g. 0.0226
+  cimrRate     Decimal? @db.Decimal(6, 4) // e.g. 0.0300, 0.0600
+  fraisProRate Decimal? @db.Decimal(6, 4) // e.g. 0.2500 / 0.3500
+  irRate       Decimal? @db.Decimal(6, 4) // e.g. 0.1000, 0.2000, 0.3000...
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  bonuses  PayslipBonus[]
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
+  @@map("payslips")
+}
+
+// ================================
+// PAYSLIP BONUS / LIGNES PRIMES DU BULLETIN
+// ================================
+
+model PayslipBonus {
+  id        Int      @id @default(autoincrement())
+  payslipId Int
+  name      String
+  amount    Decimal  @db.Decimal(12, 2)
+  taxable   Boolean  @default(true) // true = Imposable, false = Non-imposable / Exonéré
+  createdAt DateTime @default(now())
+
+  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  @@index([payslipId])
+  @@map("payslip_bonuses")
+}
+
+// ================================
+// PAYROLL CONFIGURATION (OPTIONAL DYNAMIC RATES)
+// ================================
+
+model PayrollConfig {
+  id                       Int     @id @default(autoincrement())
+  cnssSalarialeRate        Decimal @default(0.0448) @db.Decimal(6, 4) // 4.48%
+  cnssPlafond              Decimal @default(6000.00) @db.Decimal(12, 2) // 6000 DH
+  amoSalarialeRate         Decimal @default(0.0226) @db.Decimal(6, 4) // 2.26%
+  fraisProStandardRate     Decimal @default(0.3500) @db.Decimal(6, 4) // 35%
+  fraisProHighRate         Decimal @default(0.2500) @db.Decimal(6, 4) // 25%
+  fraisProStandardCap      Decimal @default(2500.00) @db.Decimal(12, 2) // 2500 DH
+  fraisProHighCap          Decimal @default(2916.67) @db.Decimal(12, 2) // 2916.67 DH
+  chargeFamilleParPersonne Decimal @default(50.00) @db.Decimal(12, 2) // 50 DH/person
+  maxChargesFamilleCount   Int     @default(6) // Max 6 dependents (300 DH cap)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payroll_configs")
+}

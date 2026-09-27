@@ -1,0 +1,28 @@
+# Bulletins Module — Task List
+
+- [x] Read skill.md + audit payrollEngine
+- [x] Write implementation plan
+- [x] User approval received
+- [x] CSS additions (custom.css)
+- [x] Sidebar partial update
+- [x] index.js wiring
+- [x] Route file (bulletins.js)
+- [x] Controller (bulletins.controller.js)
+- [x] View: Page 1 (bulletins/index.ejs)
+- [x] View: Page 2 (bulletins/show.ejs)
+- [x] Verification & syntax check
+- [x] Fix 1: 3-rate Overtime inputs (25%, 50%, 100%)
+- [x] Fix 2: IR non-cumulative method disclaimer note
+- [x] Fix 3: Visible Absences deduction line in breakdown panel
+- [x] Fix 4: Individual dynamic Prime Imposable line items in breakdown panel
+- [x] Fix 5: XSS protection in addPrime() (DOM node creation + textContent)
+- [x] Cleanup: Unified query parameter format in buildUrl() and controller
+- [x] PDF Generator: PDFKit module (src/pdf/bulletinPdf.js) with running Y-cursor, 4 columns, itemized rows, capped CNSS base, Totaux row, Net à payer box, employer/employee signatures
+- [x] PDF Route & Controller: GET /bulletins/:id/pdf (streams PDF for saved bulletins only)
+- [x] UI Link: "Télécharger le PDF" button on Page 2 when bulletin exists
+- [x] Fix Persistence Bug: `generateBulletin` and `validateBulletin` now extract and save `variablePrimes`, overtime, absences, advances, and baseSalary from POST bodies via `prepareFormSubmit` helper in `show.ejs`.
+- [x] CIMR Wiring: Implement `calculateCIMR` and wire it into `calculatePayroll` (supporting `cimrReduitBaseImposable` subtracting CIMR from SBI before computing SNI).
+- [x] Prisma Schema: Add `cimrRate`, `cimrReduitBaseImposable` to `Employee` and `status`, `validatedAt`, `validatedById`, `cimr`, `cimrRate`, `absenceDays`, `heuresSup25/50/100`, `avances` to `Payslip`.
+- [x] Database Migration: Push schema changes to MySQL database.
+- [x] Prisma Controller Integration: Replace mock store in `bulletins.controller.js` with real Prisma DB queries for Employee listing, bulk generate (handling `P2002` uniquely), single generate, page load, validation server-side lock, and PDF export.
+- [x] End-to-End Tests: Complete integration test suite verifying CIMR calculations, Frais Pro tiers, server-side locking, and idempotency.

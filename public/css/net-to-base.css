@@ -1,0 +1,34 @@
+.net-to-base-open { margin-top: 8px; }
+.net-to-base-form-state { font-size: 13px; margin-top: 6px; }
+.net-to-base-dialog {
+  position: fixed; inset: 0; margin: auto; width: min(700px, calc(100% - 32px));
+  max-height: calc(100dvh - 40px); overflow-y: auto; box-sizing: border-box;
+  padding: 26px; border: 1px solid var(--color-border, #ccc); border-radius: 12px;
+  background: #fff; color: #17202a; box-shadow: 0 20px 60px #0003;
+}
+.net-to-base-dialog::backdrop { background: #0007; }
+.net-to-base-dialog h2 { margin: 0 0 12px; font-size: 21px; }
+.net-to-base-dialog h3 { margin: 20px 0 12px; font-size: 16px; }
+.net-to-base-dialog label { display: block; font-weight: 600; margin-bottom: 6px; }
+.net-to-base-note, #net-to-base-assumptions { font-size: 13px; color: #52616b; line-height: 1.5; }
+.net-to-base-line { display: grid; grid-template-columns: minmax(0, 1fr) 135px auto; gap: 8px; margin-bottom: 10px; align-items: end; }
+.net-to-base-line .form-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.net-to-base-line .net-to-base-name { margin-top: 8px; }
+.net-to-base-dialog [hidden] { display: none !important; }
+.net-to-base-actions, .net-to-base-add-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.net-to-base-actions { justify-content: flex-end; }
+.net-to-base-dialog button:disabled { opacity: .55; cursor: default; }
+.net-to-base-error { color: #a32118; }
+#net-to-base-result { margin-top: 16px; padding: 14px; background: #edf7f1; border: 1px solid #bdd6c9; border-radius: 6px; }
+#net-to-base-result dl { margin: 0; }
+#net-to-base-result dl > div { display: flex; justify-content: space-between; gap: 16px; margin: 8px 0; }
+#net-to-base-result dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+#net-to-base-result summary { cursor: pointer; margin: 12px 0; }
+@media (max-width: 520px) {
+  .net-to-base-dialog { padding: 18px; }
+  .net-to-base-line { grid-template-columns: minmax(0, 1fr) auto; }
+  .net-to-base-line > div:first-child { grid-column: 1 / -1; }
+}
+.net-to-base-custom-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.net-to-base-custom-row input[type="text"] { flex: 1; min-width: 0; }
+.net-to-base-custom-row input[type="number"] { width: 160px; }
