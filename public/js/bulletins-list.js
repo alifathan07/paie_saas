@@ -1,4 +1,27 @@
 (() => {
+    const maskDialog = document.querySelector('#mask-dialog');
+    const maskForm = document.querySelector('#mask-dialog-form');
+    const maskMessage = document.querySelector('#mask-dialog-message');
+    document.querySelectorAll('.mask-bulletin-button').forEach(button => {
+        button.addEventListener('click', () => {
+            maskForm.action = button.dataset.action;
+            maskMessage.textContent = `Choisissez quand masquer le bulletin de ${button.dataset.employee}.`;
+            maskDialog.showModal();
+        });
+    });
+    document.querySelector('#mask-dialog-cancel')?.addEventListener('click', () => maskDialog.close());
+    maskForm?.addEventListener('submit', event => {
+        const submitter = event.submitter;
+        if (!submitter?.name) return;
+        event.preventDefault();
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = maskForm.action;
+        [['month', document.querySelector('#sel-month').value], ['year', document.querySelector('#inp-year').value], ['scope', submitter.value]]
+            .forEach(([name, value]) => { const input = document.createElement('input'); input.type = 'hidden'; input.name = name; input.value = value; form.append(input); });
+        document.body.append(form);
+        form.submit();
+    });
     const money = value => `${Number(value).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DH`;
     let dirtyRows = 0;
     window.addEventListener('beforeunload', event => {

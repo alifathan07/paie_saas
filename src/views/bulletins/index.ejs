@@ -125,6 +125,9 @@
                     <td>
                         <div style="font-weight: 600;"><%= emp.nom %> <%= emp.prenom %></div>
                         <div style="font-size: 12px; color: var(--color-text-subtle);"><%= emp.matricule %></div>
+                        <% if (!emp.actif) { %>
+                            <span class="bulletin-inactive-label">Employé inactif</span>
+                        <% } %>
                     </td>
 
                     <td style="font-weight: 600;">
@@ -135,7 +138,7 @@
                         <%= emp.bulletin ? fmt(emp.bulletin.sbi) + ' DH' : '—' %>
                     </td>
                     <td>
-                        <% if (emp.bulletin && !emp.blocageSaisiePaie && ['draft', 'generated'].includes(emp.bulletin.status)) { %>
+                        <% if (emp.bulletin && emp.actif && !emp.blocageSaisiePaie && ['draft', 'generated'].includes(emp.bulletin.status)) { %>
                             <form class="worked-days-form" action="/bulletins/<%= emp.id %>/worked-days" method="POST">
                                 <input type="hidden" name="month" value="<%= month %>">
                                 <input type="hidden" name="year" value="<%= year %>">
@@ -150,8 +153,8 @@
                     </td>
 
                     <td>
-                        <% if (emp.bulletinStatus === 'blocked' || emp.blocageSaisiePaie) { %>
-                            <span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #f87171;">Bloqué </span>
+                        <% if (emp.bulletinStatus === 'blocked' || emp.blocageSaisiePaie || !emp.actif) { %>
+                            <span class="badge badge-blocked"><%= !emp.actif ? 'Inactif · Bloqué' : 'Bloqué' %></span>
                         <% } else if (emp.bulletinStatus === 'none') { %>
                             <span class="badge badge-none">Aucun</span>
                         <% } else if (emp.bulletinStatus === 'draft') { %>
@@ -177,7 +180,7 @@
 
                     <td onclick="event.stopPropagation();">
                         <div class="table-actions">
-                            <% if (!emp.bulletin || emp.bulletinStatus === 'error') { %>
+                            <% if (!emp.bulletin && emp.actif || emp.bulletinStatus === 'error' && emp.actif) { %>
                                 <form method="POST" action="/bulletins/<%= emp.id %>/generate" style="display:inline;">
                                     <input type="hidden" name="month" value="<%= month %>">
                                     <input type="hidden" name="year" value="<%= year %>">
@@ -194,6 +197,11 @@
                                 <a href="/bulletins/<%= emp.id %>?month=<%= month %>&year=<%= year %>"
                                     class="table-link">Ouvrir →</a>
                             <% } %>
+                            <% if (emp.blocageSaisiePaie) { %>
+                                <button type="button" class="btn-mask mask-bulletin-button"
+                                    data-employee="<%= emp.nom %> <%= emp.prenom %>"
+                                    data-action="/bulletins/<%= emp.id %>/mask">Masquer</button>
+                            <% } %>
                         </div>
                     </td>
 
@@ -202,6 +210,18 @@
         </tbody>
     </table>
 </div>
+
+<dialog class="mask-dialog" id="mask-dialog" aria-labelledby="mask-dialog-title">
+    <form method="dialog" class="mask-dialog-content" id="mask-dialog-form">
+        <h2 id="mask-dialog-title">Masquer ce salarié</h2>
+        <p id="mask-dialog-message"></p>
+        <div class="mask-dialog-actions">
+            <button type="button" id="mask-dialog-cancel">Annuler</button>
+            <button type="submit" name="scope" value="month" class="mask-dialog-month">Ce mois seulement</button>
+            <button type="submit" name="scope" value="all" class="danger">Tous les mois</button>
+        </div>
+    </form>
+</dialog>
 
 <script src="/js/bulletins-list.js" defer></script>
 

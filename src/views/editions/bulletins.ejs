@@ -1,0 +1,60 @@
+<%- include('../partials/header') %>
+
+<div class="page-header editions-header">
+    <div class="header-title-area">
+        <h1 class="page-title">Édition des bulletins</h1>
+        <p class="page-subtitle">Téléchargez plusieurs bulletins dans un seul fichier PDF</p>
+    </div>
+</div>
+
+<% if (error) { %>
+    <div class="bulk-summary editions-error" role="alert"><%= error %></div>
+<% } %>
+
+<section class="edition-form-card">
+    <div class="edition-form-heading">
+        <span class="edition-form-icon">▤</span>
+        <div>
+            <h2>Choisir les bulletins</h2>
+            <p>Les bulletins sélectionnés seront assemblés page par page dans un seul PDF.</p>
+        </div>
+    </div>
+
+    <form method="POST" action="/editions/bulletins/pdf" class="bulletin-export-form">
+        <div class="bulletin-export-grid">
+            <label>
+                <span>Matricule de</span>
+                <input class="form-input" type="search" name="from" list="matricules-options" autocomplete="off" placeholder="Rechercher un matricule" required value="<%= typeof from !== 'undefined' ? from : '' %>">
+                <small>Premier matricule inclus</small>
+            </label>
+            <label>
+                <span>Matricule à</span>
+                <input class="form-input" type="search" name="to" list="matricules-options" autocomplete="off" placeholder="Rechercher un matricule" required value="<%= typeof to !== 'undefined' ? to : '' %>">
+                <small>Dernier matricule inclus</small>
+            </label>
+            <label>
+                <span>Mois</span>
+                <select class="form-input" name="month" required>
+                    <% for (let m = 1; m <= 12; m++) { %>
+                        <option value="<%= m %>" <%= m === month ? 'selected' : '' %>><%= ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][m] %></option>
+                    <% } %>
+                </select>
+            </label>
+            <label>
+                <span>Année</span>
+                <input class="form-input" type="number" name="year" min="2020" max="2040" required value="<%= year %>">
+            </label>
+        </div>
+        <datalist id="matricules-options">
+            <% (matricules || []).forEach(function(matricule) { %>
+                <option value="<%= matricule %>"></option>
+            <% }); %>
+        </datalist>
+        <div class="edition-form-actions">
+            <a href="/editions" class="button secondary">Retour</a>
+            <button type="submit" class="btn-primary">Télécharger le PDF</button>
+        </div>
+    </form>
+</section>
+
+<%- include('../partials/footer') %>

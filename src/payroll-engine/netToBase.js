@@ -17,6 +17,9 @@ export function calculateNormalMonth(employee, baseSalary, period) {
     });
     const irBrut = Number(tax.currentMonthIR.toFixed(2));
     const irNet = Math.max(0, Number((irBrut - payroll.chargesDeFamille).toFixed(2)));
+    const exactNetAPayer = Number((payroll.sbg - payroll.cnss - payroll.amo - payroll.cimr
+        - irNet - payroll.avances).toFixed(2));
+    const arrondi = Number((Math.round(exactNetAPayer) - exactNetAPayer).toFixed(2));
     return {
         ...payroll,
         irNet,
@@ -24,8 +27,9 @@ export function calculateNormalMonth(employee, baseSalary, period) {
         irTheorique: tax.theoreticalIR,
         sommeADeduire: tax.deduction,
         irBrut,
-        netAPayer: Number((payroll.sbg - payroll.cnss - payroll.amo - payroll.cimr
-            - irNet - payroll.avances).toFixed(2)),
+        exactNetAPayer,
+        arrondi,
+        netAPayer: Number((exactNetAPayer + arrondi).toFixed(2)),
     };
 }
 
@@ -85,7 +89,10 @@ export function findBaseForNet(employee, targetNet, period) {
         consider(left);
         consider(right);
         // Independent rounding of contributions can cause tiny local reversals.
-        for (let base = Math.max(left, low - 32); base <= Math.min(right, low + 32); base++) consider(base);
+        // Net rounding creates plateaus that can be wider than the old local
+        // search window. Scan enough cents to find the lowest base in the
+        // nearest rounded-net plateau.
+        for (let base = Math.max(left, low - 128); base <= Math.min(right, low + 128); base++) consider(base);
     }
     const baseSalary = best.base / 100;
     const payroll = calculateNormalMonth(employee, baseSalary, period);

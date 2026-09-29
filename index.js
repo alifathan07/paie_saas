@@ -7,6 +7,7 @@ import { auth } from './src/routes/auth.js';
 import { dashboard } from './src/routes/dashboard.js';
 import { employee } from './src/routes/employee.js';
 import { bulletins } from './src/routes/bulletins.js';
+import { editions } from './src/routes/editions.js';
 import { isAuth } from './middlewares/auth.js';
 
 export const app = express();
@@ -50,6 +51,7 @@ app.get('/', (req, res) => res.redirect('/dashboard'));
 app.use('/dashboard', dashboard);
 app.use('/employees', employee);
 app.use('/bulletins', bulletins);
+app.use('/editions', editions);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

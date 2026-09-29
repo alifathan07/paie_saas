@@ -163,7 +163,7 @@ async function main() {
     assert.equal(round(priorIR + calc.irNet), cumulativeIR);
     assert.equal(calc.fraisPro, frais.amount);
     assert.equal(calc.sni, round(calc.sbi - calc.cnss - calc.amo - calc.cimr - calc.fraisPro));
-    assert.equal(calc.netAPayer, round(calc.sbg - calc.cnss - calc.amo - calc.cimr - calc.irNet - calc.avances));
+    assert.equal(calc.netAPayer, Number((round(calc.sbg - calc.cnss - calc.amo - calc.cimr - calc.irNet - calc.avances) + calc.arrondi).toFixed(2)));
     assert.equal(saved.bonuses.length, 2);
     if (saved.status !== 'VALIDATED') await validateBulletin(req, response());
     const validated = await prisma.payslip.findUnique({ where: key, include: { bonuses: true } });

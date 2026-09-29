@@ -99,6 +99,42 @@ export async function getAnnualPayrollCumulative(employeeId, year, currentMonth,
     }), { workedDays: 0, sni: 0, irNet: 0, cnss: 0, sbi: 0, amo: 0 });
 }
 
+// PDF-only cumulative view: keeps the existing annual cumulative API stable
+// while also collecting the gross, AMO and CIMR totals needed by the layout.
+export async function getBulletinPdfCumulative(employeeId, year, month, currentPayslip) {
+    const annual = await getAnnualPayrollCumulative(employeeId, year, month, {
+        workedDays: currentPayslip.workedDays,
+        sni: currentPayslip.sni,
+        irNet: currentPayslip.irNet,
+        cnss: currentPayslip.cnss,
+        sbi: currentPayslip.sbi,
+        amo: currentPayslip.amo,
+    });
+    const rows = await prisma.payslip.findMany({
+        where: {
+            employeeId,
+            year,
+            month: { lte: month },
+            OR: [
+                { status: { in: [BULLETIN_STATUS.VALIDATED, BULLETIN_STATUS.CLOSED] } },
+                { month },
+            ],
+        },
+        select: { month: true, sbg: true, amo: true, cimr: true },
+    });
+    const previous = rows.filter(row => row.month !== month);
+    const sbg = previous.reduce((total, row) => total + Number(row.sbg || 0), Number(currentPayslip.sbg || 0));
+    const amo = previous.reduce((total, row) => total + Number(row.amo || 0), Number(currentPayslip.amo || 0));
+    const cimr = previous.reduce((total, row) => total + Number(row.cimr || 0), Number(currentPayslip.cimr || 0));
+    return {
+        ...annual,
+        sbg: Number(sbg.toFixed(2)),
+        amo: Number(amo.toFixed(2)),
+        cimr: Number(cimr.toFixed(2)),
+        deductions: Number((annual.cnss + amo + cimr + annual.irNet).toFixed(2)),
+    };
+}
+
 async function applyCumulativeIR(employeeId, month, year, calc, dependents) {
     const previous = await prisma.payslip.findMany({
         where: {
@@ -107,7 +143,7 @@ async function applyCumulativeIR(employeeId, month, year, calc, dependents) {
             month: { lt: month },
             status: { in: [BULLETIN_STATUS.VALIDATED, BULLETIN_STATUS.CLOSED] },
         },
-        select: { employeeId: true, year: true, month: true, sni: true, irNet: true },
+        select: { employeeId: true, year: true, month: true, sni: true, irNet: true, chargesDeFamille: true },
     });
     const cumulative = calculateCumulativeIR({
         employeeId,
@@ -252,7 +288,7 @@ function runEmployeeCalculation(emp, overrides = {}) {
 /**
  * Maps a Prisma Payslip DB record to the view model format expected by EJS views.
  */
-function mapPayslipToViewModel(p) {
+export function mapPayslipToViewModel(p) {
     if (!p) return null;
     const variablePrimes = (p.bonuses || [])
         .filter(b => b.taxable)
@@ -294,6 +330,9 @@ function mapPayslipToViewModel(p) {
     ).toFixed(2));
     const amoPatronale = Number((sbiNum * 0.0411).toFixed(2));
     const partPatronal = Number((cnssPatronale + amoPatronale).toFixed(2));
+    const exactNetAPayer = Number((Number(p.sbg || 0) - Number(p.cnss || 0) - Number(p.amo || 0)
+        - Number(p.cimr || 0) - Number(p.irNet || 0) - Number(p.avances || 0)).toFixed(2));
+    const arrondi = Number((Math.round(exactNetAPayer) - exactNetAPayer).toFixed(2));
 
     return {
         id: p.id,
@@ -330,7 +369,9 @@ function mapPayslipToViewModel(p) {
         irTaux: irRateNum,
         chargesDeFamille: Number(p.chargesDeFamille),
         irNet: Number(p.irNet),
-        netAPayer: Number(p.netAPayer),
+        exactNetAPayer,
+        arrondi,
+        netAPayer: Number((exactNetAPayer + arrondi).toFixed(2)),
         absenceDays: 0,
         absenceDeduction: 0,
         heuresSup25: hs25,
@@ -364,15 +405,19 @@ export const listBulletins = async (req, res) => {
             ? JSON.parse(decodeURIComponent(req.query.bulkResult))
             : null;
 
-        // Query real active Employee records for current company, left-joined with Payslip for selected period
+        // Keep inactive employees visible so their payroll state is explicit in the list.
         const dbEmployees = await prisma.employee.findMany({
-            where: { companyId, actif: true },
+            where: { companyId, bulletinMasque: false },
             orderBy: [{ nom: 'asc' }, { prenom: 'asc' }, { id: 'asc' }],
             include: {
                 payslips: {
                     where: { month, year },
                     include: { bonuses: true },
                     take: 1
+                },
+                bulletinMasks: {
+                    where: { month, year },
+                    take: 1,
                 }
             }
         });
@@ -380,7 +425,7 @@ export const listBulletins = async (req, res) => {
         const employees = dbEmployees.map(emp => {
             const payslip = emp.payslips[0] || null;
             let status = payslip ? payslip.status.toLowerCase() : "none";
-            if (emp.blocageSaisiePaie) {
+            if (emp.blocageSaisiePaie || !emp.actif) {
                 status = "blocked";
             }
 
@@ -402,11 +447,12 @@ export const listBulletins = async (req, res) => {
                 dateEmbauche: emp.dateEmbauche,
                 blocageSaisiePaie: emp.blocageSaisiePaie,
                 actif: emp.actif,
+                maskedForPeriod: emp.bulletinMasks.length > 0,
                 bulletin: payslip ? mapPayslipToViewModel(payslip) : null,
                 bulletinStatus: status,
                 variablesEntered,
             };
-        });
+        }).filter(emp => !emp.maskedForPeriod);
 
 
         const closeResult = req.session.closeBulletinsResult || null;
@@ -434,6 +480,41 @@ export const listBulletins = async (req, res) => {
     } catch (err) {
         console.error("Error listing bulletins:", err);
         res.status(500).redirect("/bulletins");
+    }
+};
+
+// POST /bulletins/:id/mask — hide an employee from this period or all periods.
+export const maskBulletin = async (req, res) => {
+    const empId = Number(req.params.id);
+    const month = Number(req.body.month);
+    const year = Number(req.body.year);
+    const scope = req.body.scope === "all" ? "all" : "month";
+
+    if (!Number.isInteger(month) || month < 1 || month > 12
+        || !Number.isInteger(year) || year < 2020 || year > 2040) {
+        return res.status(400).send("Période invalide.");
+    }
+
+    try {
+        const companyId = await resolveCompanyId(req);
+        const employee = await prisma.employee.findFirst({ where: { id: empId, companyId } });
+        if (!employee) return res.status(404).send("Employé introuvable.");
+        if (!employee.blocageSaisiePaie) return res.status(400).send("Seuls les employés dont la saisie de paie est bloquée peuvent être masqués.");
+
+        if (scope === "all") {
+            await prisma.employee.update({ where: { id: empId }, data: { bulletinMasque: true } });
+        } else {
+            await prisma.bulletinMask.upsert({
+                where: { employeeId_month_year: { employeeId: empId, month, year } },
+                create: { employeeId: empId, month, year },
+                update: {},
+            });
+        }
+
+        return res.redirect(`/bulletins?month=${month}&year=${year}`);
+    } catch (err) {
+        console.error("Mask bulletin error:", err);
+        return res.status(500).send("Impossible de masquer ce bulletin.");
     }
 };
 
@@ -616,6 +697,7 @@ export const generateBulletin = async (req, res) => {
             include: { bonuses: { include: { bonus: true } } }
         });
         if (!emp) return res.status(404).redirect("/bulletins");
+        if (!emp.actif) return res.status(400).send("Impossible de générer le bulletin : cet employé est inactif.");
 
         // Check if existing bulletin is already VALIDATED
         const existing = await prisma.payslip.findUnique({
@@ -662,7 +744,7 @@ export const generateBulletin = async (req, res) => {
             year,
             baseSalary: req.body.baseSalary || req.query.baseSalary,
             dependents: req.body.dependents || req.query.dependents,
-            workedDays: emp.blocageSaisiePaie ? 0 : normalizeWorkedDays(req.body.workedDays ?? req.query.workedDays),
+            workedDays: emp.blocageSaisiePaie || !emp.actif ? 0 : normalizeWorkedDays(req.body.workedDays ?? req.query.workedDays),
             heuresSup25: req.body.heuresSup25 || req.query.heuresSup25 || 0,
             heuresSup50: req.body.heuresSup50 || req.query.heuresSup50 || 0,
             heuresSup100: req.body.heuresSup100 || req.query.heuresSup100 || 0,
@@ -683,7 +765,7 @@ export const generateBulletin = async (req, res) => {
         }
 
         // Keep the employee's contractual salary aligned with the latest payroll input.
-        if (!emp.blocageSaisiePaie) {
+        if (!emp.blocageSaisiePaie && emp.actif) {
             await prisma.employee.update({
                 where: { id: empId },
                 data: { baseSalary: submittedBaseSalary },
@@ -734,7 +816,7 @@ export const addMonthlyPrime = async (req, res) => {
             include: { bonuses: { include: { bonus: true } } }
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée pour cet employé." });
+        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée pour cet employé." });
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -749,6 +831,16 @@ export const addMonthlyPrime = async (req, res) => {
         const previousMonthlyPrimes = (existing?.bonuses || [])
             .filter(bonus => bonus.taxable)
             .map(bonus => ({ label: bonus.name, amount: Number(bonus.amount) }));
+        // Keep the bulletin's monthly non-taxable lines when adding a taxable
+        // prime. Without passing them back to the engine, the recalculation
+        // rebuilt the payslip with only taxable lines and deleted the NIMP
+        // entries during persistPayslipBonuses().
+        const fixedNimpLabels = new Set((emp.bonuses || [])
+            .filter(b => !(b.bonus ? b.bonus.taxable : b.taxable))
+            .map(b => String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()));
+        const monthlyNimpLines = (existing?.bonuses || [])
+            .filter(bonus => !bonus.taxable && !fixedNimpLabels.has(String(bonus.name).toLowerCase()))
+            .map(bonus => ({ label: bonus.name, amount: Number(bonus.amount) }));
         const variablePrimes = [...previousMonthlyPrimes, { label, amount }];
         const monthlyCalc = runEmployeeCalculation(emp, {
             month,
@@ -760,6 +852,7 @@ export const addMonthlyPrime = async (req, res) => {
             heuresSup100: existing?.heuresSup100 || 0,
             avances: existing?.avances || 0,
             variablePrimes,
+            monthlyNimpLines,
         });
         const calc = await applyCumulativeIR(emp.id, month, year, monthlyCalc, emp.nbPersonacharge);
         const rates = await getPayrollRates();
@@ -796,7 +889,7 @@ export const deleteMonthlyPrime = async (req, res) => {
             include: { bonuses: { include: { bonus: true } } },
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
+        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -863,7 +956,7 @@ export const addMonthlyIndemnity = async (req, res) => {
 
         const emp = await prisma.employee.findUnique({ where: { id: empId }, include: { bonuses: { include: { bonus: true } } } });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
+        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -932,7 +1025,7 @@ export const updateMonthlyIndemnity = async (req, res) => {
             include: { bonuses: { include: { bonus: true } } },
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
+        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -1008,7 +1101,7 @@ export const deleteMonthlyIndemnity = async (req, res) => {
             include: { bonuses: { include: { bonus: true } } },
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
+        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -1281,7 +1374,7 @@ export const calculateLive = async (req, res) => {
             year,
             baseSalary: req.query.baseSalary !== undefined && req.query.baseSalary !== '' ? Math.max(0, Number(req.query.baseSalary) || 0) : undefined,
             dependents: req.query.dependents !== undefined && req.query.dependents !== '' ? Math.max(0, Number(req.query.dependents) || 0) : undefined,
-            workedDays: emp.blocageSaisiePaie ? 0 : normalizeWorkedDays(req.query.workedDays),
+            workedDays: emp.blocageSaisiePaie || !emp.actif ? 0 : normalizeWorkedDays(req.query.workedDays),
             heuresSup25: Math.max(0, Number(req.query.heuresSup25) || 0),
             heuresSup50: Math.max(0, Number(req.query.heuresSup50) || 0),
             heuresSup100: Math.max(0, Number(req.query.heuresSup100) || 0),
@@ -1530,6 +1623,7 @@ export const downloadPdfBulletin = async (req, res) => {
         const variablePrimes = (payslip.bonuses || [])
             .filter(b => b.taxable)
             .map(b => ({ label: b.name, amount: Number(b.amount) }));
+        const cumulative = await getBulletinPdfCumulative(empId, year, month, payslip);
 
         const pdfData = {
             ...mapPayslipToViewModel(payslip),
@@ -1537,6 +1631,14 @@ export const downloadPdfBulletin = async (req, res) => {
             employeeMatricule: emp.matricule,
             employeeCNSS: emp.numeroCNSS || '—',
             employeeFonction: emp.fonction || '—',
+            employeeAddress: emp.adresse || '—',
+            codeService: emp.codeService || '—',
+            birthDate: emp.dateNaissance ? new Date(emp.dateNaissance).toLocaleDateString('fr-MA') : '—',
+            hireDate: emp.dateEmbauche ? new Date(emp.dateEmbauche).toLocaleDateString('fr-MA') : '—',
+            sexe: emp.sexe || '—',
+            children: emp.nbEnfantCharge,
+            dependents: emp.nbPersonacharge,
+            cin: emp.cin || '—',
             seniorityYears,
             companyName: comp.name || 'CONFONDA',
             companyAddress: comp.adresse || 'hay sikaktyne',
@@ -1549,6 +1651,7 @@ export const downloadPdfBulletin = async (req, res) => {
             paymentDate: `${year}-${String(month).padStart(2, '0')}-25`,
             paymentMethod: emp.modePaiement || 'Virement',
             variablePrimes,
+            cumulative,
         };
 
         const fileName = `bulletin-${emp.nom.toLowerCase()}-${month}-${year}.pdf`;

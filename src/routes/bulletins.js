@@ -20,6 +20,7 @@ import {
     deleteMonthlyIndemnity,
     updateMonthlyIndemnity,
     downloadPdfBulletin,
+    maskBulletin,
 } from "../controllers/bulletins.controller.js";
 
 export const bulletins = express.Router();
@@ -33,6 +34,7 @@ bulletins.post("/generate-bulk", generateBulkBulletins);
 bulletins.post("/close-bulk", closeBulkBulletins);
 bulletins.post("/validate-bulk", validateBulkBulletins);
 bulletins.post("/draft-bulk", returnBulkBulletinsToDraft);
+bulletins.post("/:id/mask", maskBulletin);
 
 // Live recalculation (AJAX — returns JSON)
 bulletins.get("/:id/calculate", calculateLive);

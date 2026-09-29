@@ -36,7 +36,7 @@ export const calculatePayroll = (employee, overrides = {}) => {
   }
 
   // Blocking payroll removes payable inputs before running the normal calculation.
-  const payrollBlocked = Boolean(employee.blocageSaisiePaie);
+  const payrollBlocked = Boolean(employee.blocageSaisiePaie || employee.actif === false);
   if (payrollBlocked) {
     employee = { ...employee, bonuses: [] };
     overrides = {
@@ -192,7 +192,11 @@ export const calculatePayroll = (employee, overrides = {}) => {
   // 16. Net à Payer
   // Net = SBG - CNSS - AMO - CIMR - IR Net - Avances
   // NOTE: Frais Professionnels are NOT subtracted from Net à Payer!
-  const netAPayer = Math.max(0, Number((sbg - cnss - amo - cimr - irNet - avances).toFixed(2)));
+  const exactNetAPayer = Math.max(0, Number((sbg - cnss - amo - cimr - irNet - avances).toFixed(2)));
+  // Payroll pays the net rounded to the nearest dirham. Keep the adjustment
+  // explicit so the bulletin can show it instead of hiding the centimes.
+  const arrondi = Number((Math.round(exactNetAPayer) - exactNetAPayer).toFixed(2));
+  const netAPayer = Number((exactNetAPayer + arrondi).toFixed(2));
 
   return {
     ok: true,
@@ -250,6 +254,8 @@ export const calculatePayroll = (employee, overrides = {}) => {
 
     avances,
 
+    exactNetAPayer,
+    arrondi,
     netAPayer
   };
 };

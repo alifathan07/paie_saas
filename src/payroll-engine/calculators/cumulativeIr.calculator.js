@@ -13,13 +13,16 @@ export const calculateCumulativeIR = ({ employeeId, year, month, previousPayslip
   );
   const priorSNI = previous.reduce((sum, payslip) => sum + Number(payslip.sni || 0), 0);
   const priorIR = previous.reduce((sum, payslip) => sum + Number(payslip.irNet || 0), 0);
+  // irNet is stored after the monthly family deduction. Add prior family
+  // deductions back before comparing with cumulative gross IR due.
+  const priorFamilyCharges = previous.reduce((sum, payslip) => sum + Number(payslip.chargesDeFamille || 0), 0);
   const cumulativeSNI = Number((priorSNI + Number(currentSNI || 0)).toFixed(2));
   const periods = periodCalculator({ employeeId, year, month, previousPayslips: previous });
   const annualizedSNI = Number(((cumulativeSNI / periods) * 12).toFixed(2));
   const annualIR = calculateIR(annualizedSNI);
   const annualIRAmount = Number(annualIR.irNet.toFixed(2));
   const cumulativeIRDue = Number((annualIRAmount * (periods / 12)).toFixed(2));
-  const currentMonthIR = Number((cumulativeIRDue - priorIR).toFixed(2));
+  const currentMonthIR = Number((cumulativeIRDue - priorIR - priorFamilyCharges).toFixed(2));
 
   return {
     cumulativeSNI,
@@ -28,6 +31,7 @@ export const calculateCumulativeIR = ({ employeeId, year, month, previousPayslip
     annualIR: annualIRAmount,
     cumulativeIRDue,
     previousIRWithheld: Number(priorIR.toFixed(2)),
+    previousFamilyCharges: Number(priorFamilyCharges.toFixed(2)),
     currentMonthIR,
     rate: annualIR.taux,
     theoreticalIR: annualIR.irBrut,

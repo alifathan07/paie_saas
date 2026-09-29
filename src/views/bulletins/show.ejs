@@ -668,16 +668,18 @@
 <%
     const values = bulletin || previewResult || {};
     const bulletinStatus = bulletin?.status || 'draft';
-    const locked = Boolean(bulletin && ['validated', 'closed'].includes(bulletinStatus));
+    const payrollBlocked = Boolean(!emp.actif || emp.blocageSaisiePaie);
+    const locked = payrollBlocked || Boolean(bulletin && ['validated', 'closed'].includes(bulletinStatus));
     const closed = bulletinStatus === 'closed';
-    const canManageIndemnity = !bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus);
-    const canEditIndemnityFields = !bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus);
+    const canManageIndemnity = !payrollBlocked && (!bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus));
+    const canEditIndemnityFields = !payrollBlocked && (!bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus));
     const statusLabel = {
         draft: 'Brouillon',
         generated: 'Brouillon',
         validated: 'Validé',
         closed: 'Clôturé',
     }[bulletinStatus] || bulletinStatus;
+    const employeeStatusLabel = !emp.actif ? 'Inactif · Bloqué' : statusLabel;
     const employeeName = `${emp.nom} ${emp.prenom}`;
     const dateValue = value => value ? new Date(value).toLocaleDateString('fr-MA') : '—';
     const money = value => `${fmt(value)} DH`;
@@ -688,11 +690,14 @@
     const nimpLines = bulletin ? (bulletin.fixedNimpLines || []) : (values.nimpLines || []);
     const monthlyNimpLines = bulletin ? (bulletin.monthlyNimpLines || []) : [];
     const annual = annualCumulative || values.annualCumulative || {};
+    const arrondi = Number(values.arrondi || 0);
+    const totalGains = Number(values.sbg || 0) + Math.max(0, arrondi);
     const totalDeductions = Number(values.cnss || 0)
         + Number(values.amo || 0)
         + Number(values.cimr || 0)
         + Number(values.irNet || 0)
-        + Number(values.avances || 0);
+        + Number(values.avances || 0)
+        + Math.max(0, -arrondi);
 %>
 
 <div
@@ -704,7 +709,9 @@
     data-locked="<%= locked %>">
     <% if (month && year) {
     %>
-        <% if (!bulletin) { %>
+        <% if (!emp.actif) { %>
+            <p class="bulletin-status" role="status" style="border-color:#f87171;border-left-color:#b42318;background:#fff1f2;color:#991b1b;"><strong>Statut : Inactif · Bloqué</strong><span style="color:#991b1b;">Cet employé est inactif. Le bulletin est affiché en lecture seule.</span></p>
+        <% } else if (!bulletin) { %>
             <p class="bulletin-status" role="status">Aucun bulletin enregistré pour cette période. Les montants affichés sont un aperçu calculé avec les données actuelles.</p>
         <% } %>
     <% } %>
@@ -714,7 +721,7 @@
 
         <div class="print-actions">
             <a class="print-button return-action" href="/bulletins">Retour</a>
-            <% if (bulletin && ['draft', 'generated'].includes(bulletinStatus)) { %>
+            <% if (bulletin && !payrollBlocked && ['draft', 'generated'].includes(bulletinStatus)) { %>
                 <button class="print-button bulletin-action primary" type="submit" formaction="/bulletins/<%= emp.id %>/validate">Valider</button>
             <% } else if (bulletinStatus === 'validated') { %>
                 <button class="print-button bulletin-action" type="submit" formaction="/bulletins/<%= emp.id %>/draft">Retourner en brouillon</button>
@@ -734,7 +741,7 @@
 
         <% if (bulletin) { %>
             <div class="bulletin-status" role="status" aria-live="polite">
-                <strong>Statut : <%= statusLabel %></strong>
+                <strong>Statut : <%= employeeStatusLabel %></strong>
                 <% if (bulletinStatus === 'validated') { %>
                     <span>Bulletin en lecture seule. Retournez en brouillon pour modifier les données de paie.</span>
                 <% } else if (closed) { %>
@@ -809,7 +816,7 @@
                 <tr>
                     <td class="description">Salaire de base</td>
                     <td class="num">
-                        <input class="employee-edit live-input" name="workedDays" aria-label="Nombre de jours travaillés" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="26" step="1" required value="<%= values.workedDays ?? 26 %>" <%= locked || emp.blocageSaisiePaie ? 'disabled' : '' %>>
+                        <input class="employee-edit live-input" name="workedDays" aria-label="Nombre de jours travaillés" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="26" step="1" required value="<%= values.workedDays ?? 26 %>" <%= locked ? 'disabled' : '' %>>
                     </td>
                     <td class="num">—</td>
                     <td class="num">
@@ -900,6 +907,14 @@
                     <td class="num"><span data-result="irNet"><%= fmt(values.irNet) %></span></td>
                     <td class="num">—</td>
                 </tr>
+                <tr>
+                    <td class="description">ARRONDI</td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                    <td class="num"><span data-result="arrondiGains"><%= arrondi > 0 ? fmt(arrondi) : '—' %></span></td>
+                    <td class="num"><span data-result="arrondiRetenues"><%= arrondi < 0 ? fmt(Math.abs(arrondi)) : '—' %></span></td>
+                    <td class="num">—</td>
+                </tr>
 
                 <% nimpLines.forEach(line => { %>
                     <tr class="disabled-row">
@@ -937,7 +952,7 @@
                 <% }); %>
                 <tr class="gross totals-row">
                     <td colspan="3" class="description">TOTAUX</td>
-                    <td class="num"><span data-result="sbg"><%= money(values.sbg) %></span></td>
+                    <td class="num"><span data-result="totalGains"><%= money(totalGains) %></span></td>
                     <td class="num"><span data-result="deductionsTotal"><%= money(totalDeductions) %></span></td>
                     <td class="num">—</td>
                 </tr>

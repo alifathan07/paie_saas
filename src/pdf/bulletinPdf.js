@@ -1,304 +1,181 @@
 import PDFDocument from 'pdfkit';
 
-// ---------------------------------------------------------------------------
-// Named Layout Constants (A4 page size: 595.28 x 841.89 points)
-// ---------------------------------------------------------------------------
-const MARGIN_LEFT = 40;
-const MARGIN_RIGHT = 40;
 const PAGE_WIDTH = 595.28;
-const PRINTABLE_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT; // 515.28 pt
+const LEFT = 30;
+const RIGHT = 30;
+const WIDTH = PAGE_WIDTH - LEFT - RIGHT;
+const BLACK = '#183044';
+const NAVY = '#123b57';
+const TEAL = '#0f766e';
+const GRAY = '#607486';
+const LIGHT = '#f5f9fb';
+const MINT = '#eaf7f5';
+const BORDER = '#d7e3e8';
+const LINE = '#cbd9df';
 
-// Table Column Boundaries & Widths
-const COL_DESIGNATION_X = 45;
-const COL_DESIGNATION_W = 210;
+const money = value => Number(value || 0).toLocaleString('fr-MA', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+});
+const amount = value => Number(value || 0);
+const percent = value => `${(amount(value) * 100).toFixed(2).replace('.', ',')} %`;
 
-const COL_BASE_X = 260;
-const COL_BASE_W = 80;
-
-const COL_TAUX_X = 345;
-const COL_TAUX_W = 55;
-
-const COL_GAINS_X = 405;
-const COL_GAINS_W = 75;
-
-const COL_RETENUES_X = 485;
-const COL_RETENUES_W = 65;
-
-const ROW_HEIGHT = 19;
-const TABLE_HEADER_HEIGHT = 22;
-
-// Brand & Theme Colors (Matching Reference Image EXACTLY)
-const TEAL_PRIMARY = '#169a72';
-const MINT_BG = '#e8f4f1';
-const MINT_BORDER = '#b2dfdb';
-const GRAY_LIGHT = '#f4f6f8';
-const GRAY_BORDER = '#d0d7de';
-const TEXT_DARK = '#1a202c';
-const TEXT_MUTED = '#4a5568';
-
-function fmt(n) {
-    return Number(n || 0).toLocaleString('fr-MA', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }) + ' DH';
+function text(doc, value, x, y, width, options = {}) {
+    doc.text(String(value ?? ''), x, y, { width, lineBreak: false, ellipsis: true, ...options });
 }
 
-function fmtNum(n) {
-    return Number(n || 0).toLocaleString('fr-MA', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
-}
-
-/**
- * Generates a PDF stream using PDFKit for a saved bulletin.
- * Uses running Y-cursor pattern for all table rows and sections.
- *
- * @param {Object} data Bulletin calculation data + employee details
- * @param {WritableStream} outputStream Express response or file writable stream
- */
-export function generateBulletinPdf(data, outputStream) {
-    const doc = new PDFDocument({
-        size: 'A4',
-        margin: 40,
-        info: {
-            Title: `Bulletin de Paie - ${data.employeeName} - ${data.monthName} ${data.year}`,
-            Author: 'Paie Software',
-        },
-    });
-
-    doc.pipe(outputStream);
-
-    // -----------------------------------------------------------------------
-    // 1. HEADER BLOCK (Top of Page)
-    // -----------------------------------------------------------------------
-    let y = 40;
-
-    // Left Side: Company Branding
-    doc.fontSize(16).font('Helvetica-Bold').fillColor(TEXT_DARK)
-        .text(data.companyName || 'CONFONDA', MARGIN_LEFT, y);
-    
-    y += 18;
-    doc.fontSize(8.5).font('Helvetica').fillColor(TEXT_MUTED)
-        .text(data.companyAddress || 'hay sikaktyne', MARGIN_LEFT, y);
-    
-    y += 12;
-    doc.text(`N° CNSS : ${data.companyCNSS || '5646554654'}`, MARGIN_LEFT, y);
-    
-    y += 12;
-    doc.text(`IF : ${data.companyIF || '565653486+531564515645241563165116231311'} | ICE : ${data.companyICE || '120521852812821'}`, MARGIN_LEFT, y);
-
-    // Right Side: Document Title & Metadata
-    const rightX = 350;
-    const rightW = PAGE_WIDTH - MARGIN_RIGHT - rightX;
-
-    doc.fontSize(16).font('Helvetica-Bold').fillColor(TEAL_PRIMARY)
-        .text('BULLETIN DE PAIE', rightX, 40, { width: rightW, align: 'right' });
-
-    doc.fontSize(8.5).font('Helvetica').fillColor(TEXT_MUTED);
-    doc.text(`Période : ${data.monthName} ${data.year}`, rightX, 60, { width: rightW, align: 'right' });
-    doc.text(`Date de paiement : ${data.paymentDate || `${data.year}-${String(data.month).padStart(2, '0')}-25`}`, rightX, 72, { width: rightW, align: 'right' });
-    doc.text(`Méthode : ${data.paymentMethod || 'Virement'}`, rightX, 84, { width: rightW, align: 'right' });
-
-    y = 110;
-
-    // -----------------------------------------------------------------------
-    // 2. EMPLOYEE BLOCK (Mint Box)
-    // -----------------------------------------------------------------------
-    const empBoxHeight = 52;
-    doc.roundedRect(MARGIN_LEFT, y, PRINTABLE_WIDTH, empBoxHeight, 4)
-        .fillAndStroke(MINT_BG, MINT_BORDER);
-
-    const empY = y + 10;
-    // Left column
-    doc.fontSize(9.5).font('Helvetica-Bold').fillColor(TEXT_DARK)
-        .text(`Salarié : ${data.employeeName}`, MARGIN_LEFT + 15, empY);
-    
-    doc.fontSize(8.5).font('Helvetica').fillColor(TEXT_MUTED);
-    doc.text(`Emploi : ${data.employeeFonction || '—'}`, MARGIN_LEFT + 15, empY + 14);
-    doc.text(`Matricule : ${data.employeeMatricule || '—'}`, MARGIN_LEFT + 15, empY + 26);
-
-    // Right column
-    const empRightX = MARGIN_LEFT + 270;
-    doc.text(`N° CNSS : ${data.employeeCNSS || '—'}`, empRightX, empY + 14);
-    doc.text(`Ancienneté : ${data.seniorityYears || 0} an(s)`, empRightX, empY + 26);
-
-    y += empBoxHeight + 20;
-
-    // -----------------------------------------------------------------------
-    // 3. MAIN TABLE HEADER
-    // -----------------------------------------------------------------------
-    doc.rect(MARGIN_LEFT, y, PRINTABLE_WIDTH, TABLE_HEADER_HEIGHT)
-        .fill(TEAL_PRIMARY);
-
-    const thY = y + 6;
-    doc.fontSize(9).font('Helvetica-Bold').fillColor('#FFFFFF');
-    doc.text('Désignation', COL_DESIGNATION_X, thY, { width: COL_DESIGNATION_W, align: 'left' });
-    doc.text('Base', COL_BASE_X, thY, { width: COL_BASE_W, align: 'right' });
-    doc.text('Taux', COL_TAUX_X, thY, { width: COL_TAUX_W, align: 'right' });
-    doc.text('Gains', COL_GAINS_X, thY, { width: COL_GAINS_W, align: 'right' });
-    doc.text('Retenues', COL_RETENUES_X, thY, { width: COL_RETENUES_W, align: 'right' });
-
-    y += TABLE_HEADER_HEIGHT;
-    const tableBodyStartY = y;
-
-    // Helper for adding a dynamic table row
-    let totalGains = 0;
-    let totalRetenues = 0;
-    let rowCount = 0;
-
-    function addTableRow(designation, baseStr, tauxStr, gainsNum, retenuesNum, options = {}) {
-        const rowY = y;
-        
-        // Alternate subtle row background or line
-        if (rowCount % 2 === 1) {
-            doc.rect(MARGIN_LEFT, rowY, PRINTABLE_WIDTH, ROW_HEIGHT).fill('#fafcfc');
-        }
-
-        doc.fontSize(8.5).font(options.font || 'Helvetica').fillColor(options.color || TEXT_DARK);
-        
-        doc.text(designation, COL_DESIGNATION_X, rowY + 5, { width: COL_DESIGNATION_W, align: 'left' });
-        doc.text(baseStr || '', COL_BASE_X, rowY + 5, { width: COL_BASE_W, align: 'right' });
-        doc.text(tauxStr || '', COL_TAUX_X, rowY + 5, { width: COL_TAUX_W, align: 'right' });
-        
-        if (gainsNum !== null && gainsNum !== undefined && gainsNum > 0) {
-            doc.text(fmt(gainsNum), COL_GAINS_X, rowY + 5, { width: COL_GAINS_W, align: 'right' });
-            if (!options.excludeFromTotal) totalGains += Number(gainsNum);
-        }
-
-        if (retenuesNum !== null && retenuesNum !== undefined && retenuesNum > 0) {
-            const retStr = options.isParens ? `(${fmt(retenuesNum)})` : fmt(retenuesNum);
-            doc.text(retStr, COL_RETENUES_X, rowY + 5, { width: COL_RETENUES_W, align: 'right' });
-            if (!options.excludeFromTotal) totalRetenues += Number(retenuesNum);
-        }
-
-        // Bottom border for each row
-        doc.moveTo(MARGIN_LEFT, rowY + ROW_HEIGHT)
-           .lineTo(MARGIN_LEFT + PRINTABLE_WIDTH, rowY + ROW_HEIGHT)
-           .strokeColor('#e5eceb')
-           .lineWidth(0.5)
-           .stroke();
-
-        y += ROW_HEIGHT;
-        rowCount++;
-    }
-
-    // -----------------------------------------------------------------------
-    // 4. ITEMIZED TABLE ROWS (Exact Order Required)
-    // -----------------------------------------------------------------------
-
-    // 1. Salaire de Base (Always)
-    const baseSal = Number(data.baseSalary || 0);
-    addTableRow('Salaire de Base', fmt(baseSal), '', baseSal, null);
-
-    // 2. Primes imposables (One row per named prime)
-    if (data.variablePrimes && data.variablePrimes.length > 0) {
-        data.variablePrimes.forEach(p => {
-            if (p.amount > 0) {
-                addTableRow(p.label || 'Prime imposable', '', '', p.amount, null);
-            }
+function cell(doc, x, y, width, height, value = '', options = {}) {
+    if (options.fill) doc.rect(x, y, width, height).fill(options.fill);
+    doc.rect(x, y, width, height).strokeColor(options.border || LINE).lineWidth(options.lineWidth || 0.6).stroke();
+    if (value !== '') {
+        doc.font(options.bold ? 'Helvetica-Bold' : 'Helvetica')
+            .fontSize(options.size || 7.5).fillColor(options.color || BLACK);
+        text(doc, value, x + (options.padding ?? 4), y + (options.top ?? 4), width - ((options.padding ?? 4) * 2), {
+            align: options.align || 'left',
         });
     }
+}
 
-    // 3. Heures supplémentaires (One row per rate used)
-    if (data.hs25Amount > 0) {
-        addTableRow(`Heures sup. 25% (${data.heuresSup25} h)`, '', '25,00%', data.hs25Amount, null);
+function row(doc, y, height, columns, values, options = {}) {
+    let x = LEFT;
+    columns.forEach((width, index) => {
+        cell(doc, x, y, width, height, values[index], {
+            align: options.align?.[index] || 'left',
+            bold: options.bold?.includes(index),
+            size: options.size || 7.5,
+            padding: options.padding ?? 4,
+            top: options.top ?? 4,
+            fill: options.fill,
+            border: options.border,
+            lineWidth: options.lineWidth,
+            color: options.color || (options.fill === NAVY ? '#ffffff' : undefined),
+        });
+        x += width;
+    });
+}
+
+function numericText(value) {
+    return value ? Number(value.replace?.(/[^0-9,-]/g, '').replace(',', '.') || 0) : 0;
+}
+
+function drawPayrollTable(doc, data, startY) {
+    const columns = [35, 190, 70, 80, 50, 60, 50];
+    let y = startY;
+    row(doc, y, 22, columns, ['RUB', 'LIBELLÉS', 'COTIS. PATR.', 'NBR / BASE', 'TAUX', 'GAINS', 'RETENUES'], {
+        bold: [0, 1, 2, 3, 4, 5, 6], fill: NAVY, border: NAVY,
+        align: ['left', 'left', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 7,
+    });
+    y += 22;
+
+    const lines = [];
+    const push = (code, label, employer, base, rate, gains, deductions) => lines.push([
+        code, label, employer ? money(employer) : '', base || '', rate || '', gains ? money(gains) : '', deductions ? money(deductions) : '',
+    ]);
+    const workedDays = amount(data.workedDays);
+    const baseSalary = amount(data.rawBaseSalary ?? data.baseSalary);
+    const seniority = amount(data.primeAnciennete);
+
+    push('010', 'SALAIRE EN NOMBRE DE JOURS TRAVAILLÉS', '', `${workedDays.toFixed(2)} J`, '', data.effectiveBaseSalary ?? data.baseSalary, 0);
+    if (seniority > 0) push('075', 'ANCIENNETÉ LÉGALE', '', money(baseSalary), percent(data.ancienneteRate), seniority, 0);
+    push('019', 'SALAIRE BRUT IMPOSABLE', '', money(data.sbi), '', 0, 0);
+    (data.variablePrimes || []).forEach(prime => push('', prime.label, '', '', '', prime.amount, 0));
+    (data.nimpLines || []).forEach(line => push('', line.label, '', '', '', line.amount, 0));
+    if (amount(data.amo) > 0) push('196', 'RETENUE AMO', amount(data.amoPatronale), money(data.sbi), percent(data.amoRate), 0, data.amo);
+    if (amount(data.cnss) > 0) push('197', 'RETENUE CNSS', amount(data.cnssPatronale), money(Math.min(amount(data.sbi), 6000)), percent(data.cnssRate), 0, data.cnss);
+    if (amount(data.cimr) > 0) push('199', 'RETENUE CIMR', '', money(data.sbi), percent(data.cimrRate), 0, data.cimr);
+    if (amount(data.irNet) > 0) push('198', 'RETENUE IR', '', money(data.sni), '', 0, data.irNet);
+    if (amount(data.avances) > 0) push('400', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avances);
+    if (amount(data.arrondi) > 0) push('410', 'ARRONDI', '', '', '', data.arrondi, 0);
+    if (amount(data.arrondi) < 0) push('410', 'ARRONDI', '', '', '', 0, Math.abs(data.arrondi));
+
+    let totalGains = 0;
+    let totalDeductions = 0;
+    const maxRows = 12;
+    for (let index = 0; index < Math.max(lines.length, maxRows); index += 1) {
+        const line = lines[index] || ['', '', '', '', '', '', ''];
+        if (index < lines.length) {
+            totalGains += numericText(line[5]);
+            totalDeductions += numericText(line[6]);
+        }
+        if (index % 2 === 1) doc.rect(LEFT, y, WIDTH, 19).fill(LIGHT);
+        row(doc, y, 19, columns, line, {
+            align: ['left', 'left', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 5,
+            border: BORDER, fill: index % 2 === 1 ? LIGHT : '#ffffff',
+        });
+        y += 19;
     }
-    if (data.hs50Amount > 0) {
-        addTableRow(`Heures sup. 50% (${data.heuresSup50} h)`, '', '50,00%', data.hs50Amount, null);
-    }
-    if (data.hs100Amount > 0) {
-        addTableRow(`Heures sup. 100% (${data.heuresSup100} h)`, '', '100,00%', data.hs100Amount, null);
-    }
 
-    // 4. Prime d'ancienneté (Always if > 0)
-    if (data.primeAnciennete > 0) {
-        addTableRow("Prime d'ancienneté", '', '', data.primeAnciennete, null);
-    }
+    row(doc, y, 23, columns, ['', 'Total :', money(amount(data.cnssPatronale) + amount(data.amoPatronale)), '', '', money(totalGains), money(totalDeductions)], {
+        bold: [1, 2, 5, 6], align: ['left', 'right', 'right', 'right', 'right', 'right', 'right'], size: 7.5, top: 7,
+        fill: MINT, border: BORDER,
+    });
+    return y + 23;
+}
 
-    // 5. Retenue CNSS (Base = capped SBI, max 6000)
-    const cnssBase = Math.min(data.sbi, 6000);
-    addTableRow('Retenue CNSS', fmt(cnssBase), '4,48%', null, data.cnss);
+function drawCumulative(doc, data, startY) {
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(BLACK).text('Cumul / An:', LEFT, startY - 13);
+    const columns = [45, 85, 75, 75, 75, 75, 105];
+    row(doc, startY, 20, columns, ['JOURS', 'BRUT', 'CNSS', 'RETRAITE', 'IMPOS.', 'IR', 'RETENUES'], {
+        bold: [0, 1, 2, 3, 4, 5, 6], align: ['left', 'right', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 6, fill: NAVY, border: NAVY,
+    });
+    const cumulative = data.cumulative || {};
+    row(doc, startY + 20, 20, columns, [
+        amount(cumulative.workedDays || data.workedDays).toFixed(2), money(cumulative.sbg || data.sbg),
+        money(cumulative.cnss || data.cnss), money(cumulative.cimr || data.cimr),
+        money(cumulative.sni || data.sni), money(cumulative.irNet || data.irNet),
+        money(cumulative.deductions || amount(data.cnss) + amount(data.amo) + amount(data.cimr) + amount(data.irNet)),
+    ], { align: ['left', 'right', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 6, fill: '#ffffff', border: BORDER });
+    return startY + 40;
+}
 
-    // 7. Retenue AMO (Base = SBI, uncapped)
-    addTableRow('Retenue AMO', fmt(data.sbi), '2,26%', null, data.amo);
+/** Render one bulletin page into a PDFKit document. */
+export function generateBulletinPdf(data, outputStream, options = {}) {
+    const ownDocument = !options.doc;
+    const doc = options.doc || new PDFDocument({
+        size: 'A4', margin: 30,
+        info: { Title: `Bulletin de Paie - ${data.employeeName}`, Author: 'Paie Software' },
+    });
+    if (ownDocument) doc.pipe(outputStream);
 
-    // 7b. Retenue CIMR (If cimr > 0)
-    if (data.cimr > 0) {
-        const cimrRateStr = (Number(data.cimrRate || 0) * 100).toFixed(2).replace('.', ',') + '%';
-        addTableRow('Retenue CIMR', fmt(data.sbi), cimrRateStr, null, data.cimr);
-    }
+    doc.fillColor(BLACK);
+    doc.roundedRect(LEFT, 25, WIDTH, 55, 8).fill(MINT);
+    doc.font('Helvetica-Bold').fontSize(15).fillColor(NAVY).text(data.companyName || 'GENIE STRUCTURE', LEFT + 15, 35);
+    doc.font('Helvetica').fontSize(8.5).fillColor(GRAY).text(data.companyAddress || '', LEFT + 15, 56);
+    doc.fillColor(GRAY);
+    doc.text(`CNSS : ${data.companyCNSS || '—'}`, LEFT, 63);
+    doc.font('Helvetica-Bold').fontSize(19).fillColor(NAVY).text('BULLETIN DE PAIE', LEFT, 103, { width: WIDTH, align: 'center' });
+    doc.font('Helvetica').fontSize(8.5).fillColor(GRAY).text(
+        `Période du : 01/${String(data.month).padStart(2, '0')}/${data.year} au : ${new Date(data.year, data.month, 0).getDate()}/${String(data.month).padStart(2, '0')}/${data.year}    Mois : ${String(data.month).padStart(2, '0')}/${String(data.year).slice(-2)}`,
+        LEFT, 127, { width: WIDTH, align: 'center' }
+    );
+    doc.text(`Service : ${data.codeService || '—'}`, LEFT, 151, { width: WIDTH, align: 'right' });
 
+    const identityColumns = [55, 155, 75, 65, 65, 45, 75];
+    row(doc, 166, 22, identityColumns, ['Mle', 'Nom & Prénom', 'N° CNSS', 'Retraite', 'Mutuelle', 'Sce', 'CAT.'], {
+        bold: [0, 1, 2, 3, 4, 5, 6], align: ['center', 'center', 'center', 'center', 'center', 'center', 'center'], size: 7.2, top: 7, fill: NAVY, border: NAVY,
+    });
+    row(doc, 188, 22, identityColumns, [data.employeeMatricule, data.employeeName, data.employeeCNSS, '', '', data.codeService || '', ''], {
+        bold: [0, 1], align: ['center', 'left', 'center', 'center', 'center', 'center', 'center'], size: 7.2, top: 7, fill: '#ffffff', border: BORDER,
+    });
+    doc.font('Helvetica').fontSize(7.5).text(`Adresse : ${data.employeeAddress || '—'}`, LEFT, 214);
 
+    const detailsColumns = [50, 50, 145, 28, 30, 30, 65, 70, 67];
+    row(doc, 229, 20, detailsColumns, ['Dte Nais.', 'Dte Emb.', 'Fonction', 'S.F', 'Enf', 'Dd.', 'CIN', 'Sal. Base', 'Jours'], {
+        bold: [0, 1, 2, 3, 4, 5, 6, 7, 8], align: ['center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center'], size: 6.8, top: 6, fill: '#eef5f7', border: BORDER,
+    });
+    row(doc, 249, 22, detailsColumns, [data.birthDate || '—', data.hireDate || '—', data.employeeFonction || '—', data.sexe || '—', data.children ?? '—', data.dependents ?? '—', data.cin || '—', money(data.rawBaseSalary ?? data.baseSalary), amount(data.workedDays).toFixed(2)], {
+        align: ['center', 'center', 'center', 'center', 'center', 'center', 'center', 'right', 'right'], size: 6.8, top: 7, fill: '#ffffff', border: BORDER,
+    });
 
-    // 9. Retenue I.R. (Base = SNI)
-    addTableRow('Retenue I.R.', fmt(data.sni), 'Barème', null, data.irNet);
+    const endTable = drawPayrollTable(doc, data, 282);
+    const endCumulative = drawCumulative(doc, data, endTable + 20);
+    doc.roundedRect(LEFT, endCumulative + 17, 160, 48, 7).fill('#f4f8fa').strokeColor(BORDER).stroke();
+    doc.font('Helvetica').fontSize(8).fillColor(GRAY).text('Mode de paiement', LEFT + 12, endCumulative + 27);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(NAVY).text(data.paymentMethod || 'Virement', LEFT + 12, endCumulative + 42);
+    doc.roundedRect(PAGE_WIDTH - RIGHT - 205, endCumulative + 17, 205, 48, 7).fill(TEAL);
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#d8f5ef').text('NET À PAYER', PAGE_WIDTH - RIGHT - 190, endCumulative + 27, { width: 175, align: 'right' });
+    doc.font('Helvetica-Bold').fontSize(14).fillColor('#ffffff').text(money(data.netAPayer), PAGE_WIDTH - RIGHT - 190, endCumulative + 40, { width: 175, align: 'right' });
+    doc.font('Helvetica').fontSize(8).fillColor(GRAY).text('Signature', PAGE_WIDTH / 2 - 30, endCumulative + 82);
 
-    // Pad remaining height with blank grid lines for formal pre-printed layout
-    const minRows = 12;
-    while (rowCount < minRows) {
-        doc.rect(MARGIN_LEFT, y, PRINTABLE_WIDTH, ROW_HEIGHT).fill(rowCount % 2 === 1 ? '#fafcfc' : '#ffffff');
-        doc.moveTo(MARGIN_LEFT, y + ROW_HEIGHT)
-           .lineTo(MARGIN_LEFT + PRINTABLE_WIDTH, y + ROW_HEIGHT)
-           .strokeColor('#e5eceb')
-           .lineWidth(0.5)
-           .stroke();
-        y += ROW_HEIGHT;
-        rowCount++;
-    }
-
-    // -----------------------------------------------------------------------
-    // 5. TOTALS ROW ("TOTAUX")
-    // -----------------------------------------------------------------------
-    doc.rect(MARGIN_LEFT, y, PRINTABLE_WIDTH, ROW_HEIGHT + 3).fill('#ede8e8');
-    
-    const totY = y + 6;
-    doc.fontSize(9).font('Helvetica-Bold').fillColor(TEXT_DARK);
-    doc.text('TOTAUX', COL_DESIGNATION_X, totY);
-    doc.text(fmt(totalGains), COL_GAINS_X, totY, { width: COL_GAINS_W, align: 'right' });
-    doc.text(fmt(totalRetenues), COL_RETENUES_X, totY, { width: COL_RETENUES_W, align: 'right' });
-
-    // Table outer border
-    doc.rect(MARGIN_LEFT, tableBodyStartY - TABLE_HEADER_HEIGHT, PRINTABLE_WIDTH, y - tableBodyStartY + TABLE_HEADER_HEIGHT + ROW_HEIGHT + 3)
-       .strokeColor(GRAY_BORDER)
-       .lineWidth(1)
-       .stroke();
-
-    y += ROW_HEIGHT + 25;
-
-    // -----------------------------------------------------------------------
-    // 6. NET A PAYER BOX (Highlighted Right-Aligned Box)
-    // -----------------------------------------------------------------------
-    const netBoxWidth = 200;
-    const netBoxHeight = 48;
-    const netBoxX = MARGIN_LEFT + PRINTABLE_WIDTH - netBoxWidth;
-
-    doc.rect(netBoxX, y, netBoxWidth, netBoxHeight)
-       .lineWidth(2)
-       .strokeColor(TEAL_PRIMARY)
-       .fill('#ffffff');
-
-    doc.fontSize(9.5).font('Helvetica-Bold').fillColor(TEXT_DARK)
-       .text('NET A PAYER', netBoxX, y + 8, { width: netBoxWidth, align: 'center' });
-
-    doc.fontSize(16).font('Helvetica-Bold').fillColor(TEAL_PRIMARY)
-       .text(fmt(data.netAPayer), netBoxX, y + 23, { width: netBoxWidth, align: 'center' });
-
-    y += netBoxHeight + 45;
-
-    // -----------------------------------------------------------------------
-    // 7. BOTTOM SIGNATURES
-    // -----------------------------------------------------------------------
-    doc.moveTo(MARGIN_LEFT, y)
-       .lineTo(MARGIN_LEFT + PRINTABLE_WIDTH, y)
-       .strokeColor(GRAY_BORDER)
-       .lineWidth(0.5)
-       .stroke();
-
-    y += 12;
-    doc.fontSize(8.5).font('Helvetica').fillColor(TEXT_MUTED);
-    doc.text("Signature de l'Employeur", MARGIN_LEFT, y);
-    doc.text("Signature de l'Employé", MARGIN_LEFT, y, { width: PRINTABLE_WIDTH, align: 'right' });
-
-    doc.end();
+    if (ownDocument) doc.end();
 }

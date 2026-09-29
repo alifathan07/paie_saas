@@ -65,6 +65,21 @@ assert.equal(newTaxYear.previousIRWithheld, 0);
 
 console.log("Cumulative IR focused tests passed.");
 
+// Same SNI and family situation across two closed months must not repeat the
+// family deduction in the second month's withholding.
+const familyFirst = calculateCumulativeIR({
+  employeeId: 7, year: 2026, month: 9, previousPayslips: [], currentSNI: 15317.45,
+});
+const familyFirstNet = Number((familyFirst.currentMonthIR - 150).toFixed(2));
+const familySecond = calculateCumulativeIR({
+  employeeId: 7, year: 2026, month: 10,
+  previousPayslips: [{ employeeId: 7, year: 2026, month: 9, sni: 15317.45, irNet: familyFirstNet, chargesDeFamille: 150 }],
+  currentSNI: 15317.45,
+});
+const familySecondNet = Number((familySecond.currentMonthIR - 150).toFixed(2));
+assert.ok(Math.abs(Math.round(familySecondNet * 100) - Math.round(familyFirstNet * 100)) <= 1);
+console.log("Family deduction cumulative IR regression passed.");
+
 // Deliberately mixed history: only earlier months of this employee/year count.
 const history = [
   { employeeId: 1, year: 2026, month: 12, sni: 90000, irNet: 20000 },

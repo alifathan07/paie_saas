@@ -1,0 +1,73 @@
+<%- include('../partials/header') %>
+
+<div class="page-header editions-header">
+    <div class="header-title-area">
+        <h1 class="page-title">Éditions</h1>
+        <p class="page-subtitle">Consultez et préparez vos états et documents de paie</p>
+    </div>
+</div>
+
+<% if (selectedReport) { %>
+    <div class="bulk-summary editions-notice" role="status">
+        <strong><%= selectedReport %></strong>
+        <span>Cette édition sera disponible ici prochainement.</span>
+    </div>
+<% } %>
+
+<div class="editions-grid">
+    <a class="edition-card edition-card-primary" href="/editions/bulletins">
+        <span class="edition-card-icon" aria-hidden="true">▤</span>
+        <span class="edition-card-body">
+            <strong>Bulletins</strong>
+            <span>Générer et consulter les bulletins de salaire</span>
+        </span>
+        <span class="edition-card-arrow" aria-hidden="true">→</span>
+    </a>
+
+    <a class="edition-card" href="/editions?report=cnss">
+        <span class="edition-card-icon" aria-hidden="true">▥</span>
+        <span class="edition-card-body">
+            <strong>État CNSS</strong>
+            <span>État des cotisations CNSS</span>
+        </span>
+        <span class="edition-card-arrow" aria-hidden="true">→</span>
+    </a>
+
+    <a class="edition-card" href="/editions?report=amo">
+        <span class="edition-card-icon" aria-hidden="true">♥</span>
+        <span class="edition-card-body">
+            <strong>État AMO</strong>
+            <span>État des cotisations AMO</span>
+        </span>
+        <span class="edition-card-arrow" aria-hidden="true">→</span>
+    </a>
+
+    <a class="edition-card" href="/editions?report=journal">
+        <span class="edition-card-icon" aria-hidden="true">≡</span>
+        <span class="edition-card-body">
+            <strong>Journal de paie</strong>
+            <span>Journal détaillé des opérations de paie</span>
+        </span>
+        <span class="edition-card-arrow" aria-hidden="true">→</span>
+    </a>
+
+    <a class="edition-card" href="/editions?report=livre">
+        <span class="edition-card-icon" aria-hidden="true">▤</span>
+        <span class="edition-card-body">
+            <strong>Livre de paie</strong>
+            <span>Récapitulatif des salaires et retenues</span>
+        </span>
+        <span class="edition-card-arrow" aria-hidden="true">→</span>
+    </a>
+
+    <a class="edition-card" href="/editions?report=ir">
+        <span class="edition-card-icon" aria-hidden="true">%</span>
+        <span class="edition-card-body">
+            <strong>État IR</strong>
+            <span>État de l’impôt sur le revenu</span>
+        </span>
+        <span class="edition-card-arrow" aria-hidden="true">→</span>
+    </a>
+</div>
+
+<%- include('../partials/footer') %>

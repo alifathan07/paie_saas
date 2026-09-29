@@ -130,10 +130,12 @@ model Employee {
   rib          String?      @unique
 
   actif                   Boolean         @default(true)
+  bulletinMasque          Boolean         @default(false)
   cimrRate                Decimal?        @db.Decimal(6, 4)
   cimrReduitBaseImposable Boolean         @default(false)
   bonuses                 EmployeeBonus[]
   payslips                Payslip[]
+  bulletinMasks           BulletinMask[]
   baseSalary              Decimal         @db.Decimal(12, 2)
   createdAt               DateTime        @default(now())
   updatedAt               DateTime        @updatedAt
@@ -233,6 +235,20 @@ model Payslip {
   @@unique([employeeId, month, year])
   @@index([employeeId])
   @@map("payslips")
+}
+
+model BulletinMask {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  month      Int
+  year       Int
+  createdAt  DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month, year])
+  @@index([employeeId])
+  @@map("bulletin_masks")
 }
 
 // ================================

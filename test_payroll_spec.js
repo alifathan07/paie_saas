@@ -129,7 +129,7 @@ async function runPayrollSpecs() {
 
     const directCashMinusFraisPro = res1.sbg - res1.cnss - res1.amo - res1.fraisPro - res1.irNet;
     console.assert(res1.netAPayer > directCashMinusFraisPro, "Net salary MUST NOT subtract frais professionnels directly!");
-    console.assert(res1.netAPayer === res1.sbg - res1.cnss - res1.amo - (res1.cimr || 0) - res1.irNet, "Net salary formula must only deduct actual cash deductions (CNSS, AMO, CIMR, IR, Avances)");
+    console.assert(res1.netAPayer === Number((res1.sbg - res1.cnss - res1.amo - (res1.cimr || 0) - res1.irNet + res1.arrondi).toFixed(2)), "Net salary formula must include the explicit arrondi adjustment");
     console.log("✅ CASE 4 PASSED: Frais professionnels verified as fiscal abatement only!\n");
 
     // -------------------------------------------------------------------------
