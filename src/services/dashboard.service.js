@@ -2,14 +2,16 @@ import prisma from "../../db.ts";
 
 export const getDashboardStats = async (companyId) => {
     try {
-        const where = companyId ? { companyId: Number(companyId) } : {};
+        const normalizedCompanyId = Number(companyId);
+        if (!Number.isInteger(normalizedCompanyId) || normalizedCompanyId <= 0) throw new Error("NO_ACTIVE_COMPANY");
+        const where = { companyId: normalizedCompanyId };
         const activeWhere = { ...where, actif: true };
 
         const totalEmployees = await prisma.employee.count({ where });
         const activeEmployees = await prisma.employee.count({
             where: activeWhere
         });
-        const totalCompanies = await prisma.company.count();
+        const totalCompanies = 1;
 
         // Calculate total base salary & average
         const aggregate = await prisma.employee.aggregate({

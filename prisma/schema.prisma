@@ -26,6 +26,7 @@ model Company {
   userCompanies UserCompany[]
   employees     Employee[]
   bonuses       Bonus[]
+  reports       Report[]
 
   @@map("company")
 }
@@ -37,10 +38,41 @@ model Users {
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  isAdmin   Boolean  @default(false)
+  isBlocked Boolean  @default(false)
+  blockReason String?
+  maxCompanies Int @default(1)
 
   userCompanies UserCompany[]
+  reports       Report[]
 
   @@map("users")
+}
+
+enum ReportStatus {
+  OPEN
+  IN_PROGRESS
+  SOLVED
+  CLOSED
+}
+
+model Report {
+  id         Int          @id @default(autoincrement())
+  subject    String
+  message    String       @db.Text
+  adminNote  String?      @db.Text
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  solvedAt   DateTime?
+  userId     Int
+  companyId  Int?
+  user       Users        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company    Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+  @@map("reports")
 }
 
 model UserCompany {
@@ -51,6 +83,7 @@ model UserCompany {
   user    Users   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([companyId, userId])
+  @@unique([companyId])
   @@map("userCompanies")
 }
 
@@ -89,8 +122,7 @@ enum ModePaiement {
 model Employee {
   id            Int      @id @default(autoincrement())
   matricule     String
-  nom           String
-  prenom        String
+  nomComplet    String 
   cin           String   @unique
   dateNaissance DateTime
   sexe          Sexe
@@ -105,7 +137,6 @@ model Employee {
   natureEmploi      NatureEmploi  @default(PERMANENT) // gates CNSS/AMO logic — stagiaire/exonere ≠ same contributions
   contratDateDebut  DateTime? // Contrat Du
   contratDateFin    DateTime? // Contrat Au (nullable = CDI)
-  pieceJointeUrl    String? // Pièce jointe — store file ref, never a blob
   blocageSaisiePaie Boolean       @default(false) // locks employee out of active payroll run
 
   // --- État civil ---
@@ -119,7 +150,6 @@ model Employee {
   // --- Contact ---
   adresse             String?
   ville               String? // Ville
-  image               String?
   numeroCNSS          String?            @unique
   dateAffiliationCnss DateTime? // Dte Affiliat. under Caisse Retraite/CNSS block
 
@@ -144,7 +174,6 @@ model Employee {
 
   @@unique([companyId, matricule])
 }
-
 
 model Bonus {
   id        Int      @id @default(autoincrement())

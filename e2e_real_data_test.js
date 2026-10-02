@@ -32,8 +32,7 @@ async function main() {
         data: {
             companyId,
             matricule,
-            nom: "Berrada",
-            prenom: "Anas",
+            nomComplet: "Anas Test",
             cin: "BK" + Date.now().toString().slice(-5),
             dateNaissance: new Date("1989-04-12"),
             dateEmbauche: new Date(), // Today = 0 seniority years for crisp calculation
@@ -55,7 +54,7 @@ async function main() {
         }
     });
 
-    console.log(`✅ Created real employee in database: ${emp.nom} ${emp.prenom} (${emp.matricule})`);
+    console.log(`✅ Created real employee in database: ${emp.nomComplet} (${emp.matricule})`);
     console.log(`   Base Salary: ${emp.baseSalary} DH | CIMR Rate: ${emp.cimrRate * 100}% | Profile Bonus: ${emp.bonuses[0].bonus.name} (${emp.bonuses[0].amount} DH)`);
 
     const month = 8;
@@ -171,7 +170,7 @@ async function main() {
     };
     await bulletinsController.listBulletins({ query: { month, year }, session: { user: { companyId } } }, resList);
     const listedEmp = page1Data.employees.find(e => e.id === emp.id);
-    console.log(`   Page 1 entry for ${listedEmp.nom}: status=${listedEmp.bulletinStatus}, variablesEntered=${listedEmp.variablesEntered}, netAPayer=${listedEmp.bulletin?.netAPayer}`);
+    console.log(`   Page 1 entry for ${listedEmp.nomComplet}: status=${listedEmp.bulletinStatus}, variablesEntered=${listedEmp.variablesEntered}, netAPayer=${listedEmp.bulletin?.netAPayer}`);
     console.assert(listedEmp.bulletinStatus === "validated", "Page 1 status must reflect VALIDATED");
     console.assert(listedEmp.variablesEntered === true, "Page 1 variablesEntered must be true");
 

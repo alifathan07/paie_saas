@@ -2,9 +2,10 @@ import prisma from "../../db.ts";
 
 // Get all reusable Non-Taxable Bonus definitions for a company
 export const getAllBonusTypes = async (companyId) => {
-    const cId = companyId ? Number(companyId) : undefined;
+    const cId = Number(companyId);
+    if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
     return prisma.bonus.findMany({
-        where: cId ? { companyId: cId } : undefined,
+        where: { companyId: cId },
         orderBy: { name: 'asc' }
     });
 };
@@ -38,14 +39,15 @@ export const getEmployees = async (query = {}) => {
 
     if (search) {
         where.OR = [
-            { nom: { contains: search } },
-            { prenom: { contains: search } },
+            { nomComplet: { contains: search } },
             { matricule: { contains: search } },
             { cin: { contains: search } }
         ];
     }
     if (statut) where.statut = statut;
-    if (companyId) where.companyId = Number(companyId);
+    const cId = Number(companyId);
+    if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    where.companyId = cId;
 
     return prisma.employee.findMany({
         where,
@@ -59,9 +61,11 @@ export const getEmployees = async (query = {}) => {
     });
 };
 
-export const getEmployee = async (id) => {
-    const employee = await prisma.employee.findUnique({
-        where: { id: Number(id) },
+export const getEmployee = async (id, companyId) => {
+    const cId = Number(companyId);
+    if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    const employee = await prisma.employee.findFirst({
+        where: { id: Number(id), companyId: cId },
         include: {
             company: true,
             bonuses: {
@@ -83,12 +87,11 @@ async function resolveBonusList(bonusList, fallbackCompanyId) {
 
         let bonusDef;
         if (item.bonusId) {
-            bonusDef = await prisma.bonus.findUnique({
-                where: { id: Number(item.bonusId) }
+            bonusDef = await prisma.bonus.findFirst({
+                where: { id: Number(item.bonusId), companyId: Number(fallbackCompanyId) }
             });
         } else if (item.name && item.name.trim() !== '') {
-            const cId = item.companyId || fallbackCompanyId;
-            bonusDef = await findOrCreateBonusDefinition(item.name, cId);
+            bonusDef = await findOrCreateBonusDefinition(item.name, fallbackCompanyId);
         }
 
         if (bonusDef) {
@@ -100,28 +103,17 @@ async function resolveBonusList(bonusList, fallbackCompanyId) {
 
 export const createEmployee = async (data) => {
     const {
-        matricule, nom, prenom, cin, dateNaissance, sexe,
+        matricule, nomComplet, cin, dateNaissance, sexe,
         dateEmbauche, dateAnciennete, dateSortie, fonction, codeService,
-        contratDateDebut, contratDateFin, pieceJointeUrl,
+        contratDateDebut, contratDateFin,
         statut, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
-        adresse, ville, image, numeroCNSS, dateAffiliationCnss, modePaiement,
+        adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
         cimrRate, cimrReduitBaseImposable, blocageSaisiePaie
     } = data;
 
-    // Resolve target company
-    let targetCompanyId = companyId ? Number(companyId) : null;
-    if (!targetCompanyId) {
-        const defaultComp = await prisma.company.findFirst();
-        if (defaultComp) {
-            targetCompanyId = defaultComp.id;
-        } else {
-            const newComp = await prisma.company.create({
-                data: { name: "Entreprise Principale", ice: "000000000000000" }
-            });
-            targetCompanyId = newComp.id;
-        }
-    }
+    const targetCompanyId = Number(companyId);
+    if (!Number.isInteger(targetCompanyId) || targetCompanyId <= 0) throw new Error('NO_ACTIVE_COMPANY');
 
     const employeeBonusData = bonusList?.length > 0
         ? await resolveBonusList(bonusList, targetCompanyId)
@@ -130,8 +122,7 @@ export const createEmployee = async (data) => {
     return prisma.employee.create({
         data: {
             matricule: matricule || `EMP-${Date.now().toString().slice(-4)}`,
-            nom,
-            prenom,
+            nomComplet,
             cin,
             dateNaissance: new Date(dateNaissance),
             sexe: sexe || 'M',
@@ -142,7 +133,6 @@ export const createEmployee = async (data) => {
             codeService,
             contratDateDebut: contratDateDebut ? new Date(contratDateDebut) : null,
             contratDateFin: contratDateFin ? new Date(contratDateFin) : null,
-            pieceJointeUrl,
             statut: statut || 'TITULAIRE',
             natureEmploi: natureEmploi || 'PERMANENT',
             situationFam: situationFam || 'CELIBATAIRE',
@@ -150,7 +140,6 @@ export const createEmployee = async (data) => {
             nbEnfantCharge: Number(nbEnfantCharge || 0),
             adresse,
             ville,
-            image,
             numeroCNSS,
             dateAffiliationCnss: dateAffiliationCnss ? new Date(dateAffiliationCnss) : null,
             modePaiement: modePaiement || 'VIREMENT',
@@ -174,13 +163,13 @@ export const createEmployee = async (data) => {
     });
 };
 
-export const updateEmployee = async (id, data) => {
+export const updateEmployee = async (id, data, activeCompanyId) => {
     const {
-        matricule, nom, prenom, cin, dateNaissance, sexe,
+        matricule, nomComplet, cin, dateNaissance, sexe,
         dateEmbauche, dateAnciennete, dateSortie, fonction, codeService,
-        contratDateDebut, contratDateFin, pieceJointeUrl,
+        contratDateDebut, contratDateFin,
         statut, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
-        adresse, ville, image, numeroCNSS, dateAffiliationCnss, modePaiement,
+        adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
         cimrRate, cimrReduitBaseImposable, blocageSaisiePaie
     } = data;
@@ -188,11 +177,13 @@ export const updateEmployee = async (id, data) => {
     const empId = Number(id);
 
     // Get employee's companyId as fallback for new bonus creation
-    const existing = await prisma.employee.findUnique({
-        where: { id: empId },
+    const targetCompanyId = Number(activeCompanyId);
+    if (!Number.isInteger(targetCompanyId) || targetCompanyId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    const existing = await prisma.employee.findFirst({
+        where: { id: empId, companyId: targetCompanyId },
         select: { companyId: true }
     });
-    const targetCompanyId = companyId ? Number(companyId) : existing?.companyId;
+    if (!existing) throw new Error('EMPLOYEE_NOT_FOUND');
 
     // Replace all bonus assignments
     await prisma.employeeBonus.deleteMany({ where: { employeeId: empId } });
@@ -205,8 +196,7 @@ export const updateEmployee = async (id, data) => {
         where: { id: empId },
         data: {
             matricule,
-            nom,
-            prenom,
+            nomComplet,
             cin,
             dateNaissance: dateNaissance ? new Date(dateNaissance) : undefined,
             sexe,
@@ -217,7 +207,6 @@ export const updateEmployee = async (id, data) => {
             codeService,
             contratDateDebut: contratDateDebut ? new Date(contratDateDebut) : null,
             contratDateFin: contratDateFin ? new Date(contratDateFin) : null,
-            pieceJointeUrl,
             statut,
             natureEmploi,
             situationFam,
@@ -225,7 +214,6 @@ export const updateEmployee = async (id, data) => {
             nbEnfantCharge: nbEnfantCharge !== undefined ? Number(nbEnfantCharge) : undefined,
             adresse,
             ville,
-            image,
             numeroCNSS,
             dateAffiliationCnss: dateAffiliationCnss ? new Date(dateAffiliationCnss) : null,
             modePaiement,
@@ -243,7 +231,7 @@ export const updateEmployee = async (id, data) => {
             blocageSaisiePaie: blocageSaisiePaie !== undefined
                 ? Boolean(blocageSaisiePaie)
                 : undefined,
-            companyId: companyId ? Number(companyId) : undefined,
+            companyId: undefined,
             bonuses: employeeBonusData.length > 0 ? { create: employeeBonusData } : undefined
         },
         include: {
@@ -253,6 +241,8 @@ export const updateEmployee = async (id, data) => {
     });
 };
 
-export const deleteEmployee = async (id) => {
-    return prisma.employee.delete({ where: { id: Number(id) } });
+export const deleteEmployee = async (id, companyId) => {
+    const employee = await prisma.employee.findFirst({ where: { id: Number(id), companyId: Number(companyId) }, select: { id: true } });
+    if (!employee) throw new Error('EMPLOYEE_NOT_FOUND');
+    return prisma.employee.delete({ where: { id: employee.id } });
 };

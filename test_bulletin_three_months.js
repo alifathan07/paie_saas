@@ -66,12 +66,12 @@ async function main() {
   const resumeId = process.argv[2] ? Number(process.argv[2]) : null;
   const employee = resumeId ? await prisma.employee.findUnique({ where: { id: resumeId } }) : await prisma.employee.create({ data: {
     companyId: company.id, matricule: `TEST-3M-${tag}`, cin: `TEST-${tag}`,
-    nom: 'TEST BULLETIN', prenom: 'Trois Mois', dateNaissance: new Date('1990-01-01'),
+    nomComplet: 'TEST BULLETIN Trois Mois', dateNaissance: new Date('1990-01-01'),
     dateEmbauche: new Date('2026-07-01'), sexe: 'M', situationFam: 'CELIBATAIRE',
     nbPersonacharge: 0, nbEnfantCharge: 0, baseSalary: 12000,
     cimrRate: 0.06, cimrReduitBaseImposable: true,
   } });
-  assert.ok(employee && employee.matricule.startsWith('TEST-3M-') && employee.nom === 'TEST BULLETIN', 'Only this test fixture may be resumed');
+  assert.ok(employee && employee.matricule.startsWith('TEST-3M-') && employee.nomComplet === 'TEST BULLETIN Trois Mois', 'Only this test fixture may be resumed');
   if (!resumeId) assert.equal(await prisma.payslip.count({ where: { employeeId: employee.id } }), 0);
   log(resumeId ? 'Resuming test employee' : 'Fresh test employee — zero existing bulletins', employee);
   log('IR brackets used by the application', IR_RULES);

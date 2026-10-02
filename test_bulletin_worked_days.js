@@ -91,7 +91,7 @@ try {
     const table = source.slice(source.indexOf('<!-- Employees payroll table -->'), source.indexOf('<script src='));
     for (const [status, blocked, editable] of [['draft', false, true], ['generated', false, true], ['validated', false, false], ['closed', false, false], ['draft', true, false], ['none', false, false]]) {
         const html = ejs.render(table, { month: 9, year: 2026, fmt: String, employees: [{
-            id: 7, nom: 'Test', prenom: 'Employé', matricule: '7', baseSalary: 12000,
+            id: 7, nomComplet: 'Test Employé', matricule: '7', baseSalary: 12000,
             blocageSaisiePaie: blocked, bulletinStatus: status,
             bulletin: status === 'none' ? null : { status, workedDays: 13, sbi: 6500, netAPayer: 6000 },
         }] });

@@ -1,6 +1,6 @@
-import { prisma } from '../lib/db.js';
-import { resolveCompanyId } from '../lib/company.js';
-import { getActiveBulletinPeriod, isAfterActivePeriod } from '../lib/bulletinPeriod.js';
+import { prisma } from '../src/lib/db.js';
+import { resolveCompanyId } from '../src/lib/company.js';
+import { getActiveBulletinPeriod, isAfterActivePeriod } from '../src/lib/bulletinPeriod.js';
 
 export async function enforceBulletinPeriod(req, res, next) {
     try {

@@ -2,7 +2,7 @@
 
 <div class="page-header">
     <div class="header-title-area">
-        <h1 class="page-title">Éditer le salarié: <%= employee.nom %> <%= employee.prenom %></h1>
+        <h1 class="page-title">Éditer le salarié: <%= employee.nomComplet %></h1>
         <p class="page-subtitle">Modification des données individuelles et contractuelles</p>
     </div>
     <div class="header-actions">
@@ -14,18 +14,14 @@
     <div class="alert alert-error"><%= error %></div>
 <% } %>
 
-<form action="/employees/<%= employee.id %>/edit" method="POST" enctype="multipart/form-data" class="enterprise-form">
+<form action="/employees/<%= employee.id %>/edit" method="POST" class="enterprise-form">
     <!-- Section 1: Informations Personnelles -->
     <div class="form-section">
         <h2 class="section-title">1. État Civil & Identité</h2>
         <div class="form-grid-3">
             <div class="form-group">
-                <label for="nom">Nom <span style="color:red;">*</span></label>
-                <input type="text" id="nom" name="nom" class="form-input" required value="<%= employee.nom %>">
-            </div>
-            <div class="form-group">
-                <label for="prenom">Prénom <span style="color:red;">*</span></label>
-                <input type="text" id="prenom" name="prenom" class="form-input" required value="<%= employee.prenom %>">
+                <label for="nomComplet">Nom complet <span style="color:red;">*</span></label>
+                <input type="text" id="nomComplet" name="nomComplet" class="form-input" required value="<%= employee.nomComplet %>">
             </div>
             <div class="form-group">
                 <label for="cin">CIN <span style="color:red;">*</span></label>
@@ -192,22 +188,6 @@
             <div class="form-group">
                 <label for="rib">RIB (24 chiffres)</label>
                 <input type="text" id="rib" name="rib" class="form-input" value="<%= employee.rib || '' %>">
-            </div>
-        </div>
-        <div class="form-grid-2">
-            <div class="form-group">
-                <label for="pieceJointe">Pièce jointe</label>
-                <input type="file" id="pieceJointe" name="pieceJointe" class="form-input" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp">
-                <% if (employee.pieceJointeUrl) { %>
-                    <a href="<%= employee.pieceJointeUrl %>" target="_blank" rel="noopener">Voir la pièce jointe actuelle</a>
-                <% } %>
-            </div>
-            <div class="form-group">
-                <label for="image">Photo du salarié</label>
-                <input type="file" id="image" name="image" class="form-input" accept=".jpg,.jpeg,.png,.webp">
-                <% if (employee.image) { %>
-                    <img src="<%= employee.image %>" alt="Photo actuelle" style="display:block; width:80px; height:80px; object-fit:cover; margin-top:8px; border-radius:6px;">
-                <% } %>
             </div>
         </div>
     </div>

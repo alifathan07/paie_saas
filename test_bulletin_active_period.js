@@ -1,9 +1,9 @@
-import assert from 'node:assert/strict';
+lleimport assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ejs from 'ejs';
 import { prisma } from './src/lib/db.js';
 import { getActiveBulletinPeriod, isAfterActivePeriod } from './src/lib/bulletinPeriod.js';
-import { enforceBulletinPeriod } from './src/middleware/bulletinPeriod.js';
+import { enforceBulletinPeriod } from './middlewares/bulletinPeriod.js';
 
 const now = new Date(2026, 8, 15);
 assert.deepEqual(getActiveBulletinPeriod([], now), { month: 9, year: 2026 });

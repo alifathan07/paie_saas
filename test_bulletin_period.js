@@ -12,7 +12,7 @@ assert.equal(calculateCumulativeIR({ employeeId: 1, year: 2027, month: 1, previo
 const saved = { ...previous, id: 2, month: 9, moisEcoules: calculation.elapsedPeriods, status: 'VALIDATED', bonuses: [] };
 const original = [prisma.employee.findUnique, prisma.payslip.findUnique, prisma.payslip.findMany];
 try {
-  prisma.employee.findUnique = async () => ({ id: 1, nom: 'Test', prenom: 'Employee', dateEmbauche: new Date('2020-01-01'), bonuses: [] });
+    prisma.employee.findUnique = async () => ({ id: 1, nomComplet: 'Test Employee', dateEmbauche: new Date('2020-01-01'), bonuses: [] });
   prisma.payslip.findUnique = async () => saved;
   prisma.payslip.findMany = async () => [previous, saved];
   let rendered;

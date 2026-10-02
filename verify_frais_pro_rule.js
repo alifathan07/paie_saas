@@ -8,8 +8,7 @@ console.log("===================================================================
 // 1. Direct unit test of the prompt's exact example: SBI = 10,650 DH
 const employeeExample = {
     id: 99,
-    nom: "Test",
-    prenom: "FraisPro",
+    nomComplet: "Test FraisPro",
     baseSalary: 10650,
     dateEmbauche: new Date("2026-01-01"), // 0 months seniority
     nbPersonacharge: 0,

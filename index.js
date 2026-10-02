@@ -8,7 +8,10 @@ import { dashboard } from './src/routes/dashboard.js';
 import { employee } from './src/routes/employee.js';
 import { bulletins } from './src/routes/bulletins.js';
 import { editions } from './src/routes/editions.js';
-import { isAuth } from './middlewares/auth.js';
+import { admin } from './src/routes/admin.js';
+import { reports } from './src/routes/reports.js';
+import { isAuth, requireActiveCompany } from './middlewares/auth.js';
+import { isAdminUser } from './middlewares/admin.js';
 
 export const app = express();
 export const PORT = process.env.PORT || 3000;
@@ -25,7 +28,7 @@ const sessionStore = new MySQLStore({
 });
 
 app.use(express.static('public'));
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.set('view engine', 'ejs');
 app.set('views', './src/views');
@@ -42,16 +45,25 @@ app.use(session({
     }
 }));
 
+app.use((req, res, next) => {
+    res.locals.clientMode = req.session?.adminClientMode || null;
+    res.locals.isAdmin = isAdminUser(req);
+    next();
+});
+
 // Public routes (login/logout)
 app.use('/auth', auth);
 
 // Protected routes (require login)
 app.use(isAuth);
+app.use('/admin', admin);
+app.use(requireActiveCompany);
 app.get('/', (req, res) => res.redirect('/dashboard'));
 app.use('/dashboard', dashboard);
 app.use('/employees', employee);
 app.use('/bulletins', bulletins);
 app.use('/editions', editions);
+app.use('/reports', reports);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

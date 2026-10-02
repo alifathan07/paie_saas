@@ -65,8 +65,8 @@ async function main() {
   // 3. Seed Users
   const userAdmin = await prisma.users.upsert({
     where: { email: "admin@paie.ma" },
-    update: { password: hashedPassword },
-    create: { name: "Super Admin", email: "admin@paie.ma", password: hashedPassword },
+    update: { password: hashedPassword, isAdmin: true, isBlocked: false },
+    create: { name: "Super Admin", email: "admin@paie.ma", password: hashedPassword, isAdmin: true, maxCompanies: 0 },
   });
 
   const userAli = await prisma.users.upsert({
@@ -108,8 +108,7 @@ async function main() {
     update: { baseSalary: 12000.00 },
     create: {
       matricule: "EMP-001",
-      nom: "Benali",
-      prenom: "Youssef",
+      nomComplet: "Youssef Benali",
       cin: "AB123456",
       dateNaissance: new Date("1985-09-22"),
       sexe: "M",
@@ -145,8 +144,7 @@ async function main() {
     update: { baseSalary: 6500.00 },
     create: {
       matricule: "EMP-002",
-      nom: "Mahmoudi",
-      prenom: "Karim",
+      nomComplet: "Karim Mahmoudi",
       cin: "CD234567",
       dateNaissance: new Date("1990-03-30"),
       sexe: "M",
@@ -181,8 +179,7 @@ async function main() {
     update: { baseSalary: 4000.00 },
     create: {
       matricule: "EMP-003",
-      nom: "Cherkaoui",
-      prenom: "Laila",
+      nomComplet: "Laila Cherkaoui",
       cin: "EF345678",
       dateNaissance: new Date("1995-07-19"),
       sexe: "F",
@@ -212,8 +209,7 @@ async function main() {
     update: { baseSalary: 20000.00 },
     create: {
       matricule: "EMP-004",
-      nom: "El Amrani",
-      prenom: "Youssef",
+      nomComplet: "Youssef El Amrani",
       cin: "GH456789",
       dateNaissance: new Date("1988-02-18"),
       sexe: "M",
@@ -251,8 +247,7 @@ async function main() {
     update: { baseSalary: 5500.00 },
     create: {
       matricule: "EMP-005",
-      nom: "Chraibi",
-      prenom: "Hind",
+      nomComplet: "Hind Chraibi",
       cin: "IJ567890",
       dateNaissance: new Date("2000-01-25"),
       sexe: "F",
@@ -277,7 +272,7 @@ async function main() {
     }
   });
 
-  console.log(`✅ Employees seeded: ${emp1.nom}, ${emp2.nom}, ${emp3.nom}, ${emp4.nom}, ${emp5.nom}`);
+  console.log(`✅ Employees seeded: ${emp1.nomComplet}, ${emp2.nomComplet}, ${emp3.nomComplet}, ${emp4.nomComplet}, ${emp5.nomComplet}`);
   console.log("🎉 Database seeding completed successfully!");
 }
 

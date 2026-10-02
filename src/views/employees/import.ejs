@@ -1,0 +1,70 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+    <div class="header-title-area">
+        <h1 class="page-title">Importer les employés</h1>
+        <p class="page-subtitle">DeepSeek comprend les colonnes et transforme chaque ligne en fiche salarié.</p>
+    </div>
+    <div class="header-actions"><a href="/employees/create" class="btn-secondary">Retour au formulaire</a></div>
+</div>
+<% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+<% if (details && details.length) { %><div class="alert alert-error"><% details.slice(0, 50).forEach(detail => { %><div><%= detail %></div><% }) %></div><% } %>
+<div class="card" style="max-width:760px;padding:24px">
+    <form method="POST" action="/employees/import">
+        <label class="form-label" for="employee-file">Fichier Excel (.xlsx ou .xls)</label>
+        <input class="form-input" id="employee-file" type="file" name="file" accept=".xlsx,.xls" required>
+        <p class="page-subtitle" style="margin-top:8px">Maximum 5 Mo et 500 lignes. Les colonnes peuvent être dans n’importe quel ordre.</p>
+        <button class="btn-primary" id="employee-import-submit" type="button" style="margin-top:18px">Analyser et enregistrer</button>
+    </form>
+</div>
+<script>
+    (() => {
+        const form = document.querySelector('form[action="/employees/import"]');
+        const input = document.getElementById('employee-file');
+        const button = document.getElementById('employee-import-submit');
+        if (!form || !input || !button) return;
+
+        button.addEventListener('click', async () => {
+            const file = input.files?.[0];
+            if (!file) {
+                alert('Sélectionnez un fichier Excel .xlsx.');
+                return;
+            }
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            let binary = '';
+            const chunkSize = 0x8000;
+            for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+                binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+            }
+            const fileBase64 = btoa(binary);
+            console.info('[employee-import] browser.submit', {
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                encodedSize: fileBase64.length
+            });
+            button.disabled = true;
+            button.textContent = 'Analyse en cours...';
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileName: file.name,
+                        fileType: file.type,
+                        fileBase64
+                    }),
+                    credentials: 'same-origin'
+                });
+                document.open();
+                document.write(await response.text());
+                document.close();
+            } catch (error) {
+                console.error('[employee-import] browser.submit.failed', error);
+                button.disabled = false;
+                button.textContent = 'Analyser et enregistrer';
+                alert('La requête d’import a échoué. Consultez la console du navigateur.');
+            }
+        });
+    })();
+</script>
+<%- include('../partials/footer') %>

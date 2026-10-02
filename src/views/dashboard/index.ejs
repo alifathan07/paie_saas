@@ -66,7 +66,7 @@
                     <% stats.recentEmployees.forEach(function(emp) { %>
                         <tr>
                             <td style="font-weight: 600;"><%= emp.matricule %></td>
-                            <td style="font-weight: 600;"><%= emp.nom %> <%= emp.prenom %></td>
+                            <td style="font-weight: 600;"><%= emp.nomComplet %></td>
                             <td><%= emp.fonction || 'Non renseigné' %></td>
                             <td><%= emp.cin %></td>
                             <td style="font-weight: 600;"><%= Number(emp.baseSalary).toLocaleString('fr-MA', { minimumFractionDigits: 2 }) %> DH</td>

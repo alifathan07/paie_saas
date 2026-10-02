@@ -1,4 +1,5 @@
 <header class="app-header">
+    <% if (clientMode) { %><div style="position:absolute;left:24px;top:12px;background:#fff3cd;color:#664d03;border:1px solid #ffecb5;border-radius:6px;padding:6px 10px;font-size:12px">Mode client : <strong><%= clientMode.userName %></strong> · <%= clientMode.companyName %> <form method="POST" action="/admin/exit-mode" style="display:inline;margin-left:8px"><button type="submit" class="btn-secondary" style="padding:3px 7px">Quitter</button></form></div><% } %>
     <div class="app-header-actions">
         <span class="badge badge-actif">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
@@ -17,5 +18,8 @@
             <div class="user-avatar"><%= initials %></div>
             <span><%= userName %></span>
         </div>
+        <% if (typeof user !== 'undefined' && user && user.activeCompanyId) { %>
+            <a href="/auth/select-company" class="user-chip" title="Changer d'entreprise">Changer d'entreprise</a>
+        <% } %>
     </div>
 </header>

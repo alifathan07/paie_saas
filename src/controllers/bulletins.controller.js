@@ -52,6 +52,12 @@ function fmt(amount) {
 function currentYear() { return new Date().getFullYear(); }
 function currentMonth() { return new Date().getMonth() + 1; }
 
+async function getActiveEmployee(req, employeeId, include = {}) {
+    const companyId = resolveCompanyId(req);
+    if (!companyId) return null;
+    return prisma.employee.findFirst({ where: { id: Number(employeeId), companyId }, include });
+}
+
 async function getPayrollRates() {
     const config = await prisma.payrollConfig.findFirst({ orderBy: { id: "asc" } });
     return {
@@ -408,7 +414,7 @@ export const listBulletins = async (req, res) => {
         // Keep inactive employees visible so their payroll state is explicit in the list.
         const dbEmployees = await prisma.employee.findMany({
             where: { companyId, bulletinMasque: false },
-            orderBy: [{ nom: 'asc' }, { prenom: 'asc' }, { id: 'asc' }],
+            orderBy: [{ nomComplet: 'asc' }, { id: 'asc' }],
             include: {
                 payslips: {
                     where: { month, year },
@@ -440,8 +446,7 @@ export const listBulletins = async (req, res) => {
 
             return {
                 id: emp.id,
-                nom: emp.nom,
-                prenom: emp.prenom,
+                nomComplet: emp.nomComplet,
                 matricule: emp.matricule,
                 baseSalary: Number(emp.baseSalary),
                 dateEmbauche: emp.dateEmbauche,
@@ -692,16 +697,15 @@ export const generateBulletin = async (req, res) => {
         const month = parseInt(req.body.month || req.query.month) || currentMonth();
         const year = parseInt(req.body.year || req.query.year) || currentYear();
 
-        const emp = await prisma.employee.findUnique({
-            where: { id: empId },
-            include: { bonuses: { include: { bonus: true } } }
+        const emp = await getActiveEmployee(req, empId, {
+            bonuses: { include: { bonus: true } }
         });
         if (!emp) return res.status(404).redirect("/bulletins");
         if (!emp.actif) return res.status(400).send("Impossible de générer le bulletin : cet employé est inactif.");
 
         // Check if existing bulletin is already VALIDATED
-        const existing = await prisma.payslip.findUnique({
-            where: { employeeId_month_year: { employeeId: empId, month, year } }
+        const existing = await prisma.payslip.findFirst({
+            where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } }
         });
         if (rejectLockedBulletin(res, existing)) return;
 
@@ -811,9 +815,8 @@ export const addMonthlyPrime = async (req, res) => {
             return res.status(400).json({ ok: false, error: "Le libellé et le montant de la prime sont obligatoires." });
         }
 
-        const emp = await prisma.employee.findUnique({
-            where: { id: empId },
-            include: { bonuses: { include: { bonus: true } } }
+        const emp = await getActiveEmployee(req, empId, {
+            bonuses: { include: { bonus: true } }
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
         if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée pour cet employé." });
@@ -884,9 +887,8 @@ export const deleteMonthlyPrime = async (req, res) => {
             return res.status(400).json({ ok: false, error: "La prime à supprimer est invalide." });
         }
 
-        const emp = await prisma.employee.findUnique({
-            where: { id: empId },
-            include: { bonuses: { include: { bonus: true } } },
+        const emp = await getActiveEmployee(req, empId, {
+            bonuses: { include: { bonus: true } },
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
         if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
@@ -954,7 +956,7 @@ export const addMonthlyIndemnity = async (req, res) => {
             return res.status(400).json({ ok: false, error: "Le libellé et le montant sont obligatoires." });
         }
 
-        const emp = await prisma.employee.findUnique({ where: { id: empId }, include: { bonuses: { include: { bonus: true } } } });
+        const emp = await getActiveEmployee(req, empId, { bonuses: { include: { bonus: true } } });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
         if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
@@ -1020,9 +1022,8 @@ export const updateMonthlyIndemnity = async (req, res) => {
             return res.status(400).json({ ok: false, error: "L'indemnité à modifier est invalide." });
         }
 
-        const emp = await prisma.employee.findUnique({
-            where: { id: empId },
-            include: { bonuses: { include: { bonus: true } } },
+        const emp = await getActiveEmployee(req, empId, {
+            bonuses: { include: { bonus: true } },
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
         if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
@@ -1096,9 +1097,8 @@ export const deleteMonthlyIndemnity = async (req, res) => {
             return res.status(400).json({ ok: false, error: "L'indemnité à supprimer est invalide." });
         }
 
-        const emp = await prisma.employee.findUnique({
-            where: { id: empId },
-            include: { bonuses: { include: { bonus: true } } },
+        const emp = await getActiveEmployee(req, empId, {
+            bonuses: { include: { bonus: true } },
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
         if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
@@ -1170,8 +1170,8 @@ export const validateBulletin = async (req, res) => {
         const month = parseInt(req.body.month || req.query.month) || currentMonth();
         const year = parseInt(req.body.year || req.query.year) || currentYear();
 
-        const existing = await prisma.payslip.findUnique({
-            where: { employeeId_month_year: { employeeId: empId, month, year } }
+        const existing = await prisma.payslip.findFirst({
+            where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } }
         });
 
         if (!existing) {
@@ -1211,8 +1211,8 @@ export const returnBulletinToDraft = async (req, res) => {
         const empId = parseInt(req.params.id);
         const month = parseInt(req.body.month || req.query.month) || currentMonth();
         const year = parseInt(req.body.year || req.query.year) || currentYear();
-        const existing = await prisma.payslip.findUnique({
-            where: { employeeId_month_year: { employeeId: empId, month, year } }
+        const existing = await prisma.payslip.findFirst({
+            where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } }
         });
 
         if (!existing) return res.status(404).send("Aucun bulletin trouvé.");
@@ -1238,8 +1238,8 @@ export const closeBulletin = async (req, res) => {
         const empId = parseInt(req.params.id);
         const month = parseInt(req.body.month || req.query.month) || currentMonth();
         const year = parseInt(req.body.year || req.query.year) || currentYear();
-        const existing = await prisma.payslip.findUnique({
-            where: { employeeId_month_year: { employeeId: empId, month, year } }
+        const existing = await prisma.payslip.findFirst({
+            where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } }
         });
 
         if (!existing) return res.status(404).send("Aucun bulletin trouvé.");
@@ -1324,12 +1324,9 @@ export const calculateLive = async (req, res) => {
             return res.status(400).json({ ok: false, error: "Identifiant d'employé invalide" });
         }
 
-        const emp = await prisma.employee.findUnique({
-            where: { id: empId },
-            include: {
-                bonuses: { include: { bonus: true } },
-                company: true,
-            }
+        const emp = await getActiveEmployee(req, empId, {
+            bonuses: { include: { bonus: true } },
+            company: true,
         });
         if (!emp) {
             return res.status(404).json({ ok: false, error: "Employé introuvable" });
@@ -1443,17 +1440,28 @@ export const changeBulletinPeriod = async (req, res) => {
 };
 
 export const showBulletin = async (req, res) => {
+    const requestId = `bulletin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.info("[bulletin-show] request.started", {
+        requestId,
+        employeeId: req.params.id,
+        month: req.query.month || null,
+        year: req.query.year || null,
+        companyId: resolveCompanyId(req),
+    });
     try {
         const empId = parseInt(req.params.id);
-        const emp = await prisma.employee.findUnique({
-            where: { id: empId },
-            include: { bonuses: { include: { bonus: true } } }
+        const emp = await getActiveEmployee(req, empId, {
+            bonuses: { include: { bonus: true } }
         });
-        if (!emp) return res.status(404).redirect("/bulletins");
+        if (!emp) {
+            console.warn("[bulletin-show] employee.not-found", { requestId, employeeId: empId, companyId: resolveCompanyId(req) });
+            return res.status(404).send("Employé introuvable dans cette entreprise.");
+        }
 
         const month = req.query.month ? parseInt(req.query.month) : null;
         const year = req.query.year ? parseInt(req.query.year) : null;
         const hasPeriod = month && year;
+        console.info("[bulletin-show] employee.loaded", { requestId, employeeId: emp.id, employeeName: emp.nomComplet, hasPeriod, month, year });
 
         // Follow the active employee list, with ID breaking ties for identical names.
         const previousEmployee = await prisma.employee.findFirst({
@@ -1461,13 +1469,12 @@ export const showBulletin = async (req, res) => {
                 companyId: emp.companyId,
                 actif: true,
                 OR: [
-                    { nom: { lt: emp.nom } },
-                    { nom: emp.nom, prenom: { lt: emp.prenom } },
-                    { nom: emp.nom, prenom: emp.prenom, id: { lt: emp.id } },
+                    { nomComplet: { lt: emp.nomComplet } },
+                    { nomComplet: emp.nomComplet, id: { lt: emp.id } },
                 ],
             },
-            orderBy: [{ nom: 'desc' }, { prenom: 'desc' }, { id: 'desc' }],
-            select: { id: true, nom: true, prenom: true },
+            orderBy: [{ nomComplet: 'desc' }, { id: 'desc' }],
+            select: { id: true, nomComplet: true },
         });
         const previousBulletinUrl = previousEmployee
             ? `/bulletins/${previousEmployee.id}${hasPeriod ? `?month=${month}&year=${year}` : ''}`
@@ -1477,13 +1484,12 @@ export const showBulletin = async (req, res) => {
                 companyId: emp.companyId,
                 actif: true,
                 OR: [
-                    { nom: { gt: emp.nom } },
-                    { nom: emp.nom, prenom: { gt: emp.prenom } },
-                    { nom: emp.nom, prenom: emp.prenom, id: { gt: emp.id } },
+                    { nomComplet: { gt: emp.nomComplet } },
+                    { nomComplet: emp.nomComplet, id: { gt: emp.id } },
                 ],
             },
-            orderBy: [{ nom: 'asc' }, { prenom: 'asc' }, { id: 'asc' }],
-            select: { id: true, nom: true, prenom: true },
+            orderBy: [{ nomComplet: 'asc' }, { id: 'asc' }],
+            select: { id: true, nomComplet: true },
         });
         const nextBulletinUrl = nextEmployee
             ? `/bulletins/${nextEmployee.id}${hasPeriod ? `?month=${month}&year=${year}` : ''}`
@@ -1501,7 +1507,7 @@ export const showBulletin = async (req, res) => {
             const history = dbHistory.map(mapPayslipToViewModel);
 
             return res.render("bulletins/show", {
-                title: `${emp.nom} ${emp.prenom} — Bulletins`,
+                title: `${emp.nomComplet} — Bulletins`,
                 currentPage: "bulletins",
                 user: req.session.user,
                 emp,
@@ -1523,10 +1529,11 @@ export const showBulletin = async (req, res) => {
         }
 
         // Single bulletin mode
-        const dbPayslip = await prisma.payslip.findUnique({
-            where: { employeeId_month_year: { employeeId: empId, month, year } },
+        const dbPayslip = await prisma.payslip.findFirst({
+            where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } },
             include: { bonuses: true }
         });
+        console.info("[bulletin-show] payslip.loaded", { requestId, employeeId: empId, month, year, found: Boolean(dbPayslip) });
 
         const bulletin = mapPayslipToViewModel(dbPayslip);
         if (bulletin) {
@@ -1562,7 +1569,7 @@ export const showBulletin = async (req, res) => {
             : null;
 
         res.render("bulletins/show", {
-            title: `${emp.nom} ${emp.prenom} — ${MONTH_NAMES_FR[month]} ${year}`,
+            title: `${emp.nomComplet} — ${MONTH_NAMES_FR[month]} ${year}`,
             currentPage: "bulletins",
             user: req.session.user,
             emp,
@@ -1584,8 +1591,15 @@ export const showBulletin = async (req, res) => {
             fmt,
         });
     } catch (err) {
-        console.error("Error loading bulletin show:", err);
-        res.status(500).redirect("/bulletins");
+        console.error("[bulletin-show] request.failed", {
+            requestId,
+            employeeId: req.params.id,
+            month: req.query.month || null,
+            year: req.query.year || null,
+            error: err.message,
+            stack: err.stack,
+        });
+        return res.status(500).send(`Impossible d’ouvrir le bulletin : ${err.message}`);
     }
 };
 
@@ -1599,8 +1613,8 @@ export const downloadPdfBulletin = async (req, res) => {
         const year = parseInt(req.query.year) || currentYear();
 
         // Query real saved Payslip record from Prisma
-        const payslip = await prisma.payslip.findUnique({
-            where: { employeeId_month_year: { employeeId: empId, month, year } },
+        const payslip = await prisma.payslip.findFirst({
+            where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } },
             include: {
                 bonuses: true,
                 employee: {
@@ -1627,7 +1641,7 @@ export const downloadPdfBulletin = async (req, res) => {
 
         const pdfData = {
             ...mapPayslipToViewModel(payslip),
-            employeeName: `${emp.nom} ${emp.prenom}`,
+            employeeName: emp.nomComplet,
             employeeMatricule: emp.matricule,
             employeeCNSS: emp.numeroCNSS || '—',
             employeeFonction: emp.fonction || '—',
@@ -1654,7 +1668,7 @@ export const downloadPdfBulletin = async (req, res) => {
             cumulative,
         };
 
-        const fileName = `bulletin-${emp.nom.toLowerCase()}-${month}-${year}.pdf`;
+        const fileName = `bulletin-${emp.nomComplet.toLowerCase()}-${month}-${year}.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 

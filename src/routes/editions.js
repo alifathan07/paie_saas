@@ -42,14 +42,16 @@ async function getMatricules(companyId) {
 async function renderBulletinExportPage(req, res, options = {}) {
     const companyId = await resolveCompanyId(req);
     const matricules = await getMatricules(companyId);
+    const requestedFrom = req.body?.from ?? req.query.from;
+    const requestedTo = req.body?.to ?? req.query.to;
     return res.render("editions/bulletins", {
         title: "Édition des bulletins",
         currentPage: "editions",
         user: req.session.user,
         month: Number(req.body?.month || req.query.month) || new Date().getMonth() + 1,
         year: Number(req.body?.year || req.query.year) || new Date().getFullYear(),
-        from: req.body?.from || req.query.from || "",
-        to: req.body?.to || req.query.to || "",
+        from: requestedFrom ?? matricules[0] ?? "",
+        to: requestedTo ?? matricules[matricules.length - 1] ?? "",
         matricules,
         error: options.error || null,
     });
@@ -90,7 +92,7 @@ async function pdfDataFromPayslip(payslip) {
 
     return {
         ...mapPayslipToViewModel(payslip),
-        employeeName: `${emp.nom} ${emp.prenom}`,
+        employeeName: emp.nomComplet,
         employeeMatricule: emp.matricule,
         employeeCNSS: emp.numeroCNSS || "—",
         employeeFonction: emp.fonction || "—",

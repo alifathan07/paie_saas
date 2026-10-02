@@ -68,9 +68,6 @@ export const handleCreateEmployee = async (req, res) => {
             customBonusNames, customBonusAmounts,
             ...employeeData
         } = req.body;
-        const imageFile = req.files?.image?.[0];
-        const attachmentFile = req.files?.pieceJointe?.[0];
-
         const bonusList = [];
 
         // Existing catalog bonuses with employee-specific amounts
@@ -99,8 +96,6 @@ export const handleCreateEmployee = async (req, res) => {
             ...employeeData,
             companyId,
             bonusList,
-            image: imageFile ? `/uploads/employees/${imageFile.filename}` : undefined,
-            pieceJointeUrl: attachmentFile ? `/uploads/employees/${attachmentFile.filename}` : undefined,
             actif: req.body.actif === undefined
                 ? true
                 : (req.body.actif === '1' || req.body.actif === 'true'),
@@ -125,11 +120,11 @@ export const handleCreateEmployee = async (req, res) => {
 export const employeeshow = async (req, res) => {
     try {
         const { id } = req.params;
-        const employee = await getEmployee(parseInt(id));
+        const employee = await getEmployee(parseInt(id), await getSessionCompanyId(req));
         const payroll = calculatePayroll(employee);
 
         res.render("employees/show", {
-            title: `Employé: ${employee.nom} ${employee.prenom}`,
+            title: `Employé: ${employee.nomComplet}`,
             currentPage: "employees",
             user: req.session.user,
             employee,
@@ -156,12 +151,12 @@ export const employeeshow = async (req, res) => {
 export const renderEditForm = async (req, res) => {
     try {
         const { id } = req.params;
-        const employee = await getEmployee(parseInt(id));
+        const employee = await getEmployee(parseInt(id), await getSessionCompanyId(req));
         const companyId = employee.companyId;
         const bonusTypes = await getAllBonusTypes(companyId);
 
         res.render("employees/edit", {
-            title: `Éditer: ${employee.nom} ${employee.prenom}`,
+            title: `Éditer: ${employee.nomComplet}`,
             currentPage: "employees",
             user: req.session.user,
             employee,
@@ -180,7 +175,8 @@ export const handleUpdateEmployee = async (req, res) => {
     let employee;
 
     try {
-        employee = await getEmployee(parseInt(id));
+        const activeCompanyId = await getSessionCompanyId(req);
+        employee = await getEmployee(parseInt(id), activeCompanyId);
         const companyId = employee.companyId;
 
         const {
@@ -188,9 +184,6 @@ export const handleUpdateEmployee = async (req, res) => {
             customBonusNames, customBonusAmounts,
             ...employeeData
         } = req.body;
-        const imageFile = req.files?.image?.[0];
-        const attachmentFile = req.files?.pieceJointe?.[0];
-
         const bonusList = [];
 
         if (bonusIds) {
@@ -216,20 +209,18 @@ export const handleUpdateEmployee = async (req, res) => {
         await updateEmp(id, {
             ...employeeData,
             bonusList,
-            ...(imageFile ? { image: `/uploads/employees/${imageFile.filename}` } : {}),
-            ...(attachmentFile ? { pieceJointeUrl: `/uploads/employees/${attachmentFile.filename}` } : {}),
             actif: req.body.actif === '1' || req.body.actif === 'true',
             cimrReduitBaseImposable: Boolean(req.body.cimrReduitBaseImposable),
             blocageSaisiePaie: Boolean(req.body.blocageSaisiePaie),
-        });
+        }, activeCompanyId);
         res.redirect(`/employees/${id}`);
     } catch (error) {
         console.error("Error updating employee:", error);
-        const companyId = employee?.companyId || await getSessionCompanyId(req);
+        const companyId = await getSessionCompanyId(req);
         const bonusTypes = await getAllBonusTypes(companyId);
 
         res.status(400).render("employees/edit", {
-            title: employee ? `Éditer: ${employee.nom} ${employee.prenom}` : "Éditer salarié",
+            title: employee ? `Éditer: ${employee.nomComplet}` : "Éditer salarié",
             currentPage: "employees",
             user: req.session.user,
             employee: employee || {},
@@ -243,7 +234,7 @@ export const handleUpdateEmployee = async (req, res) => {
 export const handleDeleteEmployee = async (req, res) => {
     try {
         const { id } = req.params;
-        await deleteEmp(id);
+        await deleteEmp(id, await getSessionCompanyId(req));
 
         if (req.headers['hx-request']) {
             res.setHeader("HX-Redirect", "/employees");

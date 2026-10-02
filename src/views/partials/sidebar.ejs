@@ -31,6 +31,9 @@
             </svg>
             <span>Employés</span>
         </a>
+        <a href="/employees/import" class="sidebar-link">
+            <span>Importer des employés</span>
+        </a>
         <a href="/bulletins"
             class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'bulletins' ? 'active' : '' %>">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -52,6 +55,8 @@
             </svg>
             <span>Éditions</span>
         </a>
+        <a href="/reports" class="sidebar-link"><span>Rapporter un problème</span></a>
+        <% if (isAdmin) { %><a href="/admin" class="sidebar-link"><span>Administration</span></a><% } %>
     </nav>
 
     <div class="sidebar-footer">

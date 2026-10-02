@@ -25,8 +25,7 @@ async function runSystemSmokeTest() {
     const emp = await prisma.employee.create({
         data: {
             matricule,
-            nom: "Alami",
-            prenom: "Karim",
+            nomComplet: "Karim Test",
             cin,
             dateNaissance: new Date("1992-05-15"),
             sexe: "M",
@@ -59,7 +58,7 @@ async function runSystemSmokeTest() {
         }
     });
 
-    console.log(`\n1. Employee created in DB: ${emp.nom} ${emp.prenom} (${emp.matricule})`);
+    console.log(`\n1. Employee created in DB: ${emp.nomComplet} (${emp.matricule})`);
     console.log(`   Base: ${emp.baseSalary} DH, Dependents: ${emp.nbPersonacharge}, Non-taxable bonus: 500 DH`);
 
     const month = 8;
@@ -195,7 +194,7 @@ async function runSystemSmokeTest() {
     }, { render: (view, data) => { indexViewData = data; } });
 
     const empInList = indexViewData.employees.find(e => e.id === emp.id);
-    console.log("   Employee found in listing:", empInList.nom, empInList.prenom);
+    console.log("   Employee found in listing:", empInList.nomComplet);
     console.log("   Listing status:", empInList.bulletinStatus);
     console.log("   Listing variablesEntered:", empInList.variablesEntered);
     console.log("   Listing Net à payer:", empInList.bulletin.netAPayer);

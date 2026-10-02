@@ -6,6 +6,7 @@
             <p class="page-subtitle">Renseignez la fiche individuelle et contractuelle de l'employé</p>
         </div>
         <div class="header-actions">
+            <a href="/employees/import" class="btn-secondary">Importer un fichier</a>
             <a href="/employees" class="btn-secondary">Annuler</a>
         </div>
     </div>
@@ -16,19 +17,14 @@
         </div>
         <% } %>
 
-            <form action="/employees/create" method="POST" enctype="multipart/form-data" class="enterprise-form">
+            <form action="/employees/create" method="POST" class="enterprise-form">
                 <!-- Section 1: Informations Personnelles -->
                 <div class="form-section">
                     <h2 class="section-title">1. État Civil & Identité</h2>
                     <div class="form-grid-3">
                         <div class="form-group">
-                            <label for="nom">Nom <span style="color:red;">*</span></label>
-                            <input type="text" id="nom" name="nom" class="form-input" required placeholder="ex: Alami">
-                        </div>
-                        <div class="form-group">
-                            <label for="prenom">Prénom <span style="color:red;">*</span></label>
-                            <input type="text" id="prenom" name="prenom" class="form-input" required
-                                placeholder="ex: Hassan">
+                            <label for="nomComplet">Nom complet <span style="color:red;">*</span></label>
+                            <input type="text" id="nomComplet" name="nomComplet" class="form-input" required placeholder="ex: Hassan Alami">
                         </div>
                         <div class="form-group">
                             <label for="cin">CIN <span style="color:red;">*</span></label>
@@ -197,18 +193,6 @@
                             <label for="rib">RIB (24 chiffres)</label>
                             <input type="text" id="rib" name="rib" class="form-input"
                                 placeholder="ex: 225330000000000000000000">
-                        </div>
-                    </div>
-                    <div class="form-grid-2">
-                        <div class="form-group">
-                            <label for="pieceJointe">Pièce jointe</label>
-                            <input type="file" id="pieceJointe" name="pieceJointe" class="form-input"
-                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp">
-                        </div>
-                        <div class="form-group">
-                            <label for="image">Photo du salarié</label>
-                            <input type="file" id="image" name="image" class="form-input"
-                                accept=".jpg,.jpeg,.png,.webp">
                         </div>
                     </div>
                 </div>

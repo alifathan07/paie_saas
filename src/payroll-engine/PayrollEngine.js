@@ -202,7 +202,7 @@ export const calculatePayroll = (employee, overrides = {}) => {
     ok: true,
     payrollBlocked,
     employeeId: employee.id,
-    employeeName: employee.nom ? `${employee.nom} ${employee.prenom}` : (employee.name || ''),
+    employeeName: employee.nomComplet || employee.name || '',
 
     baseSalary: effectiveBase,
     rawBaseSalary: rawBase,

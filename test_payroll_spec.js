@@ -203,8 +203,7 @@ async function runPayrollSpecs() {
         data: {
             companyId,
             matricule: "SPEC-EMP-" + Date.now().toString().slice(-4),
-            nom: "Idrissi",
-            prenom: "Mehdi",
+            nomComplet: "Mehdi Idrissi",
             cin: "SPEC" + Date.now().toString().slice(-4),
             dateNaissance: new Date("1991-03-15"),
             dateEmbauche: new Date("2021-01-01"), // ~5.5 years => 10% seniority

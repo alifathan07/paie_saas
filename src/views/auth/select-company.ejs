@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= typeof title !== 'undefined' ? title : 'Sélectionner une entreprise' %> — Paie Software</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/css/custom.css">
+</head>
+
+<body class="login-page company-selection-page">
+    <main class="login-container company-selection-container">
+        <section class="login-card company-selection-card" aria-labelledby="company-selection-title">
+            <div class="login-logo" aria-hidden="true">
+                <div class="logo-placeholder">P</div>
+            </div>
+
+            <h1 class="login-title" id="company-selection-title">Sélectionner une entreprise</h1>
+            <p class="login-subtitle">
+                <% if (user?.name) { %>Bonjour <strong><%= user.name %></strong>. <% } %>
+                Choisissez l’entreprise à gérer.
+            </p>
+
+            <% if (error) { %>
+                <div class="alert alert-error company-selection-error" role="alert"><%= error %></div>
+            <% } %>
+
+            <div class="company-options" aria-label="Entreprises disponibles">
+                <% companies.forEach((membership) => { %>
+                    <form method="post" action="/auth/select-company" class="company-option-form">
+                        <input type="hidden" name="companyId" value="<%= membership.companyId %>">
+                        <button type="submit" class="company-option">
+                            <span class="company-option-icon" aria-hidden="true">
+                                <%= (membership.company?.name || `Entreprise ${membership.companyId}`).charAt(0).toUpperCase() %>
+                            </span>
+                            <span class="company-option-copy">
+                                <span class="company-option-label">Entreprise</span>
+                                <span class="company-option-name"><%= membership.company?.name || `Entreprise ${membership.companyId}` %></span>
+                            </span>
+                            <span class="company-option-arrow" aria-hidden="true">→</span>
+                        </button>
+                    </form>
+                <% }) %>
+            </div>
+        </section>
+
+        <p class="login-footer">© 2026 Paie Software</p>
+    </main>
+</body>
+
+</html>

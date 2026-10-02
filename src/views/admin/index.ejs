@@ -1,0 +1,9 @@
+<%- include('../partials/header') %>
+<div class="page-header"><div class="header-title-area"><h1 class="page-title">Administration</h1><p class="page-subtitle">Gestion des clients, abonnements, sociétés et rapports.</p></div><div class="header-actions"><a href="/admin/clients" class="btn-primary">Clients</a><a href="/admin/reports" class="btn-secondary">Rapports</a></div></div>
+<div class="dashboard-grid">
+    <div class="stat-card"><span>Clients</span><strong><%= stats.clientCount %></strong></div>
+    <div class="stat-card"><span>Sociétés</span><strong><%= stats.companyCount %></strong></div>
+    <div class="stat-card"><span>Rapports ouverts</span><strong><%= stats.openReports %></strong></div>
+    <div class="stat-card"><span>Clients bloqués</span><strong><%= stats.blockedCount %></strong></div>
+</div>
+<%- include('../partials/footer') %>

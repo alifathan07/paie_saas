@@ -11,7 +11,6 @@ The application is a payroll web application built with:
 - **Prisma**: the database access layer.
 - **MySQL**: the database.
 - **PDFKit**: PDF generation.
-- **Multer**: employee photo and document uploads.
 
 The main business flow is:
 
@@ -178,62 +177,12 @@ JavaScript in the create and edit pages hides `Contrat du` and `Contrat au` unle
 1. The browser submits the form.
 2. The employee route receives the request.
 3. The controller separates bonus fields and normal employee fields.
-4. The controller converts uploaded files into public paths.
-5. `employeeService.js` converts dates and numeric values.
-6. Prisma writes the employee into MySQL.
-7. Recurring bonus assignments are saved in `EmployeeBonus`.
-8. The user is redirected to the employee list or detail page.
+4. `employeeService.js` converts dates and numeric values.
+5. Prisma writes the employee into MySQL.
+6. Recurring bonus assignments are saved in `EmployeeBonus`.
+7. The user is redirected to the employee list or detail page.
 
-## 6. Employee Uploads
-
-Employee forms use:
-
-```html
-method="POST"
-enctype="multipart/form-data"
-```
-
-This is required for sending files. Normal URL-encoded forms cannot send file contents.
-
-Uploads are configured in:
-
-```text
-middlewares/employeeUploads.js
-```
-
-The routes use this middleware before the employee controller:
-
-```text
-employee.post("/create", employeeUploads, handleCreateEmployee)
-employee.post("/:id/edit", employeeUploads, handleUpdateEmployee)
-```
-
-Files are stored in:
-
-```text
-public/uploads/employees
-```
-
-Because `public/` is served statically by Express, a saved file such as:
-
-```text
-/uploads/employees/example.png
-```
-
-can be opened by the browser.
-
-Current upload rules:
-
-- Maximum size: 5 MB.
-- Employee photo: JPEG, PNG, or WEBP.
-- Attachment: PDF, Word, JPEG, PNG, or WEBP.
-- The database stores the file path, not the file bytes.
-- On edit, if no new file is selected, the old path is preserved.
-
-The database fields are:
-
-- `Employee.image` for the employee photo.
-- `Employee.pieceJointeUrl` for the attachment path.
+Employee records contain text and numeric data only; file uploads are not supported.
 
 ## 7. Recurring Bonuses
 
@@ -458,7 +407,7 @@ Connects users to companies.
 
 ### Employee
 
-Stores the long-term employee profile, including personal data, contract data, salary, bank information, CNSS, CIMR, uploads, and active/blocking flags.
+Stores the long-term employee profile, including personal data, contract data, salary, bank information, CNSS, CIMR, and active/blocking flags.
 
 ### Bonus
 
@@ -496,14 +445,13 @@ Use the application in this order:
 6. Complete identity, employment, salary, CNSS, banking, and family information.
 7. Select `Occasionnel (CDD)` if the employee has a fixed-term contract.
 8. Enter `Contrat du` and `Contrat au` only for that CDD.
-9. Upload a photo or attachment if needed.
-10. Add recurring bonuses if the employee receives them every month.
-11. Open `Bulletins`.
-12. Select the month and year.
-13. Open the employee bulletin page.
-14. Enter monthly absences, overtime, primes, or advances.
-15. Use the live preview to check the calculation.
-16. Generate the bulletin.
+9. Add recurring bonuses if the employee receives them every month.
+10. Open `Bulletins`.
+11. Select the month and year.
+12. Open the employee bulletin page.
+13. Enter monthly absences, overtime, primes, or advances.
+14. Use the live preview to check the calculation.
+15. Generate the bulletin.
 17. Review the saved amounts.
 18. Validate the bulletin.
 19. Download the PDF.
@@ -558,10 +506,6 @@ This section describes the current code, not the ideal future version.
 ### Company security
 
 The employee list is company-filtered, but some detail, edit, delete, and bulletin lookups use only a numeric ID. Those operations should also verify the employee's `companyId` against the logged-in company.
-
-### Upload storage
-
-Uploads are stored on the local server filesystem. In a production deployment, files should use durable storage and should be cleaned up when replaced or when an employee is deleted.
 
 ### Payroll configuration
 

@@ -24,7 +24,7 @@
 <div class="card" style="margin-bottom: 24px; padding: 20px 24px;">
     <form method="GET" action="/employees" style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
         <div style="flex: 1; min-width: 240px;">
-            <input type="text" name="search" class="form-input" placeholder="Rechercher par nom, prénom, CIN, matricule..." value="<%= typeof search !== 'undefined' ? search : '' %>">
+            <input type="text" name="search" class="form-input" placeholder="Rechercher par nom complet, CIN, matricule..." value="<%= typeof search !== 'undefined' ? search : '' %>">
         </div>
         <div style="width: 200px;">
             <select name="statut" class="form-input">
@@ -64,7 +64,7 @@
                     <tr>
                         <td style="font-weight: 600;"><%= emp.matricule %></td>
                         <td>
-                            <div style="font-weight: 600;"><%= emp.nom %> <%= emp.prenom %></div>
+                            <div style="font-weight: 600;"><%= emp.nomComplet %></div>
                             <div style="font-size: 12px; color: var(--color-text-subtle);"><%= emp.numeroCNSS ? 'CNSS: ' + emp.numeroCNSS : 'Sans CNSS' %></div>
                         </td>
                         <td><%= emp.cin %></td>

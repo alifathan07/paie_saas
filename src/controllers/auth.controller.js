@@ -1,5 +1,15 @@
 import { authenticateUser } from "../services/auth.service.js";
-import { pickLoginCompany } from "../lib/company.js";
+import prisma from "../../db.ts";
+
+function loginLog(event, details = {}) {
+    console.info(`[auth.login] ${event}`, details);
+}
+
+function safeEmail(email) {
+    const value = String(email || "").trim().toLowerCase();
+    const at = value.indexOf("@");
+    return at > 1 ? `${value.slice(0, 2)}***${value.slice(at)}` : "<missing>";
+}
 
 export const loginPage = (req, res) => {
     if (req.session && req.session.user) {
@@ -14,26 +24,64 @@ export const loginPage = (req, res) => {
 export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
+        loginLog("request", {
+            email: safeEmail(email),
+            hasPassword: Boolean(password),
+            method: req.method,
+            path: req.originalUrl,
+            htmx: Boolean(req.headers["hx-request"]),
+        });
         const user = await authenticateUser(email, password);
-        const { companyId, companyName } = pickLoginCompany(user);
+        const companies = user.userCompanies ?? [];
+        const activeCompanyId = companies.length === 1 ? companies[0].companyId : null;
+
+        loginLog("credentials.accepted", {
+            userId: user.id,
+            companyCount: companies.length,
+            companyIds: companies.map((membership) => membership.companyId),
+            initialActiveCompanyId: activeCompanyId,
+        });
 
         req.session.user = {
             id: user.id,
             name: user.name,
             email: user.email,
-            companyId,
-            companyName,
+            isAdmin: Boolean(user.isAdmin || (process.env.ADMIN_EMAIL && user.email === process.env.ADMIN_EMAIL)),
+            isBlocked: Boolean(user.isBlocked),
+            activeCompanyId,
         };
+
+        if (companies.length === 0) {
+            const errorMsg = "Votre compte n'est associé à aucune entreprise.";
+            loginLog("rejected.no_company", { userId: user.id });
+            delete req.session.user;
+            return res.status(403).render("auth/login", { title: "Connexion", error: errorMsg });
+        }
+
+        if (companies.length > 1) {
+            loginLog("redirect.company_selection", { userId: user.id, companyCount: companies.length });
+            if (req.headers["hx-request"]) {
+                res.setHeader("HX-Redirect", "/auth/select-company");
+                return res.status(200).send();
+            }
+            return res.redirect("/auth/select-company");
+        }
 
         // If request is from HTMX, tell HTMX to redirect the whole page
         if (req.headers["hx-request"]) {
+            loginLog("success.htmx_redirect", { userId: user.id, activeCompanyId });
             res.setHeader("HX-Redirect", "/");
             return res.status(200).send();
         }
 
+        loginLog("success.redirect", { userId: user.id, activeCompanyId });
         return res.redirect("/");
     } catch (error) {
-        console.error("Login error:", error.message);
+        loginLog("failed", {
+            error: error.message,
+            code: error.code,
+            email: safeEmail(req.body?.email),
+        });
 
         let errorMsg = "Adresse e-mail ou mot de passe incorrect.";
         if (error.message === "MISSING_CREDENTIALS") {
@@ -45,6 +93,43 @@ export const login = async (req, res) => {
         }
         return res.render("auth/login", { title: "Connexion", error: errorMsg });
     }
+};
+
+export const selectCompanyPage = async (req, res) => {
+    if (!req.session?.user) return res.redirect("/auth");
+    const user = await prisma.users.findUnique({
+        where: { id: Number(req.session.user.id) },
+        select: { userCompanies: { include: { company: true } } },
+    });
+    return res.render("auth/select-company", {
+        title: "Sélectionner une entreprise",
+        companies: user?.userCompanies || [],
+        user: req.session.user,
+        error: null,
+    });
+};
+
+export const selectCompany = async (req, res) => {
+    const userId = Number(req.session?.user?.id);
+    const companyId = Number(req.body.companyId);
+    loginLog("company_selection.request", { userId, requestedCompanyId: companyId });
+    if (!Number.isInteger(userId) || !Number.isInteger(companyId) || companyId <= 0) {
+        loginLog("company_selection.rejected.invalid", { userId, requestedCompanyId: companyId });
+        return res.status(403).send("FORBIDDEN");
+    }
+
+    const membership = await prisma.userCompany.findUnique({
+        where: { companyId_userId: { companyId, userId } },
+        select: { companyId: true },
+    });
+    if (!membership) {
+        loginLog("company_selection.rejected.not_member", { userId, requestedCompanyId: companyId });
+        return res.status(403).send("FORBIDDEN");
+    }
+
+    req.session.user.activeCompanyId = companyId;
+    loginLog("company_selection.success", { userId, activeCompanyId: companyId });
+    return res.redirect("/");
 };
 
 export const logout = async (req, res) => {

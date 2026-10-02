@@ -85,7 +85,7 @@ try {
     let createdDefinitions = 0;
     mock(prisma.bonus, 'findUnique', async ({ where }) => catalog.find(b => b.id === where.id || (where.companyId_name?.companyId === b.companyId && where.companyId_name?.name === b.name)) || null);
     mock(prisma.bonus, 'create', async ({ data }) => { createdDefinitions++; assert.equal(data.taxable, false); const value = { id: 10, ...data }; catalog.push(value); return value; });
-    const employeeData = { nom: 'Test', prenom: 'Employee', companyId: 3, dateNaissance: '1990-01-01', dateEmbauche: body.dateEmbauche,
+    const employeeData = { nomComplet: 'Test Employee', companyId: 3, dateNaissance: '1990-01-01', dateEmbauche: body.dateEmbauche,
         baseSalary: result.baseSalary, bonusList: result.indemnities, cimrReduitBaseImposable: true };
     let stored;
     mock(prisma.employee, 'create', async ({ data }) => { stored = data; return { id: 7, ...data }; });

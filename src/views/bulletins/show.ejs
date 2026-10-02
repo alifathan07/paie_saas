@@ -680,7 +680,7 @@
         closed: 'Clôturé',
     }[bulletinStatus] || bulletinStatus;
     const employeeStatusLabel = !emp.actif ? 'Inactif · Bloqué' : statusLabel;
-    const employeeName = `${emp.nom} ${emp.prenom}`;
+    const employeeName = emp.nomComplet;
     const dateValue = value => value ? new Date(value).toLocaleDateString('fr-MA') : '—';
     const money = value => `${fmt(value)} DH`;
     const primes = values.variablePrimes || [];
@@ -728,12 +728,12 @@
                 <button class="print-button bulletin-action primary close-action" type="submit" formaction="/bulletins/<%= emp.id %>/close" data-confirm="Êtes-vous sûr de vouloir clôturer le bulletin de <%= employeeName %> pour <%= monthName %> <%= year %> ?" data-confirm-title="Clôturer ce bulletin" data-confirm-label="Oui, clôturer" data-confirm-danger="true">Clôturer</button>
             <% } %>
             <% if (previousBulletinUrl) { %>
-                <a class="print-button bulletin-action" href="<%= previousBulletinUrl %>" title="Bulletin précédent : <%= previousEmployee.nom %> <%= previousEmployee.prenom %>">Précédents</a>
+                <a class="print-button bulletin-action" href="<%= previousBulletinUrl %>" title="Bulletin précédent : <%= previousEmployee.nomComplet %>">Précédents</a>
             <% } else { %>
                 <button class="print-button bulletin-action" type="button" disabled title="Premier employé de la liste">Précédents</button>
             <% } %>
             <% if (nextBulletinUrl) { %>
-                <a class="print-button bulletin-action" href="<%= nextBulletinUrl %>" title="Bulletin suivant : <%= nextEmployee.nom %> <%= nextEmployee.prenom %>">Suivant</a>
+                <a class="print-button bulletin-action" href="<%= nextBulletinUrl %>" title="Bulletin suivant : <%= nextEmployee.nomComplet %>">Suivant</a>
             <% } else { %>
                 <button class="print-button bulletin-action" type="button" disabled title="Dernier employé de la liste">Suivant</button>
             <% } %>

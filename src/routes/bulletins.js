@@ -1,5 +1,5 @@
 import express from "express";
-import { enforceBulletinPeriod } from "../middleware/bulletinPeriod.js";
+import { enforceBulletinPeriod } from "../../middlewares/bulletinPeriod.js";
 import {
     listBulletins,
     showBulletin,
