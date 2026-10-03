@@ -1,5 +1,6 @@
 import { authenticateUser } from "../services/auth.service.js";
 import prisma from "../../db.ts";
+import { clearLoginAttempts } from "../../middlewares/security.js";
 
 function loginLog(event, details = {}) {
     console.info(`[auth.login] ${event}`, details);
@@ -13,7 +14,7 @@ function safeEmail(email) {
 
 export const loginPage = (req, res) => {
     if (req.session && req.session.user) {
-        return res.redirect("/");
+        return res.redirect(req.session.user.isAdmin ? "/admin" : "/");
     }
     res.render("auth/login", {
         title: "Connexion",
@@ -35,6 +36,16 @@ export const login = async (req, res) => {
         const companies = user.userCompanies ?? [];
         const activeCompanyId = companies.length === 1 ? companies[0].companyId : null;
 
+        if (user.isBlocked && !user.isAdmin) {
+            const blockedReason = user.blockReason || "Votre compte est temporairement bloqué. Contactez l’administrateur pour obtenir de l’aide.";
+            loginLog("blocked", { userId: user.id });
+            if (req.headers["hx-request"]) {
+                const safeReason = blockedReason.replace(/[&<>\"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char]);
+                return res.status(200).send(`<div class="blocked-login-modal" role="alertdialog" aria-modal="true"><div class="blocked-login-dialog"><button type="button" class="blocked-login-close" aria-label="Fermer" onclick="this.closest('.blocked-login-modal').remove()">×</button><div class="blocked-login-icon">!</div><p class="blocked-login-eyebrow">ACCÈS SUSPENDU</p><h2>Votre compte est bloqué</h2><p>${safeReason}</p><small>Si vous pensez qu’il s’agit d’une erreur, contactez votre administrateur.</small><button type="button" class="btn-primary blocked-login-dismiss" onclick="this.closest('.blocked-login-modal').remove()">J’ai compris</button></div></div>`);
+            }
+            return res.status(403).render("auth/login", { title: "Connexion", error: null, blockedReason });
+        }
+
         loginLog("credentials.accepted", {
             userId: user.id,
             companyCount: companies.length,
@@ -46,16 +57,33 @@ export const login = async (req, res) => {
             id: user.id,
             name: user.name,
             email: user.email,
-            isAdmin: Boolean(user.isAdmin || (process.env.ADMIN_EMAIL && user.email === process.env.ADMIN_EMAIL)),
+            isAdmin: Boolean(user.isAdmin || (
+                String(process.env.ADMIN_EMAIL || "").trim().toLowerCase() === String(user.email || "").trim().toLowerCase()
+                && String(process.env.ADMIN_EMAIL || "").trim() !== ""
+            )),
             isBlocked: Boolean(user.isBlocked),
             activeCompanyId,
         };
+        clearLoginAttempts(req);
+
+        // Administrators manage companies from the admin dashboard and do not
+        // need an active company just to sign in.
+        if (req.session.user.isAdmin) {
+            loginLog("redirect.admin_dashboard", { userId: user.id });
+            if (req.headers["hx-request"]) {
+                res.setHeader("HX-Redirect", "/admin");
+                return res.status(200).send();
+            }
+            return res.redirect("/admin");
+        }
 
         if (companies.length === 0) {
-            const errorMsg = "Votre compte n'est associé à aucune entreprise.";
-            loginLog("rejected.no_company", { userId: user.id });
-            delete req.session.user;
-            return res.status(403).render("auth/login", { title: "Connexion", error: errorMsg });
+            loginLog("success.no_company", { userId: user.id });
+            if (req.headers["hx-request"]) {
+                res.setHeader("HX-Redirect", "/auth/select-company");
+                return res.status(200).send();
+            }
+            return res.redirect("/auth/select-company");
         }
 
         if (companies.length > 1) {
@@ -97,6 +125,7 @@ export const login = async (req, res) => {
 
 export const selectCompanyPage = async (req, res) => {
     if (!req.session?.user) return res.redirect("/auth");
+    if (req.session.user.isAdmin) return res.redirect("/admin");
     const user = await prisma.users.findUnique({
         where: { id: Number(req.session.user.id) },
         select: { userCompanies: { include: { company: true } } },
@@ -105,7 +134,7 @@ export const selectCompanyPage = async (req, res) => {
         title: "Sélectionner une entreprise",
         companies: user?.userCompanies || [],
         user: req.session.user,
-        error: null,
+        error: user?.userCompanies?.length ? null : "Votre compte est actif, mais aucune société ne vous est encore associée. Contactez l'administrateur.",
     });
 };
 

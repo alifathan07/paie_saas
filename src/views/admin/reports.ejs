@@ -1,11 +1,11 @@
 <%- include('../partials/header') %>
 <div class="page-header"><div class="header-title-area"><h1 class="page-title">Rapports clients</h1><p class="page-subtitle">Consultez les problèmes signalés et changez leur statut.</p></div><div class="header-actions"><a href="/admin" class="btn-secondary">Administration</a></div></div>
 <div class="data-table-wrapper"><table class="data-table"><thead><tr><th>Date</th><th>Client / société</th><th>Sujet</th><th>Description</th><th>Traitement</th></tr></thead><tbody>
-<% reports.forEach(report => { %><tr>
+<% reports.forEach(report => { const statusLabels = { OPEN: 'Ouvert', IN_PROGRESS: 'En cours', SOLVED: 'Résolu', CLOSED: 'Fermé' }; %><tr>
     <td><%= new Date(report.createdAt).toLocaleString('fr-FR') %></td>
     <td><strong><%= report.user.name %></strong><br><small><%= report.company?.name || '—' %></small></td>
     <td><%= report.subject %></td>
     <td style="white-space:pre-wrap;max-width:360px"><%= report.message %></td>
-    <td><form method="POST" action="/admin/reports/<%= report.id %>"><select class="form-input" name="status"><% ['OPEN','IN_PROGRESS','SOLVED','CLOSED'].forEach(status => { %><option value="<%= status %>" <%= report.status === status ? 'selected' : '' %>><%= status %></option><% }) %></select><textarea class="form-input" name="adminNote" placeholder="Note admin"><%= report.adminNote || '' %></textarea><button class="btn-primary" type="submit">Mettre à jour</button></form></td>
+    <td><form method="POST" action="/admin/reports/<%= report.id %>"><span class="status-pill status-<%= report.status.toLowerCase() %>"><i></i><%= statusLabels[report.status] || report.status %></span><select class="form-input report-status-select report-status-<%= report.status.toLowerCase() %>" name="status"><% ['OPEN','IN_PROGRESS','SOLVED','CLOSED'].forEach(status => { %><option value="<%= status %>" <%= report.status === status ? 'selected' : '' %>><%= statusLabels[status] %></option><% }) %></select><textarea class="form-input" name="adminNote" placeholder="Note admin"><%= report.adminNote || '' %></textarea><button class="btn-primary" type="submit">Mettre à jour</button></form></td>
 </tr><% }) %></tbody></table></div>
 <%- include('../partials/footer') %>

@@ -27,6 +27,11 @@
                 <div class="alert alert-error company-selection-error" role="alert"><%= error %></div>
             <% } %>
 
+            <% if (!companies.length) { %>
+                <div class="alert alert-error company-selection-error" role="alert"><%= error %></div>
+                <% if (!user?.isAdmin) { %><a class="btn-primary company-create-link" href="/companies">Créer ma première société</a><% } %>
+                <form method="POST" action="/auth/logout" style="margin-top:16px"><button class="btn-secondary" type="submit">Se déconnecter</button></form>
+            <% } %>
             <div class="company-options" aria-label="Entreprises disponibles">
                 <% companies.forEach((membership) => { %>
                     <form method="post" action="/auth/select-company" class="company-option-form">

@@ -12,11 +12,15 @@
     <link rel="stylesheet" href="/css/custom.css">
     <link rel="stylesheet" href="/css/show-bulletin.css">
     <link rel="stylesheet" href="/css/dialogs.css">
+    <% if (typeof dashboardStylesheet !== 'undefined' && dashboardStylesheet) { %>
+    <link rel="stylesheet" href="/css/admin-dashboard.css">
+    <script src="/js/admin-interactions.js" defer></script>
+    <% } %>
     <script src="/js/dialogs.js" defer></script>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 </head>
 
-<body>
+<body class="<%= typeof dashboardStylesheet !== 'undefined' && dashboardStylesheet ? 'admin-dashboard-shell' : '' %>">
 
     <%- include('./sidebar') %>
 

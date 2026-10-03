@@ -53,6 +53,19 @@
                 </button>
             </form>
         </div>
+        <% if (typeof blockedReason !== 'undefined' && blockedReason) { %>
+        <div class="blocked-login-modal" role="alertdialog" aria-modal="true">
+            <div class="blocked-login-dialog">
+                <button type="button" class="blocked-login-close" aria-label="Fermer" onclick="this.closest('.blocked-login-modal').remove()">×</button>
+                <div class="blocked-login-icon">!</div>
+                <p class="blocked-login-eyebrow">ACCÈS SUSPENDU</p>
+                <h2>Votre compte est bloqué</h2>
+                <p><%= blockedReason %></p>
+                <small>Si vous pensez qu’il s’agit d’une erreur, contactez votre administrateur.</small>
+                <button type="button" class="btn-primary blocked-login-dismiss" onclick="this.closest('.blocked-login-modal').remove()">J’ai compris</button>
+            </div>
+        </div>
+        <% } %>
         <div class="login-footer">© 2026 Paie Software</div>
     </div>
 </body>

@@ -1,0 +1,50 @@
+<%- include('../partials/header') %>
+<div class="page-header">
+    <div class="header-title-area">
+        <h1 class="page-title">Mes sociétés</h1>
+        <p class="page-subtitle">Ajoutez et choisissez l’espace de travail de votre entreprise.</p>
+    </div>
+</div>
+
+<div class="company-page-grid">
+    <section class="card company-create-card">
+        <div class="card-header"><h2 class="card-title">Ajouter une société</h2></div>
+        <p class="muted">Votre formule vous permet de gérer <strong><%= maxCompanies === 0 ? 'un nombre illimité de sociétés' : `${maxCompanies} société${maxCompanies > 1 ? 's' : ''}` %></strong>.</p>
+        <% if (error) { %><div class="alert alert-error" role="alert"><%= error %></div><% } %>
+        <% const atLimit = maxCompanies !== 0 && companies.length >= maxCompanies; %>
+        <% if (atLimit) { %>
+            <div class="company-limit-notice">Votre limite est atteinte. Contactez votre administrateur pour l’augmenter.</div>
+        <% } else { %>
+            <form method="POST" action="/companies" class="company-create-form">
+                <label class="form-label">Raison sociale<input class="form-input" name="name" maxlength="191" required placeholder="Ex. Atlas Consulting"></label>
+                <label class="form-label">Adresse<input class="form-input" name="adresse" maxlength="191" required placeholder="Adresse complète"></label>
+                <div class="company-form-grid">
+                    <label class="form-label">Ville<input class="form-input" name="ville" maxlength="191" required placeholder="Ex. Casablanca"></label>
+                    <label class="form-label">IF<input class="form-input" name="ifNumber" maxlength="191" required placeholder="Identifiant fiscal"></label>
+                    <label class="form-label">N° affiliation CNSS<input class="form-input" name="numeroAffiliationCnss" maxlength="191" required placeholder="Numéro CNSS"></label>
+                    <label class="form-label">SMIG pour 26 jours<input class="form-input" type="number" name="smig" min="0.01" step="0.01" required value="3422.72"></label>
+                    <label class="form-label">ICE <span>(optionnel)</span><input class="form-input" name="ice" maxlength="191" placeholder="Identifiant commun"></label>
+                    <label class="form-label">RC <span>(optionnel)</span><input class="form-input" name="rc" maxlength="191" placeholder="Registre de commerce"></label>
+                    <label class="form-label">N° assurance <span>(optionnel)</span><input class="form-input" name="numeroAssurance" maxlength="191" placeholder="Peut rester vide"></label>
+                </div>
+                <button class="btn-primary" type="submit">Créer la société</button>
+            </form>
+        <% } %>
+    </section>
+
+    <section class="card company-list-card">
+        <div class="card-header"><h2 class="card-title">Vos espaces</h2><span class="company-count"><%= companies.length %><%= maxCompanies === 0 ? '' : ` / ${maxCompanies}` %></span></div>
+        <div class="company-list">
+            <% if (!companies.length) { %><p class="muted">Aucune société n’a encore été créée.</p><% } %>
+            <% companies.forEach(membership => { %>
+                <form method="POST" action="/auth/select-company" class="company-list-item">
+                    <input type="hidden" name="companyId" value="<%= membership.companyId %>">
+                    <span class="company-list-icon"><%= membership.company.name.charAt(0).toUpperCase() %></span>
+                    <span class="company-list-copy"><strong><%= membership.company.name %></strong><small><%= membership.company.ville || 'Informations légales à compléter' %> · SMIG : <%= Number(membership.company.smig || 3422.72).toLocaleString('fr-MA', { minimumFractionDigits: 2 }) %> DH</small></span>
+                    <button class="<%= Number(user?.activeCompanyId) === membership.companyId ? 'company-current-button' : 'btn-secondary' %>" type="submit" <%= Number(user?.activeCompanyId) === membership.companyId ? 'disabled' : '' %>><%= Number(user?.activeCompanyId) === membership.companyId ? 'Vous êtes ici' : 'Ouvrir' %></button>
+                </form>
+            <% }) %>
+        </div>
+    </section>
+</div>
+<%- include('../partials/footer') %>

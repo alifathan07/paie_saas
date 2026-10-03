@@ -17,9 +17,14 @@ datasource db {
 model Company {
   id        Int      @id @default(autoincrement())
   name      String
+  adresse   String?
+  ville     String?
   ice       String?  @unique
   ifNumber  String?  @unique
   rc        String?  @unique
+  numeroAffiliationCnss String?
+  smig      Decimal? @db.Decimal(12, 2)
+  numeroAssurance String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -27,6 +32,7 @@ model Company {
   employees     Employee[]
   bonuses       Bonus[]
   reports       Report[]
+  auditLogs     AuditLog[]
 
   @@map("company")
 }
@@ -45,6 +51,7 @@ model Users {
 
   userCompanies UserCompany[]
   reports       Report[]
+  auditLogs     AuditLog[] @relation("AuditActor")
 
   @@map("users")
 }
@@ -85,6 +92,27 @@ model UserCompany {
   @@id([companyId, userId])
   @@unique([companyId])
   @@map("userCompanies")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  actorUserId Int
+  action      String   @db.VarChar(64)
+  targetType  String   @db.VarChar(64)
+  targetId    Int?
+  companyId   Int?
+  metadata    Json?
+  ipAddress   String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+
+  actor   Users    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_logs")
 }
 
 enum Sexe {

@@ -9,6 +9,19 @@
         </div>
     </div>
     <nav class="sidebar-nav">
+        <% if (isAdmin && !clientMode) { %>
+        <div class="sidebar-section-label">Pilotage</div>
+        <a href="/admin" class="sidebar-link <%= typeof adminNav !== 'undefined' && adminNav === 'overview' ? 'active' : '' %>">
+            <span class="sidebar-link-icon">⌂</span><span>Vue d’ensemble</span>
+        </a>
+        <a href="/admin/clients" class="sidebar-link <%= typeof adminNav !== 'undefined' && adminNav === 'clients' ? 'active' : '' %>"><span class="sidebar-link-icon">◉</span><span>Clients</span></a>
+        <a href="/admin/companies" class="sidebar-link <%= typeof adminNav !== 'undefined' && adminNav === 'companies' ? 'active' : '' %>"><span class="sidebar-link-icon">▦</span><span>Sociétés</span></a>
+        <div class="sidebar-section-label sidebar-section-label-spaced">Surveillance</div>
+        <a href="/admin/reports" class="sidebar-link <%= typeof adminNav !== 'undefined' && adminNav === 'reports' ? 'active' : '' %>"><span class="sidebar-link-icon">!</span><span>Rapports</span></a>
+        <a href="/admin/audit-logs" class="sidebar-link <%= typeof adminNav !== 'undefined' && adminNav === 'audit' ? 'active' : '' %>"><span class="sidebar-link-icon">↗</span><span>Journal d’activité</span></a>
+        <a href="/admin/system" class="sidebar-link <%= typeof adminNav !== 'undefined' && (adminNav === 'system' || adminNav === 'usage') ? 'active' : '' %>"><span class="sidebar-link-icon">⚙</span><span>Système</span></a>
+        <% } else { %>
+        <% if (clientMode) { %><div class="sidebar-mode-card"><span class="sidebar-mode-dot"></span><div><small>Mode client</small><strong><%= clientMode.companyName %></strong></div></div><% } %>
         <a href="/dashboard"
             class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'dashboard' ? 'active' : '' %>">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -20,6 +33,14 @@
             </svg>
             <span>Tableau de bord</span>
         </a>
+        <% if (!isAdmin) { %>
+        <a href="/companies" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'companies' ? 'active' : '' %>">
+            <span class="sidebar-link-icon">▦</span><span>Mes sociétés</span>
+        </a>
+        <a href="/parametrage" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'parametrage' ? 'active' : '' %>">
+            <span class="sidebar-link-icon">⚙</span><span>Paramétrage</span>
+        </a>
+        <% } %>
         <a href="/employees"
             class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'employees' ? 'active' : '' %>">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -56,7 +77,10 @@
             <span>Éditions</span>
         </a>
         <a href="/reports" class="sidebar-link"><span>Rapporter un problème</span></a>
-        <% if (isAdmin) { %><a href="/admin" class="sidebar-link"><span>Administration</span></a><% } %>
+        <% if (isAdmin && clientMode) { %>
+        <a href="/admin" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'admin' ? 'active' : '' %>"><span>Administration</span></a>
+        <% } %>
+        <% } %>
     </nav>
 
     <div class="sidebar-footer">

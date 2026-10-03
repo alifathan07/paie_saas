@@ -1,0 +1,15 @@
+<%- include('../partials/header') %>
+<div class="page-header"><div class="header-title-area"><h1 class="page-title">Créer un utilisateur</h1><p class="page-subtitle">Création d'un compte client normal, sans accès initial à une société.</p></div><div class="header-actions"><a href="/admin/users" class="btn-secondary">Retour aux utilisateurs</a></div></div>
+<section class="admin-section-card" style="max-width:720px">
+    <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+    <form method="POST" action="/admin/users">
+        <label class="form-label">Nom<input class="form-input" name="name" maxlength="191" required value="<%= form.name %>"></label>
+        <label class="form-label" style="display:block;margin-top:14px">Adresse e-mail<input class="form-input" type="email" name="email" maxlength="191" required value="<%= form.email %>"></label>
+        <label class="form-label" style="display:block;margin-top:14px">Mot de passe<input class="form-input" type="password" name="password" minlength="8" required autocomplete="new-password"></label>
+        <label class="form-label" style="display:block;margin-top:14px">Confirmation du mot de passe<input class="form-input" type="password" name="passwordConfirmation" minlength="8" required autocomplete="new-password"></label>
+        <label class="form-label" style="display:block;margin-top:14px">Maximum de sociétés<input class="form-input" type="number" name="maxCompanies" min="0" max="1000" required value="<%= form.maxCompanies ?? 1 %>"></label>
+        <p class="muted" style="margin-top:8px">0 signifie illimité. Le compte sera toujours créé comme utilisateur normal et sans société.</p>
+        <button class="btn-primary" type="submit" style="margin-top:16px">Créer le compte</button>
+    </form>
+</section>
+<%- include('../partials/footer') %>

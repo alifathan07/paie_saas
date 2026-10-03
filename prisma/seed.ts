@@ -7,8 +7,16 @@ const prisma = new PrismaClient()
 async function main() {
   console.log("🌱 Starting database seeding...");
 
-  const defaultPassword = "password123";
-  const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+  const requiredEnv = (name: string) => {
+    const value = process.env[name]?.trim();
+    if (!value) throw new Error(`${name} must be configured before seeding`);
+    return value;
+  };
+  const adminEmail = requiredEnv("ADMIN_EMAIL").toLowerCase();
+  const adminPassword = requiredEnv("ADMIN_PASSWORD");
+  const demoPassword = process.env.SEED_DEMO_PASSWORD?.trim() || adminPassword;
+  const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
+  const demoPasswordHash = await bcrypt.hash(demoPassword, 10);
 
   // 1. Seed Companies
   const company1 = await prisma.company.upsert({
@@ -64,21 +72,21 @@ async function main() {
 
   // 3. Seed Users
   const userAdmin = await prisma.users.upsert({
-    where: { email: "admin@paie.ma" },
-    update: { password: hashedPassword, isAdmin: true, isBlocked: false },
-    create: { name: "Super Admin", email: "admin@paie.ma", password: hashedPassword, isAdmin: true, maxCompanies: 0 },
+    where: { email: adminEmail },
+    update: { password: adminPasswordHash, isAdmin: true, isBlocked: false },
+    create: { name: "Super Admin", email: adminEmail, password: adminPasswordHash, isAdmin: true, maxCompanies: 0 },
   });
 
   const userAli = await prisma.users.upsert({
     where: { email: "ali.fathi@techsolutions.ma" },
-    update: { password: hashedPassword },
-    create: { name: "Ali Fathi", email: "ali.fathi@techsolutions.ma", password: hashedPassword },
+    update: { password: demoPasswordHash },
+    create: { name: "Ali Fathi", email: "ali.fathi@techsolutions.ma", password: demoPasswordHash },
   });
 
   const userSara = await prisma.users.upsert({
     where: { email: "sara.mansouri@atlaslogistics.ma" },
-    update: { password: hashedPassword },
-    create: { name: "Sara Mansouri", email: "sara.mansouri@atlaslogistics.ma", password: hashedPassword },
+    update: { password: demoPasswordHash },
+    create: { name: "Sara Mansouri", email: "sara.mansouri@atlaslogistics.ma", password: demoPasswordHash },
   });
 
   await prisma.userCompany.upsert({

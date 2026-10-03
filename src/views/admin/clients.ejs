@@ -1,11 +1,13 @@
 <%- include('../partials/header') %>
-<div class="page-header"><div class="header-title-area"><h1 class="page-title">Clients</h1><p class="page-subtitle">Limites, blocage de paiement et accès client.</p></div><div class="header-actions"><a href="/admin" class="btn-secondary">Administration</a></div></div>
+<div class="page-header"><div class="header-title-area"><h1 class="page-title">Utilisateurs</h1><p class="page-subtitle">Comptes, limites, sociétés et support.</p></div><div class="header-actions"><a href="/admin/users/new" class="btn-primary">Créer un utilisateur</a><a href="/admin/companies" class="btn-secondary">Sociétés</a><a href="/admin" class="btn-secondary">Dashboard</a></div></div>
+<form method="GET" action="/admin/users" class="admin-filter"><input class="form-input" name="q" value="<%= q %>" placeholder="Rechercher par nom ou e-mail"><button class="btn-primary" type="submit">Rechercher</button></form>
 <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
-<div class="data-table-wrapper"><table class="data-table"><thead><tr><th>Client</th><th>Sociétés</th><th>Limite</th><th>État</th><th>Actions</th></tr></thead><tbody>
+<div class="data-table-wrapper"><table class="data-table"><thead><tr><th>Utilisateur</th><th>Rôle / état</th><th>Sociétés</th><th>Limite</th><th>Actions</th></tr></thead><tbody>
 <% clients.forEach(client => { %>
 <tr>
-    <td><strong><%= client.name %></strong><br><small><%= client.email %></small></td>
-    <td><% client.userCompanies.forEach(membership => { %><div><%= membership.company.name %></div><% }) %><% if (!client.userCompanies.length) { %>—<% } %></td>
+    <td><a href="/admin/users/<%= client.id %>"><strong><%= client.name %></strong></a><br><small><%= client.email %></small></td>
+    <td><% if (client.isAdmin) { %><span class="badge">Administrateur</span><% } else if (client.isBlocked) { %><span class="badge badge-blocked">Bloqué</span><% } else { %><span class="badge badge-actif">Actif</span><% } %></td>
+    <td><strong><%= client.userCompanies.length %></strong><% client.userCompanies.forEach(membership => { %><div><a href="/admin/companies/<%= membership.company.id %>"><%= membership.company.name %></a></div><% }) %></td>
     <td>
         <form method="POST" action="/admin/clients/<%= client.id %>/billing" style="display:flex;gap:6px;align-items:center">
             <input class="form-input" type="number" name="maxCompanies" min="0" max="1000" value="<%= client.maxCompanies %>" style="width:90px">
@@ -13,13 +15,12 @@
         </form>
         <small>0 = illimité</small>
     </td>
-    <td><% if (client.isBlocked) { %><span class="badge badge-blocked">Bloqué</span><% } else { %><span class="badge badge-actif">Actif</span><% } %></td>
     <td>
         <div class="table-actions">
-            <% if (client.isBlocked) { %><form method="POST" action="/admin/clients/<%= client.id %>/unblock"><button class="btn-primary" type="submit">Débloquer</button></form><% } else { %><form method="POST" action="/admin/clients/<%= client.id %>/block"><input type="hidden" name="reason" value="Paiement en attente"><button class="btn-secondary" type="submit">Bloquer</button></form><% } %>
-            <% if (client.userCompanies.length) { %><form method="POST" action="/admin/clients/<%= client.id %>/mode"><select class="form-input" name="companyId"><% client.userCompanies.forEach(membership => { %><option value="<%= membership.companyId %>"><%= membership.company.name %></option><% }) %></select><button class="btn-primary" type="submit">Mode client</button></form><% } %>
+            <a class="btn-secondary" href="/admin/users/<%= client.id %>">Détails</a>
+            <% if (!client.isAdmin) { %><% if (client.isBlocked) { %><form method="POST" action="/admin/clients/<%= client.id %>/unblock"><button class="btn-primary" type="submit">Débloquer</button></form><% } else { %><form class="block-user-form" method="POST" action="/admin/clients/<%= client.id %>/block" data-default-reason="Paiement en attente"><input type="hidden" name="reason" value="Paiement en attente"><button class="btn-secondary" type="submit">Bloquer</button></form><% } %><% if (client.userCompanies.length) { %><form method="POST" action="/admin/clients/<%= client.id %>/mode"><select class="form-input" name="companyId"><% client.userCompanies.forEach(membership => { %><option value="<%= membership.companyId %>"><%= membership.company.name %></option><% }) %></select><button class="btn-primary" type="submit">Support</button></form><% } %>
+            <form method="POST" action="/admin/clients/<%= client.id %>/companies" style="display:flex;gap:6px;margin-top:8px"><input class="form-input" name="name" required placeholder="Nouvelle société"><button class="btn-secondary" type="submit">Créer</button></form><% } %>
         </div>
-        <form method="POST" action="/admin/clients/<%= client.id %>/companies" style="display:flex;gap:6px;margin-top:8px"><input class="form-input" name="name" required placeholder="Nouvelle société"><button class="btn-secondary" type="submit">Ajouter</button></form>
     </td>
 </tr>
 <% }) %>
