@@ -1,6 +1,7 @@
 import { calculatePayroll } from './PayrollEngine.js';
 import { calculateCumulativeIR } from './calculators/cumulativeIr.calculator.js';
 import { FRAIS_PRO_RULES } from './rules/fraisProfessionnels.rules.js';
+import { workingTimeConfigFromCompany } from './utils/workingTime.js';
 
 // Decimal(12, 2), also used by the employee's contractual base salary.
 export const MAX_SALARY = 9999999999.99;
@@ -8,8 +9,12 @@ const cents = value => Math.round(value * 100);
 
 // A normal full month uses the bulletin's annualized IR calculation, without history.
 export function calculateNormalMonth(employee, baseSalary, period) {
+    const workingTime = workingTimeConfigFromCompany(employee.company);
     const payroll = calculatePayroll(employee, {
-        baseSalary, month: period.month, year: period.year, workedDays: 26,
+        baseSalary, month: period.month, year: period.year,
+        ...workingTime,
+        workedDays: workingTime.workingTimeMode === 'DAYS' ? workingTime.standardMonthlyDays : undefined,
+        workedHours: workingTime.workingTimeMode === 'HOURS' ? workingTime.standardMonthlyHours : undefined,
         heuresSup25: 0, heuresSup50: 0, heuresSup100: 0, avances: 0,
     });
     const tax = calculateCumulativeIR({

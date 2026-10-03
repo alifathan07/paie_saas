@@ -6,13 +6,15 @@
 
     const locked = page.dataset.locked === 'true';
     const money = value => `${Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD`;
-    const days = value => Number(value || 0).toLocaleString('fr-MA', { maximumFractionDigits: 0 });
+    const days = value => Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const timeValue = value => Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const setResult = (name, value) => document.querySelectorAll(`[data-result="${name}"]`).forEach(node => {
         node.textContent = money(value);
     });
     const setAnnualCumulative = cumulative => {
         if (!cumulative) return;
         document.querySelectorAll('[data-result="annualWorkedDays"]').forEach(node => { node.textContent = days(cumulative.workedDays); });
+        document.querySelectorAll('[data-result="annualWorkedHours"]').forEach(node => { node.textContent = timeValue(cumulative.workedHours); });
         ['sbi', 'sni', 'irNet', 'cnss', 'amo'].forEach(key => {
             document.querySelectorAll(`[data-result="annual${key[0].toUpperCase()}${key.slice(1)}"]`).forEach(node => {
                 node.textContent = money(cumulative[key]);
@@ -229,6 +231,8 @@
             node.textContent = `${Number(Number(result.fraisProRate || 0) * 100).toLocaleString('fr-MA', { maximumFractionDigits: 2 })}%`;
         });
         setAnnualCumulative(result.annualCumulative);
+        document.querySelectorAll('[data-result="workedDays"]').forEach(node => { node.textContent = timeValue(result.workedDays); });
+        document.querySelectorAll('[data-result="workedHours"]').forEach(node => { node.textContent = timeValue(result.workedHours); });
         document.querySelectorAll('[data-result="periode"]').forEach(element => {
             element.textContent = result.periode;
         });
@@ -262,17 +266,17 @@
         }
     }
 
-    const workedDaysInput = form.elements.workedDays;
-    let savedDays = workedDaysInput?.value;
-    let savingDays = false;
-    let daysTimer;
-    async function calculateDays(save = false) {
-        if (!workedDaysInput || workedDaysInput.disabled || savingDays || !workedDaysInput.checkValidity()) return;
+    const workingTimeInput = form.elements.workedDays || form.elements.workedHours;
+    let savedWorkingTime = workingTimeInput?.value;
+    let savingWorkingTime = false;
+    let workingTimeTimer;
+    async function calculateWorkingTime(save = false) {
+        if (!workingTimeInput || workingTimeInput.disabled || savingWorkingTime || !workingTimeInput.checkValidity()) return;
         const version = ++calculationVersion;
         const state = document.querySelector('#calculation-state');
         const error = document.querySelector('#calculation-error');
-        const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, workedDays: workedDaysInput.value });
-        if (save) { savingDays = true; workedDaysInput.readOnly = true; }
+        const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, [workingTimeInput.name]: workingTimeInput.value });
+        if (save) { savingWorkingTime = true; workingTimeInput.readOnly = true; }
         state.textContent = save ? 'Enregistrement…' : 'Calcul en cours…';
         error.hidden = true;
         try {
@@ -283,45 +287,45 @@
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible de mettre à jour les jours.');
-            if (save) savedDays = body.get('workedDays');
+            if (save) savedWorkingTime = workingTimeInput.value;
             if (version !== calculationVersion) return;
             renderPayroll(result.payroll);
-            state.textContent = save ? 'Jours enregistrés' : 'Aperçu · jours non enregistrés';
+            state.textContent = save ? 'Temps de travail enregistré' : 'Aperçu · temps non enregistré';
         } catch (failure) {
             if (version !== calculationVersion) return;
             state.textContent = 'Modification non enregistrée';
             error.textContent = failure.message;
             error.hidden = false;
         } finally {
-            if (save) { savingDays = false; workedDaysInput.readOnly = false; }
+            if (save) { savingWorkingTime = false; workingTimeInput.readOnly = false; }
         }
     }
-    function saveDays() {
-        clearTimeout(daysTimer);
+    function saveWorkingTime() {
+        clearTimeout(workingTimeTimer);
         clearTimeout(timer);
-        if (page.dataset.saved === 'true' && workedDaysInput.value !== savedDays) calculateDays(true);
+        if (page.dataset.saved === 'true' && workingTimeInput.value !== savedWorkingTime) calculateWorkingTime(true);
     }
-    workedDaysInput?.addEventListener('blur', saveDays);
-    workedDaysInput?.addEventListener('keydown', event => {
+    workingTimeInput?.addEventListener('blur', saveWorkingTime);
+    workingTimeInput?.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
             event.preventDefault();
-            if (workedDaysInput.reportValidity()) saveDays();
+            if (workingTimeInput.reportValidity()) saveWorkingTime();
         }
     });
     window.addEventListener('beforeunload', event => {
-        if (workedDaysInput && !workedDaysInput.disabled && workedDaysInput.value !== savedDays) {
+        if (workingTimeInput && !workingTimeInput.disabled && workingTimeInput.value !== savedWorkingTime) {
             event.preventDefault();
             event.returnValue = '';
         }
     });
 
     form.addEventListener('input', event => {
-        if (event.target === workedDaysInput && page.dataset.saved === 'true') {
-            clearTimeout(daysTimer);
+        if (event.target === workingTimeInput && page.dataset.saved === 'true') {
+            clearTimeout(workingTimeTimer);
             clearTimeout(timer);
             ++calculationVersion;
-            if (workedDaysInput.checkValidity()) daysTimer = setTimeout(() => calculateDays(), 350);
-            else document.querySelector('#calculation-state').textContent = 'Saisissez un nombre entier de 0 à 26.';
+            if (workingTimeInput.checkValidity()) workingTimeTimer = setTimeout(() => calculateWorkingTime(), 350);
+            else document.querySelector('#calculation-state').textContent = 'Saisissez une valeur de temps de travail valide.';
             return;
         }
         if (event.target.classList.contains('live-input') || event.target.name.includes('primes')) {
@@ -330,7 +334,7 @@
         }
     });
     form.addEventListener('change', event => {
-        if (event.target === workedDaysInput && page.dataset.saved === 'true') return;
+        if (event.target === workingTimeInput && page.dataset.saved === 'true') return;
         calculate();
     });
     if (page.dataset.saved !== 'true') calculate();

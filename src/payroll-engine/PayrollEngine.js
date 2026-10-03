@@ -6,6 +6,7 @@ import { calculateCIMR } from "./calculators/cimr.calculator.js";
 import { calculateFraisProfessionnels } from "./calculators/fraisProfessionnels.calculator.js";
 import { calculateIR } from "./calculators/ir.calculator.js";
 import { calculateOvertime } from "./calculators/overtime.calculator.js";
+import { normalizeWorkingTime, workingTimeConfigFromCompany } from "./utils/workingTime.js";
 
 export const PAYROLL_WORKED_DAYS = 26;
 
@@ -15,11 +16,11 @@ export const normalizeWorkedDays = (value) => {
   }
 
   const workedDays = Number(value);
-  if (!Number.isInteger(workedDays) || workedDays < 0 || workedDays > PAYROLL_WORKED_DAYS) {
+  if (!Number.isFinite(workedDays) || workedDays < 0 || workedDays > PAYROLL_WORKED_DAYS) {
     throw new Error(`WORKED_DAYS_INVALID: workedDays must be an integer between 0 and ${PAYROLL_WORKED_DAYS}`);
   }
 
-  return workedDays;
+  return Number(workedDays.toFixed(2));
 };
 
 /**
@@ -45,6 +46,7 @@ export const calculatePayroll = (employee, overrides = {}) => {
       periodDate: overrides.periodDate,
       baseSalary: 0,
       workedDays: 0,
+      workedHours: 0,
       dependents: 0,
       heuresSup25: 0,
       heuresSup50: 0,
@@ -60,13 +62,19 @@ export const calculatePayroll = (employee, overrides = {}) => {
   const targetDate = overrides.periodDate ||
     (overrides.month && overrides.year ? new Date(Number(overrides.year), Number(overrides.month), 0) : new Date());
 
-  // 2. Base salary prorated by worked days using the fixed 26-day reference
+  const workingTime = normalizeWorkingTime({
+    ...workingTimeConfigFromCompany(employee.company),
+    ...overrides,
+  });
+
+  // 2. Base salary prorated by the company's normalized monthly basis.
   const rawBase = overrides.baseSalary !== undefined && overrides.baseSalary !== null && overrides.baseSalary !== ''
     ? Math.max(0, Number(overrides.baseSalary) || 0)
     : Math.max(0, Number(employee.baseSalary) || 0);
 
-  const workedDays = normalizeWorkedDays(overrides.workedDays);
-  const effectiveBase = Number((rawBase / PAYROLL_WORKED_DAYS * workedDays).toFixed(2));
+  const workedDays = workingTime.workedDays;
+  const workedHours = workingTime.workedHours;
+  const effectiveBase = Number((rawBase * workingTime.ratio).toFixed(2));
 
   // 3. Seniority (Prime d'ancienneté) based on effective base and dateEmbauche relative to payroll period
   const months = calculateMonths(employee.dateEmbauche, targetDate);
@@ -89,7 +97,8 @@ export const calculatePayroll = (employee, overrides = {}) => {
     effectiveBase,
     overrides.heuresSup25,
     overrides.heuresSup50,
-    overrides.heuresSup100
+    overrides.heuresSup100,
+    workingTime.standardMonthlyHours
   );
   const heuresSupAmount = overtime.totalAmount;
 
@@ -207,6 +216,10 @@ export const calculatePayroll = (employee, overrides = {}) => {
     baseSalary: effectiveBase,
     rawBaseSalary: rawBase,
     workedDays,
+    workedHours,
+    workingTimeMode: workingTime.mode,
+    standardMonthlyDays: workingTime.standardMonthlyDays,
+    standardMonthlyHours: workingTime.standardMonthlyHours,
 
     primeAnciennete,
     ancienneteRate,

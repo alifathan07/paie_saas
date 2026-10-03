@@ -1,4 +1,4 @@
-import { calculatePayroll, normalizeWorkedDays } from "../PayrollEngine.js";
+import { calculatePayroll } from "../PayrollEngine.js";
 import { calculateCNSSPatronale } from "../calculators/cnss.calculator.js";
 
 export const calculateEtatCNSS = (employeesList) => {
@@ -27,9 +27,11 @@ export const calculateEtatCNSS = (employeesList) => {
   };
 
   const rows = employeesList.map(employee => {
-    const workedDays = employee.workedDays ?? employee.payslip?.workedDays ?? employee.payslips?.[0]?.workedDays;
+    const payslip = employee.payslip || employee.payslips?.[0] || {};
+    const workedDays = employee.workedDays ?? payslip.workedDays;
+    const workedHours = employee.workedHours ?? payslip.workedHours;
     const payroll =
-      calculatePayroll(employee, { workedDays });
+      calculatePayroll(employee, { workedDays, workedHours });
 
     const sbi =
       roundMoney(payroll.sbi);
@@ -79,7 +81,7 @@ export const calculateEtatCNSS = (employeesList) => {
       nCnss:
         employee.cnssNumber || "000000000",
 
-      jours: normalizeWorkedDays(workedDays),
+      jours: payroll.workedDays,
 
       sansLimitePlafonne: sbi,
 

@@ -72,10 +72,11 @@ function drawPayrollTable(doc, data, startY) {
         code, label, employer ? money(employer) : '', base || '', rate || '', gains ? money(gains) : '', deductions ? money(deductions) : '',
     ]);
     const workedDays = amount(data.workedDays);
+    const workedHours = amount(data.workedHours);
     const baseSalary = amount(data.rawBaseSalary ?? data.baseSalary);
     const seniority = amount(data.primeAnciennete);
 
-    push('010', 'SALAIRE EN NOMBRE DE JOURS TRAVAILLÉS', '', `${workedDays.toFixed(2)} J`, '', data.effectiveBaseSalary ?? data.baseSalary, 0);
+    push('010', 'TEMPS DE TRAVAIL', '', `${workedDays.toFixed(2)} J / ${workedHours.toFixed(2)} H`, '', data.effectiveBaseSalary ?? data.baseSalary, 0);
     if (seniority > 0) push('075', 'ANCIENNETÉ LÉGALE', '', money(baseSalary), percent(data.ancienneteRate), seniority, 0);
     push('019', 'SALAIRE BRUT IMPOSABLE', '', money(data.sbi), '', 0, 0);
     (data.variablePrimes || []).forEach(prime => push('', prime.label, '', '', '', prime.amount, 0));
@@ -114,17 +115,17 @@ function drawPayrollTable(doc, data, startY) {
 
 function drawCumulative(doc, data, startY) {
     doc.font('Helvetica-Bold').fontSize(8).fillColor(BLACK).text('Cumul / An:', LEFT, startY - 13);
-    const columns = [45, 85, 75, 75, 75, 75, 105];
-    row(doc, startY, 20, columns, ['JOURS', 'BRUT', 'CNSS', 'RETRAITE', 'IMPOS.', 'IR', 'RETENUES'], {
-        bold: [0, 1, 2, 3, 4, 5, 6], align: ['left', 'right', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 6, fill: NAVY, border: NAVY,
+    const columns = [40, 55, 65, 65, 65, 65, 80, 100];
+    row(doc, startY, 20, columns, ['JOURS', 'HEURES', 'BRUT', 'CNSS', 'RETRAITE', 'IMPOS.', 'IR', 'RETENUES'], {
+        bold: [0, 1, 2, 3, 4, 5, 6, 7], align: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 6, fill: NAVY, border: NAVY,
     });
     const cumulative = data.cumulative || {};
     row(doc, startY + 20, 20, columns, [
-        amount(cumulative.workedDays || data.workedDays).toFixed(2), money(cumulative.sbg || data.sbg),
+        amount(cumulative.workedDays || data.workedDays).toFixed(2), amount(cumulative.workedHours || data.workedHours).toFixed(2), money(cumulative.sbg || data.sbg),
         money(cumulative.cnss || data.cnss), money(cumulative.cimr || data.cimr),
         money(cumulative.sni || data.sni), money(cumulative.irNet || data.irNet),
         money(cumulative.deductions || amount(data.cnss) + amount(data.amo) + amount(data.cimr) + amount(data.irNet)),
-    ], { align: ['left', 'right', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 6, fill: '#ffffff', border: BORDER });
+    ], { align: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 6, fill: '#ffffff', border: BORDER });
     return startY + 40;
 }
 
@@ -159,12 +160,12 @@ export function generateBulletinPdf(data, outputStream, options = {}) {
     });
     doc.font('Helvetica').fontSize(7.5).text(`Adresse : ${data.employeeAddress || '—'}`, LEFT, 214);
 
-    const detailsColumns = [50, 50, 145, 28, 30, 30, 65, 70, 67];
-    row(doc, 229, 20, detailsColumns, ['Dte Nais.', 'Dte Emb.', 'Fonction', 'S.F', 'Enf', 'Dd.', 'CIN', 'Sal. Base', 'Jours'], {
-        bold: [0, 1, 2, 3, 4, 5, 6, 7, 8], align: ['center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center'], size: 6.8, top: 6, fill: '#eef5f7', border: BORDER,
+    const detailsColumns = [50, 50, 135, 28, 30, 30, 60, 65, 43, 44];
+    row(doc, 229, 20, detailsColumns, ['Dte Nais.', 'Dte Emb.', 'Fonction', 'S.F', 'Enf', 'Dd.', 'CIN', 'Sal. Base', 'Jours', 'Heures'], {
+        bold: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], align: ['center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center'], size: 6.8, top: 6, fill: '#eef5f7', border: BORDER,
     });
-    row(doc, 249, 22, detailsColumns, [data.birthDate || '—', data.hireDate || '—', data.employeeFonction || '—', data.sexe || '—', data.children ?? '—', data.dependents ?? '—', data.cin || '—', money(data.rawBaseSalary ?? data.baseSalary), amount(data.workedDays).toFixed(2)], {
-        align: ['center', 'center', 'center', 'center', 'center', 'center', 'center', 'right', 'right'], size: 6.8, top: 7, fill: '#ffffff', border: BORDER,
+    row(doc, 249, 22, detailsColumns, [data.birthDate || '—', data.hireDate || '—', data.employeeFonction || '—', data.sexe || '—', data.children ?? '—', data.dependents ?? '—', data.cin || '—', money(data.rawBaseSalary ?? data.baseSalary), amount(data.workedDays).toFixed(2), amount(data.workedHours).toFixed(2)], {
+        align: ['center', 'center', 'center', 'center', 'center', 'center', 'center', 'right', 'right', 'right'], size: 6.8, top: 7, fill: '#ffffff', border: BORDER,
     });
 
     const endTable = drawPayrollTable(doc, data, 282);

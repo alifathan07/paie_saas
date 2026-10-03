@@ -1,6 +1,8 @@
 import prisma from "../../db.ts";
 
 const DEFAULT_SMIG = 3422.72;
+const DEFAULT_STANDARD_DAYS = 26;
+const DEFAULT_STANDARD_HOURS = 191;
 
 function page(req, overrides = {}) {
     return {
@@ -98,6 +100,9 @@ function companyForm(company) {
         numeroAssurance: company?.numeroAssurance || "",
         ice: company?.ice || "",
         rc: company?.rc || "",
+        workingTimeMode: company?.workingTimeMode || "DAYS",
+        standardMonthlyDays: company?.standardMonthlyDays ? String(company.standardMonthlyDays) : String(DEFAULT_STANDARD_DAYS),
+        standardMonthlyHours: company?.standardMonthlyHours ? String(company.standardMonthlyHours) : String(DEFAULT_STANDARD_HOURS),
     };
 }
 
@@ -125,9 +130,17 @@ export async function updateSettings(req, res) {
         numeroAssurance: String(req.body.numeroAssurance || "").trim().slice(0, 191),
         ice: String(req.body.ice || "").trim().slice(0, 191),
         rc: String(req.body.rc || "").trim().slice(0, 191),
+        workingTimeMode: String(req.body.workingTimeMode || "DAYS").toUpperCase(),
+        standardMonthlyDays: String(req.body.standardMonthlyDays || "").trim(),
+        standardMonthlyHours: String(req.body.standardMonthlyHours || "").trim(),
     };
     const smig = Number(form.smig);
-    if (!form.name || !form.adresse || !form.ville || !form.ifNumber || !form.numeroAffiliationCnss || !Number.isFinite(smig) || smig <= 0) {
+    const standardMonthlyDays = Number(form.standardMonthlyDays);
+    const standardMonthlyHours = Number(form.standardMonthlyHours);
+    if (!form.name || !form.adresse || !form.ville || !form.ifNumber || !form.numeroAffiliationCnss || !Number.isFinite(smig) || smig <= 0
+        || !["DAYS", "HOURS"].includes(form.workingTimeMode)
+        || !Number.isFinite(standardMonthlyDays) || standardMonthlyDays <= 0 || standardMonthlyDays > 31
+        || !Number.isFinite(standardMonthlyHours) || standardMonthlyHours <= 0 || standardMonthlyHours > 744) {
         return res.status(400).render("parametrage/index", page(req, { title: "Paramétrage", currentPage: "parametrage", company: current, form, error: "Veuillez renseigner tous les champs obligatoires et un SMIG valide." }));
     }
 
@@ -144,6 +157,9 @@ export async function updateSettings(req, res) {
                 numeroAssurance: form.numeroAssurance || null,
                 ice: form.ice || null,
                 rc: form.rc || null,
+                workingTimeMode: form.workingTimeMode,
+                standardMonthlyDays,
+                standardMonthlyHours,
             },
         });
         return res.render("parametrage/index", page(req, { title: "Paramétrage", currentPage: "parametrage", company, form: companyForm(company), success: "Les informations de la société ont été enregistrées." }));

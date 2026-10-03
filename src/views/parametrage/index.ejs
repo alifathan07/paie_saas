@@ -18,6 +18,9 @@
             <label class="form-label">IF<input class="form-input" name="ifNumber" maxlength="191" required value="<%= form.ifNumber %>"></label>
             <label class="form-label">N° affiliation CNSS<input class="form-input" name="numeroAffiliationCnss" maxlength="191" required value="<%= form.numeroAffiliationCnss %>"></label>
             <label class="form-label">SMIG pour 26 jours<input class="form-input" type="number" name="smig" min="0.01" step="0.01" required value="<%= form.smig %>"></label>
+            <label class="form-label">Mode de temps de travail<select class="form-input" name="workingTimeMode" required><option value="DAYS" <%= form.workingTimeMode === 'DAYS' ? 'selected' : '' %>>Jours — saisir les jours</option><option value="HOURS" <%= form.workingTimeMode === 'HOURS' ? 'selected' : '' %>>Heures — saisir les heures</option></select></label>
+            <label class="form-label">Base mensuelle — jours<input class="form-input" type="number" name="standardMonthlyDays" min="0.01" max="31" step="0.01" required value="<%= form.standardMonthlyDays %>"></label>
+            <label class="form-label">Base mensuelle — heures<input class="form-input" type="number" name="standardMonthlyHours" min="0.01" max="744" step="0.01" required value="<%= form.standardMonthlyHours %>"></label>
             <label class="form-label">ICE <span>(optionnel)</span><input class="form-input" name="ice" maxlength="191" value="<%= form.ice %>"></label>
             <label class="form-label">RC <span>(optionnel)</span><input class="form-input" name="rc" maxlength="191" value="<%= form.rc %>"></label>
             <label class="form-label">N° assurance <span>(optionnel)</span><input class="form-input" name="numeroAssurance" maxlength="191" value="<%= form.numeroAssurance %>"></label>

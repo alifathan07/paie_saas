@@ -1,6 +1,67 @@
 import XLSX from "xlsx";
 import prisma from "../../db.ts";
 
+function responseHeader(response, name) {
+    return typeof response?.headers?.get === "function"
+        ? response.headers.get(name)
+        : null;
+}
+
+function safePreview(value, limit = 3000) {
+    return String(value ?? "").slice(0, limit);
+}
+
+/**
+ * Accept only JSON or one complete markdown JSON fence. Do not search for a
+ * JSON-looking substring: surrounding prose can hide a corrupted response.
+ */
+export function normalizeAIJsonContent(content) {
+    if (typeof content !== "string") return "";
+    const trimmed = content.trim();
+    const fenced = trimmed.match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
+    return (fenced ? fenced[1] : trimmed).trim();
+}
+
+function resolveAIProvider() {
+    if (String(process.env.DEEPSEEK_API_KEY || "").trim()) {
+        return {
+            provider: "deepseek",
+            apiKey: String(process.env.DEEPSEEK_API_KEY).trim(),
+            model: String(process.env.DEEPSEEK_MODEL || "deepseek-chat").trim(),
+            baseUrl: String(process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "")
+        };
+    }
+
+    const legacyModel = String(process.env.GROQ_MODEL || "").trim();
+    const legacyKey = String(process.env.GROQ_API_KEY || "").trim();
+
+    // Deliberate backward compatibility: this project historically stored the
+    // DeepSeek credential under GROQ_API_KEY and the DeepSeek model under
+    // GROQ_MODEL. Only a model explicitly named as DeepSeek activates this
+    // compatibility path; a normal Groq model still uses the Groq endpoint.
+    if (legacyKey && /^deepseek(?:-|$)/i.test(legacyModel)) {
+        return {
+            provider: "deepseek",
+            apiKey: legacyKey,
+            model: String(process.env.DEEPSEEK_MODEL || legacyModel || "deepseek-chat").trim(),
+            baseUrl: String(process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, ""),
+            keySource: "GROQ_API_KEY (legacy DeepSeek configuration)"
+        };
+    }
+
+    if (legacyKey) {
+        return {
+            provider: "groq",
+            apiKey: legacyKey,
+            model: legacyModel || "llama-3.1-8b-instant",
+            baseUrl: String(process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/$/, ""),
+            keySource: "GROQ_API_KEY"
+        };
+    }
+
+    return null;
+}
+
 export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
     const log = (level, event, details = {}) => console[level](`[employee-import] ${event}`, {
         timestamp: new Date().toISOString(),
@@ -57,37 +118,87 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         baseSalary: "number, required",
         cimrRate: "number between 0 and 1 or null"
     };
-    const apiKey = String(process.env.DEEPSEEK_API_KEY || process.env.GROQ_API_KEY || "").trim();
-    const model = String(process.env.DEEPSEEK_MODEL || process.env.GROQ_MODEL || "deepseek-chat").trim();
-    if (!apiKey) throw new Error("DEEPSEEK_NOT_CONFIGURED");
+    const ai = resolveAIProvider();
+    if (!ai) throw new Error("DEEPSEEK_NOT_CONFIGURED");
 
-    const baseUrl = String(process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
-    const endpoint = `${baseUrl}/chat/completions`;
-    log("info", "ai.request.started", { provider: "deepseek", endpoint, model, keySource: process.env.DEEPSEEK_API_KEY ? "DEEPSEEK_API_KEY" : "GROQ_API_KEY", rowCount: rows.length, columnCount: headers.length });
+    const endpoint = `${ai.baseUrl}/chat/completions`;
+    log("info", "ai.request.started", { provider: ai.provider, endpoint, model: ai.model, keySource: ai.keySource || (ai.provider === "deepseek" ? "DEEPSEEK_API_KEY" : "GROQ_API_KEY"), rowCount: rows.length, columnCount: headers.length });
     const response = await fetch(endpoint, {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${ai.apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-            model,
+            model: ai.model,
             temperature: 0,
             max_tokens: 12000,
             response_format: { type: "json_object" },
             messages: [
                 {
                     role: "system",
-                    content: `You normalize employee spreadsheet rows into JSON. Return JSON only in the exact shape {"employees":[...]}. Map any language, spelling, abbreviations, column order, and French date/number formats to the allowed fields. Never invent a value that is not present except defaults explicitly requested. Preserve CIN, matricule, bank numbers, and names as strings. Use null for missing optional fields. Required fields must be null when absent so the application can report them. If the spreadsheet does not contain a value for nbPersonacharge, return null; the application will calculate it as nbEnfantCharge + 1. Every output object must include sourceRow from the input. Allowed fields and formats: ${JSON.stringify(fields)}. Defaults: sexe=M, statut=TITULAIRE, natureEmploi=PERMANENT, situationFam=CELIBATAIRE, nbEnfantCharge=0, modePaiement=VIREMENT. For date-only values return YYYY-MM-DD. Convert decimal commas to numbers.`
+                    content: `You normalize employee spreadsheet rows into JSON. Respond with JSON only: no Markdown, no triple-backtick json fences, no explanations before or after the JSON. The exact root shape is {"employees":[...]}; do not return any other root shape. Map any language, spelling, abbreviations, column order, and French date/number formats to the allowed fields. Never invent a value that is not present except defaults explicitly requested. Preserve CIN, matricule, bank numbers, and names as strings. Use null for missing optional fields. Required fields must be null when absent so the application can report them. If the spreadsheet does not contain a value for nbPersonacharge, return null; the application will calculate it as nbEnfantCharge + 1. Every output object must include sourceRow from the input. Allowed fields and formats: ${JSON.stringify(fields)}. Defaults: sexe=M, statut=TITULAIRE, natureEmploi=PERMANENT, situationFam=CELIBATAIRE, nbEnfantCharge=0, modePaiement=VIREMENT. For date-only values return YYYY-MM-DD. Convert decimal commas to numbers.`
                 },
                 { role: "user", content: JSON.stringify({ sheet: sheetName, headers, rows }) }
             ]
         })
     });
-    log("info", "ai.response.received", { provider: "deepseek", status: response.status, ok: response.ok });
-    if (!response.ok) throw new Error(`DEEPSEEK_HTTP_${response.status}`);
-    const body = await response.json();
+    log("info", "ai.response.received", { provider: ai.provider, model: ai.model, status: response.status, ok: response.ok, contentType: responseHeader(response, "content-type") });
+    if (!response.ok) {
+        let providerErrorPreview = "";
+        try {
+            providerErrorPreview = safePreview(await response.text());
+        } catch {
+            providerErrorPreview = "<response body unavailable>";
+        }
+        log("error", "ai.response.http_error", {
+            provider: ai.provider,
+            model: ai.model,
+            status: response.status,
+            contentType: responseHeader(response, "content-type"),
+            contentLength: responseHeader(response, "content-length"),
+            preview: providerErrorPreview
+        });
+        throw new Error(`${ai.provider.toUpperCase()}_HTTP_${response.status}`);
+    }
+    let body;
+    try {
+        body = await response.json();
+    } catch (error) {
+        log("error", "ai.response.invalid_envelope", {
+            provider: ai.provider,
+            model: ai.model,
+            status: response.status,
+            contentType: responseHeader(response, "content-type"),
+            contentLength: responseHeader(response, "content-length"),
+            preview: safePreview(error?.message)
+        });
+        throw new Error("DEEPSEEK_EMPTY_RESPONSE");
+    }
     const content = body?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("DEEPSEEK_EMPTY_RESPONSE");
+    if (typeof content !== "string" || !content.trim()) {
+        log("error", "ai.response.empty_content", {
+            provider: ai.provider,
+            model: ai.model,
+            status: response.status,
+            contentType: responseHeader(response, "content-type"),
+            contentLength: responseHeader(response, "content-length"),
+            preview: safePreview(JSON.stringify(body))
+        });
+        throw new Error("DEEPSEEK_EMPTY_RESPONSE");
+    }
+    const normalizedContent = normalizeAIJsonContent(content);
     let parsed;
-    try { parsed = JSON.parse(content); } catch { throw new Error("DEEPSEEK_INVALID_JSON"); }
+    try {
+        parsed = JSON.parse(normalizedContent);
+    } catch (error) {
+        log("error", "ai.response.invalid_json", {
+            provider: ai.provider,
+            model: ai.model,
+            status: response.status,
+            contentType: responseHeader(response, "content-type"),
+            contentLength: responseHeader(response, "content-length") || content.length,
+            preview: safePreview(content)
+        });
+        throw new Error("DEEPSEEK_INVALID_JSON");
+    }
     if (!Array.isArray(parsed.employees) || parsed.employees.length !== rows.length) throw new Error("DEEPSEEK_ROW_COUNT_MISMATCH");
     log("info", "ai.mapping.completed", { mappedRowCount: parsed.employees.length });
 

@@ -34,11 +34,11 @@
         });
         const form = row.querySelector('.worked-days-form');
         if (!form) return;
-        const input = form.elements.workedDays;
+        const input = form.elements.workedDays || form.elements.workedHours;
         const message = form.querySelector('.worked-days-message');
         const sbi = row.querySelector('[data-payroll-sbi]');
         const net = row.querySelector('[data-payroll-net]');
-        let savedDays = input.value;
+        let savedWorkingTime = input.value;
         let savedAmounts = { sbi: sbi.textContent, net: net.textContent };
         let dirty = false;
         let sequence = 0;
@@ -74,7 +74,7 @@
                 sbi.textContent = money(result.payroll.sbi);
                 net.textContent = money(result.payroll.netAPayer);
                 if (save) {
-                    savedDays = input.value;
+                    savedWorkingTime = input.value;
                     savedAmounts = { sbi: sbi.textContent, net: net.textContent };
                     setDirty(false);
                 }
@@ -94,10 +94,10 @@
             clearTimeout(timer);
             ++sequence;
             pending?.abort();
-            setDirty(input.value !== savedDays);
+            setDirty(input.value !== savedWorkingTime);
             restoreAmounts();
             if (!input.checkValidity()) {
-                message.textContent = 'Saisissez un nombre entier de 0 à 26.';
+                message.textContent = 'Saisissez une valeur de temps de travail valide.';
             } else if (dirty) {
                 message.textContent = 'Modification non enregistrée…';
                 timer = setTimeout(() => calculate(), 300);

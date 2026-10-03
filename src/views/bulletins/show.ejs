@@ -667,6 +667,9 @@
 </style>
 <%
     const values = bulletin || previewResult || {};
+    const workingTimeMode = values.workingTimeMode || emp.company?.workingTimeMode || 'DAYS';
+    const standardMonthlyDays = Number(values.standardMonthlyDays || emp.company?.standardMonthlyDays || 26);
+    const standardMonthlyHours = Number(values.standardMonthlyHours || emp.company?.standardMonthlyHours || 191);
     const bulletinStatus = bulletin?.status || 'draft';
     const payrollBlocked = Boolean(!emp.actif || emp.blocageSaisiePaie);
     const locked = payrollBlocked || Boolean(bulletin && ['validated', 'closed'].includes(bulletinStatus));
@@ -814,9 +817,16 @@
             </thead>
             <tbody id="prime-lines">
                 <tr>
-                    <td class="description">Salaire de base</td>
-                    <td class="num">
-                        <input class="employee-edit live-input" name="workedDays" aria-label="Nombre de jours travaillés" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="26" step="1" required value="<%= values.workedDays ?? 26 %>" <%= locked ? 'disabled' : '' %>>
+                        <td class="description">Salaire de base<br><small><%= workingTimeMode === 'HOURS' ? 'Mode heures' : 'Mode jours' %></small></td>
+                        <td class="num">
+                        <% if (workingTimeMode === 'HOURS') { %>
+                            <input class="employee-edit live-input working-time-primary" name="workedHours" aria-label="Nombre d'heures travaillées" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyHours %>" step="0.01" required value="<%= values.workedHours ?? standardMonthlyHours %>" <%= locked ? 'disabled' : '' %>>
+                            <small class="working-time-unit">heures</small>
+                        <% } else { %>
+                            <input class="employee-edit live-input working-time-primary" name="workedDays" aria-label="Nombre de jours travaillés" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyDays %>" step="0.01" required value="<%= values.workedDays ?? standardMonthlyDays %>" <%= locked ? 'disabled' : '' %>>
+                            <small class="working-time-unit">jours</small>
+                        <% } %>
+                        <div class="working-time-derived"><%= workingTimeMode === 'HOURS' ? 'Jours travaillés' : 'Heures travaillées' %> : <strong data-result="<%= workingTimeMode === 'HOURS' ? 'workedDays' : 'workedHours' %>"><%= Number(workingTimeMode === 'HOURS' ? (values.workedDays ?? standardMonthlyDays) : (values.workedHours ?? standardMonthlyHours)).toFixed(2) %></strong> <%= workingTimeMode === 'HOURS' ? 'j' : 'h' %></div>
                     </td>
                     <td class="num">—</td>
                     <td class="num">
@@ -982,6 +992,10 @@
                 <div class="annual-cumulative-item">
                     <span>Jours travaillés</span>
                     <strong data-result="annualWorkedDays"><%= Number(annual.workedDays || 0).toLocaleString('fr-MA') %></strong>
+                </div>
+                <div class="annual-cumulative-item">
+                    <span>Heures travaillées</span>
+                    <strong data-result="annualWorkedHours"><%= Number(annual.workedHours || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></strong>
                 </div>
                 <div class="annual-cumulative-item">
                     <span>Salaire brut imposable (SBI)</span>

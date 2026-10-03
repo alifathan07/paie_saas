@@ -25,6 +25,9 @@ model Company {
   numeroAffiliationCnss String?
   smig      Decimal? @db.Decimal(12, 2)
   numeroAssurance String?
+  workingTimeMode WorkingTimeMode @default(DAYS)
+  standardMonthlyDays Decimal @default(26) @db.Decimal(8, 2)
+  standardMonthlyHours Decimal @default(191) @db.Decimal(8, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -61,6 +64,11 @@ enum ReportStatus {
   IN_PROGRESS
   SOLVED
   CLOSED
+}
+
+enum WorkingTimeMode {
+  DAYS
+  HOURS
 }
 
 model Report {
@@ -239,7 +247,11 @@ model Payslip {
   employeeId    Int
   month         Int // 1 - 12 (Count)
   year          Int // e.g. 2026 (Count)
-  workedDays    Int       @default(26) // Count
+  workedDays    Decimal   @default(26) @db.Decimal(8, 2) // Historical day-equivalent
+  workedHours   Decimal?  @db.Decimal(8, 2)
+  workingTimeMode WorkingTimeMode?
+  standardMonthlyDays Decimal? @db.Decimal(8, 2)
+  standardMonthlyHours Decimal? @db.Decimal(8, 2)
   status        String    @default("DRAFT") // DRAFT, GENERATED, VALIDATED, CLOSED, ERROR
   validatedAt   DateTime?
   validatedById Int?

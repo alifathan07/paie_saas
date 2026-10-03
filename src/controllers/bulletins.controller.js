@@ -10,6 +10,7 @@
 import { prisma } from "../lib/db.js";
 import { resolveCompanyId } from "../lib/company.js";
 import { calculatePayroll, normalizeWorkedDays, PAYROLL_WORKED_DAYS } from "../payroll-engine/PayrollEngine.js";
+import { calculateWorkedHoursFromDays, DEFAULT_STANDARD_MONTHLY_HOURS, DEFAULT_STANDARD_MONTHLY_DAYS, normalizeWorkingTime } from "../payroll-engine/utils/workingTime.js";
 import { calculateCumulativeIR } from "../payroll-engine/calculators/cumulativeIr.calculator.js";
 import { generateBulletinPdf } from "../pdf/bulletinPdf.js";
 
@@ -55,7 +56,7 @@ function currentMonth() { return new Date().getMonth() + 1; }
 async function getActiveEmployee(req, employeeId, include = {}) {
     const companyId = resolveCompanyId(req);
     if (!companyId) return null;
-    return prisma.employee.findFirst({ where: { id: Number(employeeId), companyId }, include });
+    return prisma.employee.findFirst({ where: { id: Number(employeeId), companyId }, include: { company: true, ...include } });
 }
 
 async function getPayrollRates() {
@@ -84,7 +85,7 @@ export async function getAnnualPayrollCumulative(employeeId, year, currentMonth,
                 ...(hasSelectedMonth ? [{ month: selectedMonth }] : []),
             ],
         },
-        select: { id: true, month: true, workedDays: true, sni: true, irNet: true, cnss: true, sbi: true, amo : true },
+        select: { id: true, month: true, workedDays: true, workedHours: true, workingTimeMode: true, standardMonthlyDays: true, standardMonthlyHours: true, sni: true, irNet: true, cnss: true, sbi: true, amo : true },
         orderBy: { month: "asc" },
     });
 
@@ -97,12 +98,17 @@ export async function getAnnualPayrollCumulative(employeeId, year, currentMonth,
 
     return rows.reduce((totals, payslip) => ({
         workedDays: totals.workedDays + Number(payslip.workedDays || 0),
+        workedHours: totals.workedHours + Number(payslip.workedHours ?? calculateWorkedHoursFromDays(
+            Number(payslip.workedDays || 0),
+            Number(payslip.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS),
+            Number(payslip.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS),
+        )),
         sni: Number((totals.sni + Number(payslip.sni || 0)).toFixed(2)),
         irNet: Number((totals.irNet + Number(payslip.irNet || 0)).toFixed(2)),
         cnss: Number((totals.cnss + Number(payslip.cnss || 0)).toFixed(2)),
         sbi: Number((totals.sbi + Number(payslip.sbi || 0)).toFixed(2)),
         amo: Number((totals.amo + Number(payslip.amo || 0)).toFixed(2)),
-    }), { workedDays: 0, sni: 0, irNet: 0, cnss: 0, sbi: 0, amo: 0 });
+    }), { workedDays: 0, workedHours: 0, sni: 0, irNet: 0, cnss: 0, sbi: 0, amo: 0 });
 }
 
 // PDF-only cumulative view: keeps the existing annual cumulative API stable
@@ -110,6 +116,7 @@ export async function getAnnualPayrollCumulative(employeeId, year, currentMonth,
 export async function getBulletinPdfCumulative(employeeId, year, month, currentPayslip) {
     const annual = await getAnnualPayrollCumulative(employeeId, year, month, {
         workedDays: currentPayslip.workedDays,
+        workedHours: currentPayslip.workedHours,
         sni: currentPayslip.sni,
         irNet: currentPayslip.irNet,
         cnss: currentPayslip.cnss,
@@ -247,7 +254,11 @@ async function buildPayslipData(emp, calc, month, year, rates, status = BULLETIN
         employeeId: emp.id,
         month,
         year,
-        workedDays: normalizeWorkedDays(calc.workedDays),
+        workedDays: calc.workedDays,
+        workedHours: calc.workedHours,
+        workingTimeMode: calc.workingTimeMode,
+        standardMonthlyDays: calc.standardMonthlyDays,
+        standardMonthlyHours: calc.standardMonthlyHours,
         status,
         // Store the contractual base so later payslip edits do not prorate an already prorated amount.
         baseSalary: calc.rawBaseSalary,
@@ -290,6 +301,19 @@ function runEmployeeCalculation(emp, overrides = {}) {
     return calculatePayroll(emp, overrides);
 }
 
+function resolveWorkingTimeForPayslip(emp, payslip = null, input = {}) {
+    const mode = payslip?.workingTimeMode || emp.company?.workingTimeMode || "DAYS";
+    const standardMonthlyDays = Number(payslip?.standardMonthlyDays || emp.company?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS);
+    const standardMonthlyHours = Number(payslip?.standardMonthlyHours || emp.company?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS);
+    return normalizeWorkingTime({
+        workingTimeMode: mode,
+        standardMonthlyDays,
+        standardMonthlyHours,
+        workedDays: mode === "DAYS" ? (input.workedDays ?? payslip?.workedDays) : undefined,
+        workedHours: mode === "HOURS" ? (input.workedHours ?? payslip?.workedHours) : undefined,
+    });
+}
+
 
 /**
  * Maps a Prisma Payslip DB record to the view model format expected by EJS views.
@@ -321,8 +345,14 @@ export function mapPayslipToViewModel(p) {
     const workedDays = p.workedDays === null || p.workedDays === undefined
         ? PAYROLL_WORKED_DAYS
         : Number(p.workedDays);
-    const effectiveBase = Number((storedBaseSalary / PAYROLL_WORKED_DAYS * workedDays).toFixed(2));
-    const hourlyRate = effectiveBase / (26 * 8);
+    const standardMonthlyDays = Number(p.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS);
+    const standardMonthlyHours = Number(p.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS);
+    const workingTimeMode = p.workingTimeMode || "DAYS";
+    const workedHours = p.workedHours === null || p.workedHours === undefined
+        ? calculateWorkedHoursFromDays(workedDays, standardMonthlyDays, standardMonthlyHours)
+        : Number(p.workedHours);
+    const effectiveBase = Number((storedBaseSalary * (workedDays / standardMonthlyDays)).toFixed(2));
+    const hourlyRate = effectiveBase / standardMonthlyHours;
     const hs25Amount = hs25 * hourlyRate * 1.25;
     const hs50Amount = hs50 * hourlyRate * 1.50;
     const hs100Amount = hs100 * hourlyRate * 2.00;
@@ -347,6 +377,10 @@ export function mapPayslipToViewModel(p) {
         year: p.year,
         periode: p.moisEcoules,
         workedDays,
+        workedHours,
+        workingTimeMode,
+        standardMonthlyDays,
+        standardMonthlyHours,
         status: (p.status || 'DRAFT').toLowerCase(),
         rawStatus: p.status,
         baseSalary: effectiveBase,
@@ -416,6 +450,7 @@ export const listBulletins = async (req, res) => {
             where: { companyId, bulletinMasque: false },
             orderBy: [{ nomComplet: 'asc' }, { id: 'asc' }],
             include: {
+                company: true,
                 payslips: {
                     where: { month, year },
                     include: { bonuses: true },
@@ -436,7 +471,7 @@ export const listBulletins = async (req, res) => {
             }
 
             const variablesEntered = payslip ? (
-                Number(payslip.workedDays) < PAYROLL_WORKED_DAYS ||
+                Number(payslip.workedDays) < Number(emp.company?.standardMonthlyDays || PAYROLL_WORKED_DAYS) ||
                 Number(payslip.heuresSup25 || 0) > 0 ||
                 Number(payslip.heuresSup50 || 0) > 0 ||
                 Number(payslip.heuresSup100 || 0) > 0 ||
@@ -452,6 +487,9 @@ export const listBulletins = async (req, res) => {
                 dateEmbauche: emp.dateEmbauche,
                 blocageSaisiePaie: emp.blocageSaisiePaie,
                 actif: emp.actif,
+                workingTimeMode: emp.company?.workingTimeMode || "DAYS",
+                standardMonthlyDays: Number(emp.company?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS),
+                standardMonthlyHours: Number(emp.company?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS),
                 maskedForPeriod: emp.bulletinMasks.length > 0,
                 bulletin: payslip ? mapPayslipToViewModel(payslip) : null,
                 bulletinStatus: status,
@@ -641,6 +679,7 @@ export const generateBulkBulletins = async (req, res) => {
         const eligibleEmployees = await prisma.employee.findMany({
             where: { companyId, actif: true },
             include: {
+                company: true,
                 bonuses: {
                     include: { bonus: true }
                 },
@@ -748,7 +787,10 @@ export const generateBulletin = async (req, res) => {
             year,
             baseSalary: req.body.baseSalary || req.query.baseSalary,
             dependents: req.body.dependents || req.query.dependents,
-            workedDays: emp.blocageSaisiePaie || !emp.actif ? 0 : normalizeWorkedDays(req.body.workedDays ?? req.query.workedDays),
+            ...resolveWorkingTimeForPayslip(emp, existing, {
+                workedDays: emp.blocageSaisiePaie || !emp.actif ? 0 : (req.body.workedDays ?? req.query.workedDays),
+                workedHours: emp.blocageSaisiePaie || !emp.actif ? 0 : (req.body.workedHours ?? req.query.workedHours),
+            }),
             heuresSup25: req.body.heuresSup25 || req.query.heuresSup25 || 0,
             heuresSup50: req.body.heuresSup50 || req.query.heuresSup50 || 0,
             heuresSup100: req.body.heuresSup100 || req.query.heuresSup100 || 0,
@@ -849,7 +891,7 @@ export const addMonthlyPrime = async (req, res) => {
             month,
             year,
             baseSalary: existing ? Number(existing.baseSalary) : undefined,
-            workedDays: existing ? normalizeWorkedDays(existing.workedDays) : PAYROLL_WORKED_DAYS,
+            ...resolveWorkingTimeForPayslip(emp, existing),
             heuresSup25: existing?.heuresSup25 || 0,
             heuresSup50: existing?.heuresSup50 || 0,
             heuresSup100: existing?.heuresSup100 || 0,
@@ -921,7 +963,7 @@ export const deleteMonthlyPrime = async (req, res) => {
             month,
             year,
             baseSalary: Number(existing.baseSalary),
-            workedDays: normalizeWorkedDays(existing.workedDays),
+            ...resolveWorkingTimeForPayslip(emp, existing),
             heuresSup25: existing.heuresSup25 || 0,
             heuresSup50: existing.heuresSup50 || 0,
             heuresSup100: existing.heuresSup100 || 0,
@@ -977,7 +1019,7 @@ export const addMonthlyIndemnity = async (req, res) => {
         const monthlyCalc = runEmployeeCalculation(emp, {
             month, year,
             baseSalary: existing ? Number(existing.baseSalary) : undefined,
-            workedDays: existing ? normalizeWorkedDays(existing.workedDays) : PAYROLL_WORKED_DAYS,
+            ...resolveWorkingTimeForPayslip(emp, existing),
             heuresSup25: existing?.heuresSup25 || 0,
             heuresSup50: existing?.heuresSup50 || 0,
             heuresSup100: existing?.heuresSup100 || 0,
@@ -1056,7 +1098,7 @@ export const updateMonthlyIndemnity = async (req, res) => {
             month,
             year,
             baseSalary: Number(existing.baseSalary),
-            workedDays: normalizeWorkedDays(existing.workedDays),
+            ...resolveWorkingTimeForPayslip(emp, existing),
             heuresSup25: existing.heuresSup25 || 0,
             heuresSup50: existing.heuresSup50 || 0,
             heuresSup100: existing.heuresSup100 || 0,
@@ -1133,7 +1175,7 @@ export const deleteMonthlyIndemnity = async (req, res) => {
             month,
             year,
             baseSalary: Number(existing.baseSalary),
-            workedDays: normalizeWorkedDays(existing.workedDays),
+            ...resolveWorkingTimeForPayslip(emp, existing),
             heuresSup25: existing.heuresSup25 || 0,
             heuresSup50: existing.heuresSup50 || 0,
             heuresSup100: existing.heuresSup100 || 0,
@@ -1263,29 +1305,37 @@ export const updateBulletinWorkedDays = async (req, res) => {
     const employeeId = Number(req.params.id);
     const month = Number(input.month);
     const year = Number(input.year);
-    const workedDays = Number(input.workedDays);
+    const requestedDays = input.workedDays;
+    const requestedHours = input.workedHours;
     if (!Number.isInteger(employeeId) || employeeId <= 0
         || !Number.isInteger(month) || month < 1 || month > 12
         || !Number.isInteger(year) || year < 2020 || year > 2040
-        || input.workedDays === undefined || String(input.workedDays).trim() === ''
-        || !Number.isInteger(workedDays) || workedDays < 0 || workedDays > PAYROLL_WORKED_DAYS) {
-        return res.status(400).json({ ok: false, error: 'Saisissez une période valide et un nombre entier de jours entre 0 et 26.' });
+        || (requestedDays === undefined && requestedHours === undefined)) {
+        return res.status(400).json({ ok: false, error: 'Saisissez une période valide et une valeur de temps de travail valide.' });
     }
     try {
         const companyId = await resolveCompanyId(req);
         if (!companyId) return res.status(400).json({ ok: false, error: 'Aucune entreprise associée à cette session.' });
         const existing = await prisma.payslip.findFirst({
             where: { employeeId, month, year, employee: { companyId } },
-            include: { employee: true, bonuses: true },
+            include: { employee: { include: { company: true } }, bonuses: true },
         });
         if (!existing) return res.status(404).json({ ok: false, error: 'Générez le bulletin avant de modifier les jours.' });
         if (existing.employee.blocageSaisiePaie || ![BULLETIN_STATUS.DRAFT, BULLETIN_STATUS.GENERATED].includes(existing.status)) {
             return res.status(403).json({ ok: false, error: 'Ce bulletin est verrouillé ou la saisie de paie est bloquée.' });
         }
+        const company = existing.employee.company;
+        const workingTime = normalizeWorkingTime({
+            workingTimeMode: company?.workingTimeMode || existing.workingTimeMode || "DAYS",
+            standardMonthlyDays: company?.standardMonthlyDays || existing.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS,
+            standardMonthlyHours: company?.standardMonthlyHours || existing.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS,
+            workedDays: company?.workingTimeMode === "HOURS" ? undefined : requestedDays,
+            workedHours: company?.workingTimeMode === "HOURS" ? requestedHours : undefined,
+        });
         // Use the saved bonus lines, without adding today's recurring bonuses again.
         const employee = { ...existing.employee, bonuses: [], cimrRate: existing.cimrRate };
         const monthlyCalc = runEmployeeCalculation(employee, {
-            month, year, workedDays,
+            month, year, ...workingTime,
             baseSalary: Number(existing.baseSalary),
             dependents: Number(existing.chargesDeFamille || 0) / 50,
             heuresSup25: Number(existing.heuresSup25 || 0),
@@ -1371,7 +1421,13 @@ export const calculateLive = async (req, res) => {
             year,
             baseSalary: req.query.baseSalary !== undefined && req.query.baseSalary !== '' ? Math.max(0, Number(req.query.baseSalary) || 0) : undefined,
             dependents: req.query.dependents !== undefined && req.query.dependents !== '' ? Math.max(0, Number(req.query.dependents) || 0) : undefined,
-            workedDays: emp.blocageSaisiePaie || !emp.actif ? 0 : normalizeWorkedDays(req.query.workedDays),
+            ...normalizeWorkingTime({
+                workingTimeMode: emp.company?.workingTimeMode || "DAYS",
+                standardMonthlyDays: emp.company?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS,
+                standardMonthlyHours: emp.company?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS,
+                workedDays: emp.blocageSaisiePaie || !emp.actif ? 0 : (emp.company?.workingTimeMode === "HOURS" ? undefined : req.query.workedDays),
+                workedHours: emp.blocageSaisiePaie || !emp.actif ? 0 : (emp.company?.workingTimeMode === "HOURS" ? req.query.workedHours : undefined),
+            }),
             heuresSup25: Math.max(0, Number(req.query.heuresSup25) || 0),
             heuresSup50: Math.max(0, Number(req.query.heuresSup50) || 0),
             heuresSup100: Math.max(0, Number(req.query.heuresSup100) || 0),
@@ -1396,6 +1452,8 @@ export const calculateLive = async (req, res) => {
             heuresSupAmount: result.heuresSupAmount,
             sbg: result.sbg,
             workedDays: result.workedDays,
+            workedHours: result.workedHours,
+            workingTimeMode: result.workingTimeMode,
             bonusesNIMP: result.bonusesNIMP,
             nimpLines: result.nimpLines || [],
             sbi: result.sbi,
@@ -1656,7 +1714,7 @@ export const downloadPdfBulletin = async (req, res) => {
             seniorityYears,
             companyName: comp.name || 'CONFONDA',
             companyAddress: comp.adresse || 'hay sikaktyne',
-            companyCNSS: comp.numeroCNSS || '5646554654',
+            companyCNSS: comp.numeroAffiliationCnss || '—',
             companyIF: comp.ifNumber || '565653486',
             companyICE: comp.ice || '120521852812821',
             month,

@@ -111,7 +111,7 @@
                 <th>Salarié</th>
                 <th>Salaire de base</th>
                 <th>Brut imposable</th>
-                <th>Jours travaillés</th>
+                <th>Temps travaillé</th>
                 <th>Statut bulletin</th>
                 <th>Net à payer</th>
                 <th>Actions</th>
@@ -143,12 +143,18 @@
                                 <input type="hidden" name="month" value="<%= month %>">
                                 <input type="hidden" name="year" value="<%= year %>">
                                 <div class="worked-days-controls">
-                                    <input class="form-input" type="number" name="workedDays" min="0" max="26" step="1" required value="<%= emp.bulletin.workedDays %>" aria-label="Jours travaillés de <%= emp.nomComplet %>">
+                                    <% if (emp.workingTimeMode === 'HOURS') { %>
+                                        <input class="form-input" type="number" name="workedHours" min="0" max="<%= emp.standardMonthlyHours %>" step="0.01" required value="<%= emp.bulletin.workedHours %>" aria-label="Heures travaillées de <%= emp.nomComplet %>">
+                                        <small>h · <%= Number(emp.bulletin.workedDays).toFixed(2) %> j</small>
+                                    <% } else { %>
+                                        <input class="form-input" type="number" name="workedDays" min="0" max="<%= emp.standardMonthlyDays %>" step="0.01" required value="<%= emp.bulletin.workedDays %>" aria-label="Jours travaillés de <%= emp.nomComplet %>">
+                                        <small>j · <%= Number(emp.bulletin.workedHours).toFixed(2) %> h</small>
+                                    <% } %>
                                 </div>
                                 <span class="worked-days-message" role="status" aria-live="polite"></span>
                             </form>
                         <% } else { %>
-                            <%= emp.bulletin ? emp.bulletin.workedDays : '—' %>
+                            <%= emp.bulletin ? `${Number(emp.bulletin.workedDays).toFixed(2)} j · ${Number(emp.bulletin.workedHours).toFixed(2)} h` : '—' %>
                         <% } %>
                     </td>
 
