@@ -74,6 +74,12 @@ body.admin-dashboard-shell .sidebar-logout {
   box-shadow: none;
 }
 
+body.admin-dashboard-shell .sidebar-logout:hover {
+  color: #fff;
+  background: rgba(153, 27, 27, 0.34);
+  border-color: rgba(248, 113, 113, 0.48);
+}
+
 body.admin-dashboard-shell .app-header {
   background: rgb(255 255 255 / 0.92);
   border-bottom: 1px solid var(--admin-border);

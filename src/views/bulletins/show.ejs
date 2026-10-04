@@ -927,15 +927,13 @@
                 </tr>
 
                 <% nimpLines.forEach(line => { %>
-                    <tr class="disabled-row">
+                    <tr class="disabled-row fixed-indemnity-line monthly-indemnity-line" data-sticky="true">
                         <td class="description">
-                            <%= line.label %> 
-                            <input type="hidden" name="nimpLabels" value="<%= line.label %>">
-                            <input type="hidden" name="nimpAmounts" value="<%= line.amount %>">
+                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" <%= canEditIndemnityFields ? '' : 'disabled' %>>
                         </td>
                         <td class="num">—</td>
                         <td class="num">—</td>
-                        <td class="num"><%= fmt(line.amount) %></td>
+                        <td class="num"><input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" type="number" min="0" step="0.01" value="<%= line.amount %>" placeholder="Montant DH" <%= canEditIndemnityFields ? '' : 'disabled' %>></td>
                         <td class="num">—</td>
                         <td class="num">—</td>
                     </tr>

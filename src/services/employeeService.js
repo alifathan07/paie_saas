@@ -109,7 +109,7 @@ export const createEmployee = async (data) => {
         statut, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
-        cimrRate, cimrReduitBaseImposable, blocageSaisiePaie
+        cimrRate, cimrReduitBaseImposable, indemniteNonImposable, blocageSaisiePaie
     } = data;
 
     const targetCompanyId = Number(companyId);
@@ -152,6 +152,7 @@ export const createEmployee = async (data) => {
                 ? Number(cimrRate)
                 : null,
             cimrReduitBaseImposable: Boolean(cimrReduitBaseImposable),
+            indemniteNonImposable: Boolean(indemniteNonImposable),
             blocageSaisiePaie: Boolean(blocageSaisiePaie),
             companyId: targetCompanyId,
             bonuses: employeeBonusData.length > 0 ? { create: employeeBonusData } : undefined
@@ -171,7 +172,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         statut, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
-        cimrRate, cimrReduitBaseImposable, blocageSaisiePaie
+        cimrRate, cimrReduitBaseImposable, indemniteNonImposable, blocageSaisiePaie
     } = data;
 
     const empId = Number(id);
@@ -227,6 +228,9 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
                 : undefined,
             cimrReduitBaseImposable: cimrReduitBaseImposable !== undefined
                 ? Boolean(cimrReduitBaseImposable)
+                : undefined,
+            indemniteNonImposable: indemniteNonImposable !== undefined
+                ? Boolean(indemniteNonImposable)
                 : undefined,
             blocageSaisiePaie: blocageSaisiePaie !== undefined
                 ? Boolean(blocageSaisiePaie)

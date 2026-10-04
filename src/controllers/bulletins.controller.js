@@ -1047,6 +1047,40 @@ export const addMonthlyIndemnity = async (req, res) => {
     }
 };
 
+// POST /bulletins/:id/indemnities/stick — Make a monthly indemnity recurring for the employee
+export const stickMonthlyIndemnity = async (req, res) => {
+    try {
+        const empId = parseInt(req.params.id);
+        const label = String(req.body.label || '').trim();
+        const amount = Number(req.body.amount);
+        if (!label || label.length > 191 || !Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ ok: false, error: "L'indemnité à conserver est invalide." });
+        }
+
+        const emp = await getActiveEmployee(req, empId);
+        if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
+
+        const bonus = await prisma.bonus.upsert({
+            where: { companyId_name: { companyId: emp.companyId, name: label } },
+            create: { companyId: emp.companyId, name: label, taxable: false },
+            update: {},
+        });
+        if (bonus.taxable) {
+            return res.status(400).json({ ok: false, error: "Cette indemnité existe déjà comme prime imposable." });
+        }
+
+        await prisma.employeeBonus.upsert({
+            where: { employeeId_bonusId: { employeeId: emp.id, bonusId: bonus.id } },
+            create: { employeeId: emp.id, bonusId: bonus.id, amount: Number(amount.toFixed(2)) },
+            update: { amount: Number(amount.toFixed(2)) },
+        });
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error("Stick monthly indemnity error:", err);
+        return res.status(500).json({ ok: false, error: "Impossible de conserver l'indemnité pour les prochains bulletins." });
+    }
+};
+
 // ---------------------------------------------------------------------------
 // POST /bulletins/:id/indemnities/update — Edit a monthly non-taxable indemnity
 // ---------------------------------------------------------------------------
@@ -1059,6 +1093,7 @@ export const updateMonthlyIndemnity = async (req, res) => {
         const oldAmount = Number(req.body.oldAmount);
         const label = String(req.body.label || '').trim();
         const amount = Number(req.body.amount);
+        const saveEmployee = req.body.saveEmployee === true || req.body.saveEmployee === 'true';
 
         if (!oldLabel || !Number.isFinite(oldAmount) || oldAmount <= 0 || !label || !Number.isFinite(amount) || amount <= 0) {
             return res.status(400).json({ ok: false, error: "L'indemnité à modifier est invalide." });
@@ -1079,22 +1114,67 @@ export const updateMonthlyIndemnity = async (req, res) => {
             return res.status(403).json({ ok: false, error: "Ce bulletin ne peut pas être modifié." });
         }
 
-        const fixedNimpLabels = new Set((emp.bonuses || [])
+        const fixedNimpBonuses = (emp.bonuses || []).filter(b => !(b.bonus ? b.bonus.taxable : b.taxable));
+        const storedBonus = fixedNimpBonuses.find(b =>
+            String(b.bonus ? b.bonus.name : b.name || '').toLowerCase() === oldLabel.toLowerCase()
+            && Number(b.amount) === oldAmount
+        );
+
+        // When requested, update the recurring employee indemnity first. The
+        // current bulletin is recalculated below from the updated employee.
+        if (saveEmployee && storedBonus) {
+            const storedBonusDefinition = await prisma.bonus.upsert({
+                where: { companyId_name: { companyId: emp.companyId, name: label } },
+                create: { companyId: emp.companyId, name: label, taxable: false },
+                update: {},
+            });
+            if (storedBonusDefinition.taxable) {
+                return res.status(400).json({ ok: false, error: "Cette indemnité existe déjà comme prime imposable." });
+            }
+            if (storedBonusDefinition.id !== storedBonus.bonusId) {
+                await prisma.employeeBonus.delete({
+                    where: { employeeId_bonusId: { employeeId: emp.id, bonusId: storedBonus.bonusId } },
+                });
+                await prisma.employeeBonus.upsert({
+                    where: { employeeId_bonusId: { employeeId: emp.id, bonusId: storedBonusDefinition.id } },
+                    create: { employeeId: emp.id, bonusId: storedBonusDefinition.id, amount: Number(amount.toFixed(2)) },
+                    update: { amount: Number(amount.toFixed(2)) },
+                });
+            } else {
+                await prisma.employeeBonus.update({
+                    where: { employeeId_bonusId: { employeeId: emp.id, bonusId: storedBonus.bonusId } },
+                    data: { amount: Number(amount.toFixed(2)) },
+                });
+            }
+        }
+
+        const calculationEmployee = saveEmployee && storedBonus
+            ? await getActiveEmployee(req, empId, { bonuses: { include: { bonus: true } } })
+            : storedBonus
+                ? { ...emp, bonuses: (emp.bonuses || []).filter(b => b !== storedBonus) }
+                : emp;
+        const fixedNimpLabels = new Set((calculationEmployee.bonuses || [])
             .filter(b => !(b.bonus ? b.bonus.taxable : b.taxable))
             .map(b => String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()));
         const monthlyNimpLines = existing.bonuses
-            .filter(b => !b.taxable && !fixedNimpLabels.has(String(b.name).toLowerCase()))
+            .filter(b => !b.taxable
+                && !fixedNimpLabels.has(String(b.name).toLowerCase())
+                && !(saveEmployee && storedBonus
+                    && String(b.name).toLowerCase() === oldLabel.toLowerCase()
+                    && Number(b.amount) === oldAmount))
             .map(b => ({ label: b.name, amount: Number(b.amount) }));
-        const updateIndex = monthlyNimpLines.findIndex(line =>
-            line.label.toLowerCase() === oldLabel.toLowerCase() && line.amount === oldAmount
-        );
-        if (updateIndex === -1) return res.status(404).json({ ok: false, error: "Cette indemnité n'existe pas sur ce bulletin." });
-        monthlyNimpLines[updateIndex] = { label, amount };
+        if (!saveEmployee || !storedBonus) {
+            const updateIndex = monthlyNimpLines.findIndex(line =>
+                line.label.toLowerCase() === oldLabel.toLowerCase() && line.amount === oldAmount
+            );
+            if (updateIndex === -1) return res.status(404).json({ ok: false, error: "Cette indemnité n'existe pas sur ce bulletin." });
+            monthlyNimpLines[updateIndex] = { label, amount };
+        }
 
         const variablePrimes = existing.bonuses
             .filter(b => b.taxable)
             .map(b => ({ label: b.name, amount: Number(b.amount) }));
-        const monthlyCalc = runEmployeeCalculation(emp, {
+        const monthlyCalc = runEmployeeCalculation(calculationEmployee, {
             month,
             year,
             baseSalary: Number(existing.baseSalary),
@@ -1106,10 +1186,10 @@ export const updateMonthlyIndemnity = async (req, res) => {
             variablePrimes,
             monthlyNimpLines,
         });
-        const calc = await applyCumulativeIR(emp.id, month, year, monthlyCalc, emp.nbPersonacharge);
+        const calc = await applyCumulativeIR(calculationEmployee.id, month, year, monthlyCalc, calculationEmployee.nbPersonacharge);
         const rates = await getPayrollRates();
         const payslipData = await buildPayslipData(
-            emp,
+            calculationEmployee,
             calc,
             month,
             year,

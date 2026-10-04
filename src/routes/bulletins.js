@@ -17,6 +17,7 @@ import {
     addMonthlyPrime,
     deleteMonthlyPrime,
     addMonthlyIndemnity,
+    stickMonthlyIndemnity,
     deleteMonthlyIndemnity,
     updateMonthlyIndemnity,
     downloadPdfBulletin,
@@ -45,6 +46,7 @@ bulletins.post("/:id/worked-days", updateBulletinWorkedDays);
 bulletins.post("/:id/primes", addMonthlyPrime);
 bulletins.post("/:id/primes/delete", deleteMonthlyPrime);
 bulletins.post("/:id/indemnities", addMonthlyIndemnity);
+bulletins.post("/:id/indemnities/stick", stickMonthlyIndemnity);
 bulletins.post("/:id/indemnities/delete", deleteMonthlyIndemnity);
 bulletins.post("/:id/indemnities/update", updateMonthlyIndemnity);
 

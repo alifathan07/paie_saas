@@ -12,6 +12,7 @@ import { admin } from './src/routes/admin.js';
 import { companies } from './src/routes/companies.js';
 import { parametrage } from './src/routes/parametrage.js';
 import { reports } from './src/routes/reports.js';
+import { profile } from './src/routes/profile.js';
 import { isAuth, requireActiveCompany } from './middlewares/auth.js';
 import { isAdminUser } from './middlewares/admin.js';
 import { securityHeaders, sameOriginProtection } from './middlewares/security.js';
@@ -66,6 +67,7 @@ app.use('/auth', auth);
 
 // Protected routes (require login)
 app.use(isAuth);
+app.use('/profile', profile);
 app.use('/admin', admin);
 app.use('/companies', companies);
 app.use(requireActiveCompany);

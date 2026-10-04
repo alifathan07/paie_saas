@@ -109,6 +109,29 @@
             if (!response.ok || !result.ok) throw new Error(result.error || "Impossible d'enregistrer l'indemnité.");
             indemnityDialogForm.reset();
             indemnityDialog?.close();
+            const keepForEmployee = await window.AppDialog.confirm(
+                "L’ajouter aux prochains bulletins de cet employé ?",
+                { title: "Conserver l’indemnité", confirmLabel: "Oui, conserver" }
+            );
+            if (keepForEmployee) {
+                const stickResponse = await fetch(`/bulletins/${page.dataset.employeeId}/indemnities/stick`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({ label, amount, month: page.dataset.month, year: page.dataset.year })
+                });
+                const stickResult = await stickResponse.json();
+                if (!stickResponse.ok || !stickResult.ok) throw new Error(stickResult.error || "Impossible de conserver l'indemnité.");
+
+                // Re-run the current-bulletin endpoint after the employee bonus
+                // is stored, so this bulletin also contains the recurring line.
+                const currentResponse = await fetch(`/bulletins/${page.dataset.employeeId}/indemnities`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({ label, amount, month: page.dataset.month, year: page.dataset.year })
+                });
+                const currentResult = await currentResponse.json();
+                if (!currentResponse.ok || !currentResult.ok) throw new Error(currentResult.error || "Impossible de mettre à jour le bulletin courant.");
+            }
             window.location.reload();
         } catch (errorObject) {
             window.AppDialog.alert(errorObject.message);
@@ -120,7 +143,7 @@
 
     lines?.addEventListener('change', async event => {
         if (!event.target.matches('[name="nimpLabels"], [name="nimpAmounts"]')) return;
-        const row = event.target.closest('.monthly-indemnity-line');
+        const row = event.target.closest('.monthly-indemnity-line, .fixed-indemnity-line');
         if (!row) return;
 
         const labelInput = row.querySelector('[name="nimpLabels"]');
@@ -146,12 +169,37 @@
                     oldAmount,
                     label,
                     amount,
+                    saveEmployee: false,
                     month: page.dataset.month,
                     year: page.dataset.year,
                 }),
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || "Impossible de modifier l'indemnité.");
+
+            if (row.dataset.sticky === 'true') {
+                const saveEmployee = await window.AppDialog.confirm(
+                    "Enregistrer aussi cette modification pour les prochains bulletins de cet employé ?",
+                    { title: "Modifier l’indemnité récurrente", confirmLabel: "Oui, enregistrer" }
+                );
+                if (saveEmployee) {
+                    const employeeResponse = await fetch(`/bulletins/${page.dataset.employeeId}/indemnities/update`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                        body: JSON.stringify({
+                            oldLabel,
+                            oldAmount,
+                            label,
+                            amount,
+                            saveEmployee: true,
+                            month: page.dataset.month,
+                            year: page.dataset.year,
+                        }),
+                    });
+                    const employeeResult = await employeeResponse.json();
+                    if (!employeeResponse.ok || !employeeResult.ok) throw new Error(employeeResult.error || "Impossible d'enregistrer la modification pour l'employé.");
+                }
+            }
             window.location.reload();
         } catch (errorObject) {
             window.AppDialog.alert(errorObject.message);

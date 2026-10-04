@@ -18,6 +18,7 @@
             <div class="user-avatar"><%= initials %></div>
             <span><%= userName %></span>
         </div>
+        <% if (typeof user !== 'undefined' && user) { %><a href="/profile" class="user-chip" title="Modifier mon profil">Mon profil</a><% } %>
         <% if (typeof user !== 'undefined' && user && user.activeCompanyId) { %>
             <a href="/auth/select-company" class="user-chip" title="Changer d'entreprise">Changer d'entreprise</a>
         <% } %>

@@ -4,6 +4,7 @@ import {
     adminDashboard, adminClients, adminCreateUserPage, adminCreateUser, adminUserDetails, adminCompanies, adminCompanyDetails,
     adminAuditLogs, adminUsage, adminSystem, updateClientBilling, blockClient, unblockClient,
     createClientCompany, enterClientMode, exitClientMode, adminReports, updateReport,
+    adminUpdateUserProfile, adminSetUserPassword,
 } from "../controllers/admin.controller.js";
 
 export const admin = express.Router();
@@ -13,6 +14,8 @@ admin.get("/users", adminClients);
 admin.get("/users/new", adminCreateUserPage);
 admin.post("/users", adminCreateUser);
 admin.get("/users/:id", adminUserDetails);
+admin.post("/users/:id/profile", adminUpdateUserProfile);
+admin.post("/users/:id/password", adminSetUserPassword);
 admin.get("/clients", adminClients);
 admin.get("/companies", adminCompanies);
 admin.get("/companies/:id", adminCompanyDetails);

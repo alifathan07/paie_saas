@@ -268,6 +268,37 @@ a:hover {
   transform: translateY(1px);
 }
 
+.sidebar-logout {
+  justify-content: flex-start;
+  color: #f8fafc;
+  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(127, 29, 29, 0.18);
+  font-family: inherit;
+}
+
+.sidebar-logout:hover {
+  color: #fff;
+  background: rgba(153, 27, 27, 0.34);
+  border-color: rgba(248, 113, 113, 0.48);
+  filter: none;
+}
+
+.sidebar-logout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: #ef4444;
+  background: rgba(254, 226, 226, 0.12);
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.sidebar-logout-icon svg {
+  display: block;
+}
+
 .main-wrapper {
   margin-left: var(--sidebar-width);
   min-height: 100vh;

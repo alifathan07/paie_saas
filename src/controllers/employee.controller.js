@@ -100,6 +100,7 @@ export const handleCreateEmployee = async (req, res) => {
                 ? true
                 : (req.body.actif === '1' || req.body.actif === 'true'),
             cimrReduitBaseImposable: Boolean(req.body.cimrReduitBaseImposable),
+            indemniteNonImposable: req.body.indemniteNonImposable === '1' || req.body.indemniteNonImposable === 'true',
             blocageSaisiePaie: req.body.blocageSaisiePaie === '1' || req.body.blocageSaisiePaie === 'true',
         });
         res.redirect("/employees");
@@ -211,6 +212,7 @@ export const handleUpdateEmployee = async (req, res) => {
             bonusList,
             actif: req.body.actif === '1' || req.body.actif === 'true',
             cimrReduitBaseImposable: Boolean(req.body.cimrReduitBaseImposable),
+            indemniteNonImposable: req.body.indemniteNonImposable === '1' || req.body.indemniteNonImposable === 'true',
             blocageSaisiePaie: Boolean(req.body.blocageSaisiePaie),
         }, activeCompanyId);
         res.redirect(`/employees/${id}`);

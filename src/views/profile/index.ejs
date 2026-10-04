@@ -1,0 +1,9 @@
+<%- include('../partials/header') %>
+<div class="page-header"><div class="header-title-area"><h1 class="page-title">Mon profil</h1><p class="page-subtitle">Gérez vos informations de compte et votre mot de passe.</p></div></div>
+<section class="admin-section-card" style="max-width:720px;margin-bottom:20px"><h2>Informations personnelles</h2>
+<% if (profileError) { %><div class="alert alert-error"><%= profileError %></div><% } %><% if (profileSuccess) { %><div class="alert alert-success"><%= profileSuccess %></div><% } %>
+<form method="POST" action="/profile"><label class="form-label">Nom</label><input class="form-input" name="name" value="<%= account.name %>" required maxlength="191"><label class="form-label">E-mail</label><input class="form-input" type="email" name="email" value="<%= account.email %>" required maxlength="191"><button class="btn-primary" type="submit" style="margin-top:14px">Enregistrer</button></form></section>
+<section class="admin-section-card" style="max-width:720px"><h2>Modifier le mot de passe</h2>
+<% if (passwordError) { %><div class="alert alert-error"><%= passwordError %></div><% } %><% if (passwordSuccess) { %><div class="alert alert-success"><%= passwordSuccess %></div><% } %>
+<form method="POST" action="/profile/password"><label class="form-label">Mot de passe actuel</label><input class="form-input" type="password" name="currentPassword" required autocomplete="current-password"><label class="form-label">Nouveau mot de passe</label><input class="form-input" type="password" name="password" required minlength="8" autocomplete="new-password"><label class="form-label">Confirmation</label><input class="form-input" type="password" name="passwordConfirmation" required minlength="8" autocomplete="new-password"><button class="btn-primary" type="submit" style="margin-top:14px">Changer le mot de passe</button></form></section>
+<%- include('../partials/footer') %>

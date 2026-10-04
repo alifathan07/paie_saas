@@ -103,6 +103,9 @@ function companyForm(company) {
         workingTimeMode: company?.workingTimeMode || "DAYS",
         standardMonthlyDays: company?.standardMonthlyDays ? String(company.standardMonthlyDays) : String(DEFAULT_STANDARD_DAYS),
         standardMonthlyHours: company?.standardMonthlyHours ? String(company.standardMonthlyHours) : String(DEFAULT_STANDARD_HOURS),
+        indemniteNonImposableRate: company?.indemniteNonImposableRate !== undefined && company?.indemniteNonImposableRate !== null
+            ? String(Number(company.indemniteNonImposableRate) * 100)
+            : "10",
     };
 }
 
@@ -133,15 +136,20 @@ export async function updateSettings(req, res) {
         workingTimeMode: String(req.body.workingTimeMode || "DAYS").toUpperCase(),
         standardMonthlyDays: String(req.body.standardMonthlyDays || "").trim(),
         standardMonthlyHours: String(req.body.standardMonthlyHours || "").trim(),
+        indemniteNonImposableRate: String(req.body.indemniteNonImposableRate || "").trim(),
     };
     const smig = Number(form.smig);
     const standardMonthlyDays = Number(form.standardMonthlyDays);
     const standardMonthlyHours = Number(form.standardMonthlyHours);
+    const indemniteNonImposableRate = Number(form.indemniteNonImposableRate);
     if (!form.name || !form.adresse || !form.ville || !form.ifNumber || !form.numeroAffiliationCnss || !Number.isFinite(smig) || smig <= 0
         || !["DAYS", "HOURS"].includes(form.workingTimeMode)
         || !Number.isFinite(standardMonthlyDays) || standardMonthlyDays <= 0 || standardMonthlyDays > 31
         || !Number.isFinite(standardMonthlyHours) || standardMonthlyHours <= 0 || standardMonthlyHours > 744) {
         return res.status(400).render("parametrage/index", page(req, { title: "Paramétrage", currentPage: "parametrage", company: current, form, error: "Veuillez renseigner tous les champs obligatoires et un SMIG valide." }));
+    }
+    if (!Number.isFinite(indemniteNonImposableRate) || indemniteNonImposableRate < 0 || indemniteNonImposableRate > 100) {
+        return res.status(400).render("parametrage/index", page(req, { title: "Paramétrage", currentPage: "parametrage", company: current, form, error: "Le taux d’indemnité non imposable doit être compris entre 0 et 100 %." }));
     }
 
     try {
@@ -160,6 +168,7 @@ export async function updateSettings(req, res) {
                 workingTimeMode: form.workingTimeMode,
                 standardMonthlyDays,
                 standardMonthlyHours,
+                indemniteNonImposableRate: indemniteNonImposableRate / 100,
             },
         });
         return res.render("parametrage/index", page(req, { title: "Paramétrage", currentPage: "parametrage", company, form: companyForm(company), success: "Les informations de la société ont été enregistrées." }));

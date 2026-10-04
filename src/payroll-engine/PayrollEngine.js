@@ -102,9 +102,24 @@ export const calculatePayroll = (employee, overrides = {}) => {
   );
   const heuresSupAmount = overtime.totalAmount;
 
-  // 6. Recurring employee bonuses from DB (EmployeeBonus + Bonus catalog)
+  // 6. Company-wide non-taxable indemnity. The rate is stored per company as
+  // a decimal (10% = 0.10) and is applied to the effective base salary.
   const nimpLines = [];
   const nimpLabels = new Set();
+  const indemnityRateRaw = employee.company?.indemniteNonImposableRate;
+  const indemnityRate = indemnityRateRaw === undefined || indemnityRateRaw === null || indemnityRateRaw === ''
+    ? 0.10
+    : Math.max(0, Number(indemnityRateRaw) || 0);
+  const indemnityEnabled = employee.indemniteNonImposable === true;
+  const indemniteNonImposable = indemnityEnabled
+    ? Number((effectiveBase * indemnityRate).toFixed(2))
+    : 0;
+  if (indemnityEnabled && indemniteNonImposable > 0) {
+    nimpLines.push({ label: 'Indemnité de représentation', amount: indemniteNonImposable });
+    nimpLabels.add('indemnité de représentation');
+  }
+
+  // 7. Recurring employee bonuses from DB (EmployeeBonus + Bonus catalog)
   if (employee.bonuses && Array.isArray(employee.bonuses)) {
     employee.bonuses.forEach(eb => {
       const isTaxable = eb.bonus ? Boolean(eb.bonus.taxable) : Boolean(eb.taxable);
@@ -142,15 +157,15 @@ export const calculatePayroll = (employee, overrides = {}) => {
   bonusesNIMP = Number(bonusesNIMP.toFixed(2));
   const bonusesIMP = Number(variablePrimes.reduce((sum, p) => sum + p.amount, 0).toFixed(2));
 
-  // 7. Salaire Brut Global (SBG)
+  // 8. Salaire Brut Global (SBG)
   // SBG = Base effective + Ancienneté + Primes imposables + Heures sup + Indemnités non imposables
   const sbg = Number((effectiveBase + primeAnciennete + bonusesIMP + heuresSupAmount + bonusesNIMP).toFixed(2));
 
-  // 8. Salaire Brut Imposable (SBI)
+  // 9. Salaire Brut Imposable (SBI)
   // SBI = SBG - Indemnités non imposables
   const sbi = Math.max(0, Number((sbg - bonusesNIMP).toFixed(2)));
 
-  // 9. Cotisations Sociales Salariales
+  // 10. Cotisations Sociales Salariales
   // CNSS: 4.48% plafonné à 6 000 DH (max 268.80 DH)
   const cnss = Number(calculateCNSSSalariale(sbi).toFixed(2));
   // AMO: 2.26% non plafonné
@@ -161,23 +176,23 @@ export const calculatePayroll = (employee, overrides = {}) => {
   const amoPatronale = Number(calculateAMOPatronale(sbi).toFixed(2));
   const partPatronal = Number((cnssPatronale + amoPatronale).toFixed(2));
 
-  // 10. CIMR (Optional / Conditional)
+  // 11. CIMR (Optional / Conditional)
   const rawCimrRate = employee.cimrRate ? Number(employee.cimrRate) : null;
   const cimrRate = rawCimrRate && rawCimrRate > 0 ? rawCimrRate : null;
   const cimr = Number(calculateCIMR(sbi, cimrRate).toFixed(2));
   const cimrReduitBaseImposable = Boolean(employee.cimrReduitBaseImposable);
 
-  // 11. Frais Professionnels (Fiscal Abatement for IR reduction — NOT a cash deduction from salary)
+  // 12. Frais Professionnels (Fiscal Abatement for IR reduction — NOT a cash deduction from salary)
   const fraisPro = calculateFraisProfessionnels(sbi);
   const fraisProAmount = Number(fraisPro.amount.toFixed(2));
   const fraisProRate = fraisPro.rate;
 
-  // 12. Salaire Net Imposable (SNI)
+  // 13. Salaire Net Imposable (SNI)
   // SNI = SBI - CNSS - AMO - (CIMR if reducible) - FraisPro
   const baseAvantFraisPro = sbi - cnss - amo - (cimrReduitBaseImposable ? cimr : 0);
   const sni = Math.max(0, Number((baseAvantFraisPro - fraisProAmount).toFixed(2)));
 
-  // 13. Impôt sur le Revenu (IR) selon le barème marocain
+  // 14. Impôt sur le Revenu (IR) selon le barème marocain
   const ir = calculateIR(sni);
   const irTaux = ir.taux;
   const irTheorique = Number((sni * irTaux).toFixed(2));
@@ -185,7 +200,7 @@ export const calculatePayroll = (employee, overrides = {}) => {
   // Moroccan standard convention: IR Brut is the bracket-adjusted tax before family allowances
   const irBrut = Number(ir.irNet.toFixed(2));
 
-  // 14. Charges de famille: 50 DH per dependent, max 6 dependents (300 DH max)
+  // 15. Charges de famille: 50 DH per dependent, max 6 dependents (300 DH max)
   const dependentsRaw = overrides.dependents !== undefined && overrides.dependents !== null && overrides.dependents !== ''
     ? Number(overrides.dependents)
     : (employee.nbPersonacharge !== undefined ? Number(employee.nbPersonacharge) : (Number(employee.dependents) || 0));
@@ -195,10 +210,10 @@ export const calculatePayroll = (employee, overrides = {}) => {
   // IR Net = max(0, IR Brut - Charges de famille)
   const irNet = Math.max(0, Number((irBrut - chargesDeFamille).toFixed(2)));
 
-  // 15. Avances (Salary advance cash deduction)
+  // 16. Avances (Salary advance cash deduction)
   const avances = Math.max(0, Number(overrides.avances) || 0);
 
-  // 16. Net à Payer
+  // 17. Net à Payer
   // Net = SBG - CNSS - AMO - CIMR - IR Net - Avances
   // NOTE: Frais Professionnels are NOT subtracted from Net à Payer!
   const exactNetAPayer = Math.max(0, Number((sbg - cnss - amo - cimr - irNet - avances).toFixed(2)));
@@ -229,6 +244,8 @@ export const calculatePayroll = (employee, overrides = {}) => {
     variablePrimes,
     nimpLines,
     bonusesIMP,
+    indemniteNonImposableRate: indemnityRate,
+    indemniteNonImposable,
 
     heuresSup25: overtime.heuresSup25,
     heuresSup50: overtime.heuresSup50,

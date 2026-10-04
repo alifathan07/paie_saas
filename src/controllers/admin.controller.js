@@ -1,6 +1,6 @@
 import prisma from "../../db.ts";
 import { recordAudit } from "../services/audit.service.js";
-import { createUserAccount } from "../services/auth.service.js";
+import { createUserAccount, setUserPassword, updateUserProfile } from "../services/auth.service.js";
 import { polishBlockReason } from "../services/blockReason.service.js";
 
 const safeUserSelect = {
@@ -123,6 +123,40 @@ export const adminUserDetails = async (req, res) => {
         prisma.report.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 10, include: { company: { select: { name: true } } } }),
     ]);
     return res.render("admin/user-details", page(req, { account: user, activity, reports, error: null }));
+};
+
+const profileMessages = {
+    INVALID_NAME: "Le nom est obligatoire et doit contenir au maximum 191 caractères.",
+    INVALID_EMAIL: "Veuillez renseigner une adresse e-mail valide.",
+    EMAIL_ALREADY_EXISTS: "Cette adresse e-mail est déjà utilisée.",
+    PASSWORD_TOO_SHORT: "Le mot de passe doit contenir au moins 8 caractères.",
+    PASSWORD_MISMATCH: "Les mots de passe ne correspondent pas.",
+};
+
+export const adminUpdateUserProfile = async (req, res) => {
+    const userId = Number(req.params.id);
+    try {
+        const account = await updateUserProfile(userId, req.body);
+        if (userId === Number(req.session.user.id)) {
+            req.session.user.name = account.name;
+            req.session.user.email = account.email;
+        }
+        await recordAudit(req, { action: "ADMIN_UPDATE_PROFILE", targetType: "USER", targetId: userId });
+        return res.redirect(`/admin/users/${userId}`);
+    } catch (error) {
+        return res.status(400).send(profileMessages[error.message] || "Impossible de mettre à jour le profil.");
+    }
+};
+
+export const adminSetUserPassword = async (req, res) => {
+    const userId = Number(req.params.id);
+    try {
+        await setUserPassword(userId, req.body.password, req.body.passwordConfirmation);
+        await recordAudit(req, { action: "ADMIN_CHANGE_PASSWORD", targetType: "USER", targetId: userId });
+        return res.redirect(`/admin/users/${userId}`);
+    } catch (error) {
+        return res.status(400).send(profileMessages[error.message] || "Impossible de modifier le mot de passe.");
+    }
 };
 
 export const adminCompanies = async (req, res) => {
