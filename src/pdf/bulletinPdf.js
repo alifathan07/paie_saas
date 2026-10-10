@@ -84,7 +84,7 @@ function drawPayrollTable(doc, data, startY) {
     if (amount(data.amo) > 0) push('196', 'RETENUE AMO', amount(data.amoPatronale), money(data.sbi), percent(data.amoRate), 0, data.amo);
     if (amount(data.cnss) > 0) push('197', 'RETENUE CNSS', amount(data.cnssPatronale), money(Math.min(amount(data.sbi), 6000)), percent(data.cnssRate), 0, data.cnss);
     if (amount(data.cimr) > 0) push('199', 'RETENUE CIMR', '', money(data.sbi), percent(data.cimrRate), 0, data.cimr);
-    if (amount(data.irNet) > 0) push('198', 'RETENUE IR', '', money(data.sni), '', 0, data.irNet);
+    if (amount(data.irNet) > 0) push('198', 'RETENUE IR', '', money(data.sni), percent(data.irTaux), 0, data.irNet);
     if (amount(data.avances) > 0) push('400', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avances);
     if (amount(data.arrondi) > 0) push('410', 'ARRONDI', '', '', '', data.arrondi, 0);
     if (amount(data.arrondi) < 0) push('410', 'ARRONDI', '', '', '', 0, Math.abs(data.arrondi));

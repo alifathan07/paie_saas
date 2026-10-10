@@ -206,11 +206,8 @@
                         Ces primes apparaîtront automatiquement sur chaque bulletin mensuel.
                         Vous pouvez aussi créer une nouvelle prime qui sera réutilisable pour d'autres employés.
                     </p>
-                    <div class="form-group" style="display:flex; align-items:center; gap:10px; padding:12px 16px; margin-bottom:16px; background:rgba(220, 240, 255, 0.5); border:1px solid var(--color-border); border-radius:var(--radius-md);">
-                        <input type="checkbox" id="indemniteNonImposable" name="indemniteNonImposable" value="1" style="width:18px;height:18px;accent-color:var(--color-primary);">
-                        <label for="indemniteNonImposable" style="margin:0;font-weight:600;">Indemnité de représentation</label>
-                        <span style="font-size:12px;color:var(--color-text-subtle);">Le taux défini dans le paramétrage est appliqué au salaire de base.</span>
-                    </div>
+                    <div id="representation-container" data-default-rate="<%= defaultRepresentationRate ?? 10 %>" style="margin-bottom:16px;"></div>
+                    <button type="button" id="add-representation" class="btn-secondary" style="margin-bottom:20px;">+ Ajouter indemnité de représentation</button>
 
                     <!-- Existing catalog bonuses -->
                     <div id="bonus-list-container"
@@ -288,6 +285,19 @@
     `;
                     container.appendChild(row);
                 }
+
+                document.getElementById('add-representation').addEventListener('click', function () {
+                    const container = document.getElementById('representation-container');
+                    if (container.children.length) return;
+                    container.innerHTML = `
+                        <div class="bonus-row" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(220,240,255,.5);border:1px solid var(--color-primary);border-radius:var(--radius-md);">
+                            <input type="hidden" name="indemniteRepresentationName" value="Indemnité de représentation">
+                            <span style="flex:1;font-weight:600;">Indemnité de représentation</span>
+                            <input type="number" name="indemniteRepresentationRate" class="form-input" value="${container.dataset.defaultRate || '10'}" placeholder="Taux (%)" min="0" max="100" step="0.01" required style="width:150px;">
+                            <span style="font-weight:600;">%</span>
+                            <button type="button" onclick="this.closest('.bonus-row').remove()" style="background:none;border:none;color:#c00;cursor:pointer;font-size:18px;padding:4px 8px;">✕</button>
+                        </div>`;
+                });
             </script>
 
             <%- include('net-to-base') %>

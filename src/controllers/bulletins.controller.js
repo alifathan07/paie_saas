@@ -301,6 +301,46 @@ function runEmployeeCalculation(emp, overrides = {}) {
     return calculatePayroll(emp, overrides);
 }
 
+// Draft/generated bulletins follow the employee's current contract data.
+// Validated and closed bulletins remain immutable snapshots.
+async function refreshOpenBulletinFromEmployee(emp, payslip) {
+    if (!payslip || isLockedBulletin(payslip.status)) return payslip;
+
+    const fixedTaxableLabels = new Set((emp.bonuses || [])
+        .filter(item => item.bonus ? Boolean(item.bonus.taxable) : Boolean(item.taxable))
+        .map(item => String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()));
+    const fixedNimpLabels = new Set((emp.bonuses || [])
+        .filter(item => item.bonus ? !Boolean(item.bonus.taxable) : !Boolean(item.taxable))
+        .map(item => String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()));
+    const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+
+    const variablePrimes = (payslip.bonuses || [])
+        .filter(item => item.taxable && !fixedTaxableLabels.has(String(item.name).trim().toLowerCase()))
+        .map(item => ({ label: item.name, amount: Number(item.amount) }));
+    const monthlyNimpLines = (payslip.bonuses || [])
+        .filter(item => !item.taxable
+            && !fixedNimpLabels.has(String(item.name).trim().toLowerCase())
+            && (!representationLabel || String(item.name).trim().toLowerCase() !== representationLabel))
+        .map(item => ({ label: item.name, amount: Number(item.amount) }));
+
+    const monthlyCalc = runEmployeeCalculation(emp, {
+        month: payslip.month,
+        year: payslip.year,
+        ...resolveWorkingTimeForPayslip(emp, payslip),
+        // No baseSalary override: use the employee's current base salary.
+        heuresSup25: Number(payslip.heuresSup25 || 0),
+        heuresSup50: Number(payslip.heuresSup50 || 0),
+        heuresSup100: Number(payslip.heuresSup100 || 0),
+        avances: Number(payslip.avances || 0),
+        variablePrimes,
+        monthlyNimpLines,
+    });
+    const calc = await applyCumulativeIR(emp.id, payslip.month, payslip.year, monthlyCalc, emp.nbPersonacharge);
+    const rates = await getPayrollRates();
+    const data = await buildPayslipData(emp, calc, payslip.month, payslip.year, rates, payslip.status);
+    return savePayslipWithBonuses(data, payslip.id, calc);
+}
+
 function resolveWorkingTimeForPayslip(emp, payslip = null, input = {}) {
     const mode = payslip?.workingTimeMode || emp.company?.workingTimeMode || "DAYS";
     const standardMonthlyDays = Number(payslip?.standardMonthlyDays || emp.company?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS);
@@ -483,13 +523,17 @@ export const listBulletins = async (req, res) => {
                 id: emp.id,
                 nomComplet: emp.nomComplet,
                 matricule: emp.matricule,
-                baseSalary: Number(emp.baseSalary),
+                // A generated bulletin is a monthly snapshot. Prefer it over the
+                // employee's current contract values for this period.
+                baseSalary: payslip ? Number(payslip.baseSalary) : Number(emp.baseSalary),
                 dateEmbauche: emp.dateEmbauche,
                 blocageSaisiePaie: emp.blocageSaisiePaie,
                 actif: emp.actif,
-                workingTimeMode: emp.company?.workingTimeMode || "DAYS",
-                standardMonthlyDays: Number(emp.company?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS),
-                standardMonthlyHours: Number(emp.company?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS),
+                // The overview follows the company's configured input mode.
+                // Do not expose the other unit from a saved/validated snapshot.
+                workingTimeMode: emp.company?.workingTimeMode || payslip?.workingTimeMode || "DAYS",
+                standardMonthlyDays: Number(emp.company?.standardMonthlyDays || payslip?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS),
+                standardMonthlyHours: Number(emp.company?.standardMonthlyHours || payslip?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS),
                 maskedForPeriod: emp.bulletinMasks.length > 0,
                 bulletin: payslip ? mapPayslipToViewModel(payslip) : null,
                 bulletinStatus: status,
@@ -1633,6 +1677,37 @@ export const showBulletin = async (req, res) => {
             ? `/bulletins/${nextEmployee.id}${hasPeriod ? `?month=${month}&year=${year}` : ''}`
             : null;
 
+        let bulletinEmployees = [];
+        if (hasPeriod) {
+            const periodEmployees = await prisma.employee.findMany({
+                where: {
+                    companyId: emp.companyId,
+                    OR: [{ actif: true }, { id: emp.id }],
+                },
+                orderBy: [{ nomComplet: 'asc' }, { id: 'asc' }],
+                select: {
+                    id: true,
+                    nomComplet: true,
+                    matricule: true,
+                    payslips: {
+                        where: { month, year },
+                        take: 1,
+                        select: { status: true, netAPayer: true },
+                    },
+                },
+            });
+            bulletinEmployees = periodEmployees.map(employee => {
+                const periodBulletin = employee.payslips[0];
+                return {
+                    id: employee.id,
+                    nomComplet: employee.nomComplet,
+                    matricule: employee.matricule,
+                    status: periodBulletin?.status || BULLETIN_STATUS.DRAFT,
+                    netAPayer: periodBulletin ? Number(periodBulletin.netAPayer || 0) : null,
+                };
+            });
+        }
+
 
         if (!hasPeriod) {
             // History mode: query all Payslips for this employee ordered by year/month desc
@@ -1653,6 +1728,7 @@ export const showBulletin = async (req, res) => {
                 previousBulletinUrl,
                 nextEmployee,
                 nextBulletinUrl,
+                bulletinEmployees,
                 mode: "history",
                 history,
                 bulletin: null,
@@ -1673,13 +1749,21 @@ export const showBulletin = async (req, res) => {
         });
         console.info("[bulletin-show] payslip.loaded", { requestId, employeeId: empId, month, year, found: Boolean(dbPayslip) });
 
-        const bulletin = mapPayslipToViewModel(dbPayslip);
+        const refreshedPayslip = await refreshOpenBulletinFromEmployee(emp, dbPayslip);
+        const bulletin = mapPayslipToViewModel(refreshedPayslip);
         if (bulletin) {
             const fixedNimpLabels = new Set((emp.bonuses || [])
                 .filter(bonus => !(bonus.bonus ? bonus.bonus.taxable : bonus.taxable))
                 .map(bonus => String(bonus.bonus ? bonus.bonus.name : bonus.name || '').toLowerCase()));
-            bulletin.fixedNimpLines = bulletin.nimpLines.filter(line => fixedNimpLabels.has(String(line.label).toLowerCase()));
-            bulletin.monthlyNimpLines = bulletin.nimpLines.filter(line => !fixedNimpLabels.has(String(line.label).toLowerCase()));
+            const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+            bulletin.fixedNimpLines = bulletin.nimpLines.filter(line => {
+                const label = String(line.label).toLowerCase();
+                return fixedNimpLabels.has(label) || (representationLabel && label === representationLabel);
+            });
+            bulletin.monthlyNimpLines = bulletin.nimpLines.filter(line => {
+                const label = String(line.label).toLowerCase();
+                return !fixedNimpLabels.has(label) && !(representationLabel && label === representationLabel);
+            });
         }
 
         // Pre-compute preview result if no payslip exists yet in DB
@@ -1715,6 +1799,7 @@ export const showBulletin = async (req, res) => {
             previousBulletinUrl,
             nextEmployee,
             nextBulletinUrl,
+            bulletinEmployees,
             periodBlocked: req.query.periodBlocked === "1",
             mode: "single",
             bulletin: bulletinViewModel,

@@ -1,4 +1,5 @@
 import prisma from "../../db.ts";
+import { refreshDraftPayslips } from "./employeePayrollRefresh.service.js";
 
 // Get all reusable Non-Taxable Bonus definitions for a company
 export const getAllBonusTypes = async (companyId) => {
@@ -109,7 +110,8 @@ export const createEmployee = async (data) => {
         statut, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
-        cimrRate, cimrReduitBaseImposable, indemniteNonImposable, blocageSaisiePaie
+        cimrRate, cimrReduitBaseImposable,
+        indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie
     } = data;
 
     const targetCompanyId = Number(companyId);
@@ -145,14 +147,19 @@ export const createEmployee = async (data) => {
             modePaiement: modePaiement || 'VIREMENT',
             banque,
             agence,
-            rib,
+            rib: rib === undefined || rib === null ? null : String(rib).trim() || null,
             actif: actif === undefined ? true : Boolean(actif),
             baseSalary: Number(baseSalary || 0),
             cimrRate: cimrRate !== undefined && cimrRate !== null && cimrRate !== ''
                 ? Number(cimrRate)
                 : null,
             cimrReduitBaseImposable: Boolean(cimrReduitBaseImposable),
-            indemniteNonImposable: Boolean(indemniteNonImposable),
+            indemniteRepresentationName: indemniteRepresentationRate !== undefined && indemniteRepresentationRate !== null && indemniteRepresentationRate !== ''
+                ? 'Indemnité de représentation'
+                : null,
+            indemniteRepresentationRate: indemniteRepresentationRate !== undefined && indemniteRepresentationRate !== null && indemniteRepresentationRate !== ''
+                ? Number(indemniteRepresentationRate) / 100
+                : null,
             blocageSaisiePaie: Boolean(blocageSaisiePaie),
             companyId: targetCompanyId,
             bonuses: employeeBonusData.length > 0 ? { create: employeeBonusData } : undefined
@@ -172,7 +179,8 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         statut, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
-        cimrRate, cimrReduitBaseImposable, indemniteNonImposable, blocageSaisiePaie
+        cimrRate, cimrReduitBaseImposable,
+        indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie
     } = data;
 
     const empId = Number(id);
@@ -182,20 +190,26 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
     if (!Number.isInteger(targetCompanyId) || targetCompanyId <= 0) throw new Error('NO_ACTIVE_COMPANY');
     const existing = await prisma.employee.findFirst({
         where: { id: empId, companyId: targetCompanyId },
-        select: { companyId: true }
+        select: { companyId: true, baseSalary: true, indemniteRepresentationRate: true }
     });
     if (!existing) throw new Error('EMPLOYEE_NOT_FOUND');
 
-    // Replace all bonus assignments
-    await prisma.employeeBonus.deleteMany({ where: { employeeId: empId } });
-
-    const employeeBonusData = bonusList?.length > 0
+    // Only replace bonus assignments when the edit form explicitly submitted them.
+    const shouldReplaceBonuses = bonusList !== undefined;
+    const salaryChanged = baseSalary !== undefined && Number(baseSalary) !== Number(existing.baseSalary);
+    const representationChanged = indemniteRepresentationRate !== undefined
+        && Number(indemniteRepresentationRate || 0) / 100 !== Number(existing.indemniteRepresentationRate || 0);
+    const employeeBonusData = shouldReplaceBonuses && bonusList.length > 0
         ? await resolveBonusList(bonusList, targetCompanyId)
         : [];
 
-    return prisma.employee.update({
-        where: { id: empId },
-        data: {
+    return prisma.$transaction(async tx => {
+        if (shouldReplaceBonuses) {
+            await tx.employeeBonus.deleteMany({ where: { employeeId: empId } });
+        }
+        const updated = await tx.employee.update({
+            where: { id: empId },
+            data: {
             matricule,
             nomComplet,
             cin,
@@ -220,7 +234,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
             modePaiement,
             banque,
             agence,
-            rib,
+            rib: rib === undefined ? undefined : (rib === null ? null : String(rib).trim() || null),
             actif: actif !== undefined ? Boolean(actif) : undefined,
             baseSalary: baseSalary !== undefined ? Number(baseSalary) : undefined,
             cimrRate: cimrRate !== undefined
@@ -229,19 +243,29 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
             cimrReduitBaseImposable: cimrReduitBaseImposable !== undefined
                 ? Boolean(cimrReduitBaseImposable)
                 : undefined,
-            indemniteNonImposable: indemniteNonImposable !== undefined
-                ? Boolean(indemniteNonImposable)
+            indemniteRepresentationName: indemniteRepresentationRate !== undefined
+                ? (indemniteRepresentationRate === '' || indemniteRepresentationRate === null
+                    ? null
+                    : 'Indemnité de représentation')
+                : undefined,
+            indemniteRepresentationRate: indemniteRepresentationRate !== undefined
+                ? (indemniteRepresentationRate === '' || indemniteRepresentationRate === null
+                    ? null
+                    : Number(indemniteRepresentationRate) / 100)
                 : undefined,
             blocageSaisiePaie: blocageSaisiePaie !== undefined
                 ? Boolean(blocageSaisiePaie)
                 : undefined,
             companyId: undefined,
-            bonuses: employeeBonusData.length > 0 ? { create: employeeBonusData } : undefined
-        },
-        include: {
-            company: true,
-            bonuses: { include: { bonus: true } }
-        }
+                bonuses: shouldReplaceBonuses ? { create: employeeBonusData } : undefined
+            },
+            include: {
+                company: true,
+                bonuses: { include: { bonus: true } }
+            }
+        });
+        if (salaryChanged || representationChanged) await refreshDraftPayslips(tx, updated);
+        return updated;
     });
 };
 

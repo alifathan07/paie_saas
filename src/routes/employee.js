@@ -7,6 +7,8 @@ import {
     renderEditForm,
     handleUpdateEmployee,
     handleDeleteEmployee,
+    handleEmployeeIndemnites,
+    handleRemoveEmployeeIndemnite,
 
 } from "../controllers/employee.controller.js";
 import { isAuth } from "../../middlewares/auth.js";
@@ -27,5 +29,7 @@ employee.post("/import", employeeImportUpload, express.json({ limit: "8mb" }), i
 employee.get("/:id", employeeshow);
 employee.get("/:id/edit", renderEditForm);
 employee.post("/:id/edit", handleUpdateEmployee);
+employee.post("/:id/indemnites", handleEmployeeIndemnites);
+employee.post("/:id/indemnites/:bonusId/delete", handleRemoveEmployeeIndemnite);
 employee.post("/:id/delete", handleDeleteEmployee);
 employee.delete("/:id", handleDeleteEmployee);

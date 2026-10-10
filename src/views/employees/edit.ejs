@@ -15,6 +15,14 @@
 <% } %>
 
 <form action="/employees/<%= employee.id %>/edit" method="POST" class="enterprise-form">
+    <nav class="employee-tabs-shell" aria-label="Sections du salarié">
+        <div class="employee-tabs-label"><span class="employee-tabs-label-icon">☰</span><div><strong>Sections de la fiche salarié</strong><small>Choisissez une section à modifier</small></div></div>
+        <div class="employee-tabs">
+            <button type="button" class="employee-tab active" data-tab="general"><span class="employee-tab-icon">●</span><span><strong>Informations générales</strong><small>État civil, contrat et coordonnées</small></span></button>
+            <button type="button" class="employee-tab" data-tab="indemnites"><span class="employee-tab-icon">＋</span><span><strong>Indemnités non imposables</strong><small>Montants récurrents du salarié</small></span><span class="employee-tab-arrow">→</span></button>
+        </div>
+    </nav>
+    <div class="employee-general-content">
     <!-- Section 1: Informations Personnelles -->
     <div class="form-section">
         <h2 class="section-title">1. État Civil & Identité</h2>
@@ -192,82 +200,123 @@
         </div>
     </div>
 
-    <!-- Section 4: Primes & Indemnités non-imposables (Fixes mensuelles) -->
-    <div class="form-section">
-        <h2 class="section-title">4. Primes & Indemnités non-imposables (Fixes mensuelles)</h2>
-        <p style="font-size: 13px; color: var(--color-text-subtle); margin-bottom: 16px;">
-            Sélectionnez les primes/indemnités <strong>exonérées</strong> attribuées à cet employé et modifiez leur montant spécifique.
-            Ces primes apparaîtront automatiquement sur chaque bulletin mensuel.
-            Vous pouvez aussi créer une nouvelle prime qui sera réutilisable pour d'autres employés.
-        </p>
-        <div class="form-group" style="display:flex; align-items:center; gap:10px; padding:12px 16px; margin-bottom:16px; background:rgba(220, 240, 255, 0.5); border:1px solid var(--color-border); border-radius:var(--radius-md);">
-            <input type="checkbox" id="indemniteNonImposable" name="indemniteNonImposable" value="1" <%= employee.indemniteNonImposable ? 'checked' : '' %> style="width:18px;height:18px;accent-color:var(--color-primary);">
-            <label for="indemniteNonImposable" style="margin:0;font-weight:600;">Indemnité de représentation</label>
-            <span style="font-size:12px;color:var(--color-text-subtle);">Le taux défini dans le paramétrage est appliqué au salaire de base.</span>
-        </div>
+    </div>
 
-        <!-- Existing catalog bonuses -->
-        <div id="bonus-list-container" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-            <% if (typeof bonusTypes !== 'undefined' && bonusTypes && bonusTypes.length > 0) { %>
-                <% bonusTypes.forEach(function(bt) {
-                    const assigned = employee.bonuses.find(eb => eb.bonusId === bt.id);
-                %>
-                    <div class="bonus-row" style="display: flex; align-items: center; gap: 16px; background: rgba(255,255,255,0.6); padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--color-border); <%= assigned ? 'border-color: var(--color-primary); background: rgba(220, 240, 255, 0.5);' : '' %>">
-                        <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
-                            <input type="checkbox" name="bonusIds" value="<%= bt.id %>" id="bt-<%= bt.id %>"
-                                <%= assigned ? 'checked' : '' %>
-                                style="width: 18px; height: 18px; accent-color: var(--color-primary);"
-                                onchange="
-                                    const amt = this.closest('.bonus-row').querySelector('.bonus-amt');
-                                    amt.required = this.checked;
-                                    amt.disabled = !this.checked;
-                                ">
-                            <label for="bt-<%= bt.id %>" style="font-weight: 600; cursor: pointer;">
-                                <%= bt.name %>
-                                <span class="badge badge-actif" style="margin-left: 8px; font-size: 11px;">Exonéré</span>
-                            </label>
-                        </div>
-                        <div style="width: 220px; display: flex; align-items: center; gap: 8px;">
-                            <input type="number" step="0.01" name="bonusAmounts" id="amt-<%= bt.id %>"
-                                class="form-input bonus-amt"
-                                placeholder="Montant (DH)"
-                                value="<%= assigned ? Number(assigned.amount) : '' %>"
-                                style="padding: 6px 12px;"
-                                <%= assigned ? '' : 'disabled' %>>
-                            <span style="font-weight: 600; color: var(--color-text-muted);">DH</span>
-                        </div>
-                    </div>
-                <% }); %>
-            <% } else { %>
-                <p style="font-size: 13px; color: var(--color-text-subtle); padding: 12px;">
-                    Aucune prime dans le catalogue. Créez-en une ci-dessous.
-                </p>
-            <% } %>
-        </div>
-
-        <!-- New bonus creation area -->
-        <div style="border-top: 1px dashed var(--color-border); padding-top: 16px;">
-            <p style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--color-text-muted);">
-                ➕ Créer une nouvelle prime (sera sauvegardée dans le catalogue de l'entreprise)
-            </p>
-            <div id="new-bonus-rows">
-                <!-- Injected by JS -->
+    <div class="form-section employee-tab-panel" data-panel="indemnites">
+        <% const employeeRepresentationRate = employee.indemniteRepresentationRate === null || employee.indemniteRepresentationRate === undefined ? '' : (Number(employee.indemniteRepresentationRate) * 100).toFixed(2); %>
+        <div class="representation-employee-card">
+            <div>
+                <strong>Indemnité de représentation</strong>
+                <small>Calculée automatiquement en pourcentage du salaire de base.</small>
             </div>
-            <button type="button" onclick="addNewBonusRow()" class="btn-secondary" style="margin-top: 10px; font-size: 13px;">
-                + Ajouter une nouvelle prime
-            </button>
+            <label class="representation-employee-control">
+                <input type="checkbox" name="representationEnabled" value="1" <%= employeeRepresentationRate !== '' ? 'checked' : '' %>>
+                <span>Attribuée</span>
+            </label>
+            <label class="representation-rate-control">
+                <span>Taux</span>
+                <input type="number" name="indemniteRepresentationRate" value="<%= employeeRepresentationRate %>" data-default-rate="<%= defaultRepresentationRate ?? 10 %>" placeholder="<%= defaultRepresentationRate ?? 10 %>" min="0" max="100" step="0.01" <%= employeeRepresentationRate === '' ? 'disabled' : '' %>>
+                <strong>%</strong>
+            </label>
         </div>
+        <div class="section-heading-row">
+            <div>
+                <h2 class="section-title" style="margin-bottom: 4px;">Indemnités non imposables</h2>
+                <p style="font-size: 13px; color: var(--color-text-subtle); margin: 0;">Attribuez les indemnités récurrentes à ce salarié et ajustez son montant mensuel.</p>
+            </div>
+            <button type="button" class="btn-primary open-indemnites-modal">+ Ajouter des indemnités</button>
+        </div>
+        <div class="table-wrapper" style="margin-top: 20px;">
+            <table class="data-table">
+                <thead><tr><th>Indemnité</th><th>Montant salarié</th><th>Montant par défaut</th><th>Statut</th><th></th></tr></thead>
+                <tbody>
+                    <% if (employee.indemnitesNonImposables && employee.indemnitesNonImposables.length) { %>
+                        <% employee.indemnitesNonImposables.forEach(function (row) { %>
+                            <tr><td><strong><%= row.indemnite.name %></strong></td><td><%= Number(row.amount).toFixed(2) %> DH</td><td><%= Number(row.indemnite.defaultAmount).toFixed(2) %> DH</td><td><span class="badge badge-actif">Active</span></td><td class="employee-indemnite-actions"><button type="button" class="btn-icon-delete btn-compact" data-remove-employee-indemnite="<%= row.indemnite.name %>" data-remove-url="/employees/<%= employee.id %>/indemnites/<%= row.bonusId %>/delete"><span aria-hidden="true">⌫</span> Supprimer</button></td></tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr><td colspan="5" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+        <div class="indemnites-bottom-action"><span>Vous souhaitez ajouter ou modifier une indemnité ?</span><button type="button" class="btn-primary open-indemnites-modal">+ Ajouter des indemnités</button></div>
     </div>
 
     <!-- Submit Bar -->
-    <div class="form-actions-bar">
-        <button type="submit" class="btn-primary" style="min-width: 200px;">
-            Mettre à jour le salarié
-        </button>
+    <div class="form-actions-bar" id="employee-submit-bar">
+        <button type="submit" class="btn-primary" style="min-width: 200px;">Mettre à jour le salarié</button>
     </div>
 </form>
 
+<form id="employee-delete-form" method="POST"></form>
+<div id="indemnites-modal" class="app-modal" hidden>
+        <div class="app-modal-backdrop" data-close-indemnites></div>
+        <form class="app-modal-card" action="/employees/<%= employee.id %>/indemnites" method="POST">
+            <div class="app-modal-header"><div><h2>Ajouter des indemnités</h2><p>Sélectionnez une indemnité, puis personnalisez son montant.</p></div><button type="button" class="modal-close" data-close-indemnites>×</button></div>
+            <div class="indemnite-picker">
+                <% if (indemnites && indemnites.length) { indemnites.forEach(function (item) { const assigned = (employee.indemnitesNonImposables || []).find(row => row.indemniteId === item.id); %>
+                    <label class="indemnite-picker-row">
+                        <input type="checkbox" name="employeeIndemniteIds" value="<%= item.id %>" <%= assigned ? 'checked' : '' %>>
+                        <span class="indemnite-picker-name"><strong><%= item.name %></strong><small>Défaut : <%= Number(item.defaultAmount).toFixed(2) %> DH<%= assigned ? ` · Actuel : ${Number(assigned.amount).toFixed(2)} DH` : '' %></small></span>
+                        <input type="number" name="employeeIndemniteAmounts" class="form-input" min="0.01" step="0.01" value="<%= assigned ? Number(assigned.amount).toFixed(2) : Number(item.defaultAmount).toFixed(2) %>" required>
+                        <span>DH</span>
+                    </label>
+                <% }); } else { %><p class="empty-state">Aucune indemnité dans le catalogue. Créez-en une ci-dessous.</p><% } %>
+            </div>
+            <div class="inline-create-panel"><strong>Créer depuis cette fenêtre</strong><div id="new-indemnite-rows"></div><button type="button" class="btn-secondary" id="add-new-indemnite">+ Nouvelle indemnité</button></div>
+            <div class="app-modal-actions"><button type="button" class="btn-secondary" data-close-indemnites>Annuler</button><button type="submit" class="btn-primary">Enregistrer les indemnités</button></div>
+        </form>
+    </div>
+
+<div id="employee-delete-confirm" class="confirm-modal" hidden>
+    <div class="confirm-modal-backdrop" data-close-delete-confirm></div>
+    <div class="confirm-modal-card" role="dialog" aria-modal="true" aria-labelledby="employee-delete-title">
+        <div class="confirm-modal-icon">⌫</div>
+        <div class="confirm-modal-content"><h2 id="employee-delete-title">Retirer l’indemnité ?</h2><p id="employee-delete-message">Cette action retirera l’indemnité de cet employé uniquement.</p></div>
+        <div class="confirm-modal-actions"><button type="button" class="btn-secondary" data-close-delete-confirm>Annuler</button><button type="button" class="btn-icon-delete" id="confirm-employee-delete">Retirer de l’employé</button></div>
+    </div>
+</div>
+
 <script>
+const employeeTabButtons = document.querySelectorAll('.employee-tab');
+const employeePanels = document.querySelectorAll('.employee-tab-panel');
+const employeeGeneral = document.querySelector('.employee-general-content');
+const employeeSubmitBar = document.getElementById('employee-submit-bar');
+employeeTabButtons.forEach(button => button.addEventListener('click', () => {
+    employeeTabButtons.forEach(item => item.classList.toggle('active', item === button));
+    employeePanels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === button.dataset.tab));
+    employeeGeneral.hidden = button.dataset.tab !== 'general';
+    employeeSubmitBar.hidden = !['general', 'indemnites'].includes(button.dataset.tab);
+}));
+if (new URLSearchParams(window.location.search).get('tab') === 'indemnites') document.querySelector('[data-tab="indemnites"]').click();
+
+const indemnitesModal = document.getElementById('indemnites-modal');
+document.querySelectorAll('.open-indemnites-modal').forEach(button => button.addEventListener('click', () => { indemnitesModal.hidden = false; }));
+document.querySelectorAll('[data-close-indemnites]').forEach(button => button.addEventListener('click', () => { indemnitesModal.hidden = true; }));
+const representationEnabled = document.querySelector('input[name="representationEnabled"]');
+const representationRate = document.querySelector('input[name="indemniteRepresentationRate"]');
+if (representationEnabled && representationRate) {
+    representationEnabled.addEventListener('change', () => {
+        if (representationEnabled.checked && !representationRate.value) representationRate.value = representationRate.dataset.defaultRate || '10';
+        representationRate.disabled = !representationEnabled.checked;
+    });
+}
+document.querySelectorAll('.indemnite-picker-row').forEach(row => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    const amount = row.querySelector('input[type="number"]');
+    const sync = () => { amount.disabled = !checkbox.checked; amount.required = checkbox.checked; };
+    checkbox.addEventListener('change', sync);
+    sync();
+});
+document.getElementById('add-new-indemnite').addEventListener('click', () => {
+    const row = document.createElement('div');
+    row.className = 'new-indemnite-row';
+    row.innerHTML = '<input type="text" name="newIndemniteNames" class="form-input" placeholder="Nom de l’indemnité" required><input type="number" name="newIndemniteAmounts" class="form-input" min="0.01" step="0.01" placeholder="Montant DH" required><button type="button" class="remove-inline-row">×</button>';
+    row.querySelector('.remove-inline-row').addEventListener('click', () => row.remove());
+    document.getElementById('new-indemnite-rows').appendChild(row);
+});
+
 function toggleContractFields(nature) {
     const contractFields = document.getElementById('contract-fields');
     const contractInputs = contractFields.querySelectorAll('input');
@@ -280,23 +329,23 @@ function toggleContractFields(nature) {
 
 toggleContractFields(document.getElementById('natureEmploi').value);
 
-// Enable/disable amount fields for pre-checked bonuses on page load
-document.querySelectorAll('.bonus-row input[type="checkbox"]').forEach(cb => {
-    const amt = cb.closest('.bonus-row').querySelector('.bonus-amt');
-    if (amt) amt.disabled = !cb.checked;
+const employeeDeleteConfirm = document.getElementById('employee-delete-confirm');
+const employeeDeleteMessage = document.getElementById('employee-delete-message');
+let pendingEmployeeDeleteUrl = null;
+document.querySelectorAll('[data-remove-employee-indemnite]').forEach(button => button.addEventListener('click', event => {
+    event.preventDefault();
+    pendingEmployeeDeleteUrl = button.dataset.removeUrl;
+    employeeDeleteMessage.textContent = `« ${button.dataset.removeEmployeeIndemnite} » sera retirée de cet employé. Elle restera disponible dans le catalogue.`;
+    employeeDeleteConfirm.hidden = false;
+}));
+document.querySelectorAll('[data-close-delete-confirm]').forEach(button => button.addEventListener('click', () => { employeeDeleteConfirm.hidden = true; pendingEmployeeDeleteUrl = null; }));
+document.getElementById('confirm-employee-delete').addEventListener('click', () => {
+    if (!pendingEmployeeDeleteUrl) return;
+    const deleteForm = document.getElementById('employee-delete-form');
+    deleteForm.action = pendingEmployeeDeleteUrl;
+    deleteForm.submit();
 });
 
-function addNewBonusRow() {
-    const container = document.getElementById('new-bonus-rows');
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:10px;';
-    row.innerHTML = `
-        <input type="text" name="customBonusNames" class="form-input" placeholder="Nom de la prime (ex: Indemnité de Logement)" style="flex:1;">
-        <input type="number" step="0.01" name="customBonusAmounts" class="form-input" placeholder="Montant (DH)" style="width:180px;">
-        <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:#c00;cursor:pointer;font-size:18px;padding:4px 8px;">✕</button>
-    `;
-    container.appendChild(row);
-}
 </script>
 
 <%- include('net-to-base') %>

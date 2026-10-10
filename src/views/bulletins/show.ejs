@@ -686,6 +686,18 @@
     const employeeName = emp.nomComplet;
     const dateValue = value => value ? new Date(value).toLocaleDateString('fr-MA') : '—';
     const money = value => `${fmt(value)} DH`;
+    const percent = value => value === undefined || value === null || Number.isNaN(Number(value))
+        ? '—'
+        : `${fmt(Number(value) * 100)}%`;
+    const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+    const representationRate = line => {
+        if (!representationLabel || String(line.label || '').trim().toLowerCase() !== representationLabel) return null;
+        if (values.indemniteNonImposableRate !== undefined && values.indemniteNonImposableRate !== null) {
+            return values.indemniteNonImposableRate;
+        }
+        const base = Number(values.baseSalary || 0);
+        return base > 0 ? Number(line.amount || 0) / base : null;
+    };
     const primes = values.variablePrimes || [];
     const fixedPrimeKeys = new Set((emp.bonuses || [])
         .filter(item => item.bonus ? item.bonus.taxable : item.taxable)
@@ -702,6 +714,40 @@
         + Number(values.avances || 0)
         + Math.max(0, -arrondi);
 %>
+
+<% if (month && year) { %>
+<div class="bulletin-workspace" id="bulletin-workspace">
+<aside class="bulletin-employee-panel" id="bulletin-employee-panel" aria-label="Employés de la période" data-period="<%= month %>-<%= year %>">
+    <div class="bulletin-employee-panel-header">
+        <div>
+            <span class="bulletin-panel-eyebrow">PÉRIODE</span>
+            <h2>Employés</h2>
+        </div>
+        <button type="button" class="bulletin-panel-toggle" id="bulletin-panel-toggle" aria-controls="bulletin-employee-list" aria-expanded="true" title="Réduire la liste">‹</button>
+    </div>
+    <div class="bulletin-panel-body">
+        <label class="bulletin-employee-search">
+            <span class="sr-only">Rechercher un employé</span>
+            <input id="bulletin-employee-search" type="search" placeholder="Nom ou matricule" autocomplete="off">
+        </label>
+        <div class="bulletin-employee-list" id="bulletin-employee-list" role="list">
+            <% bulletinEmployees.forEach(employee => { %>
+                <% const isCurrent = Number(employee.id) === Number(emp.id); %>
+                <% const isValidated = ['VALIDATED', 'CLOSED'].includes(employee.status); %>
+                <a class="bulletin-employee-link <%= isCurrent ? 'is-current' : '' %>" href="/bulletins/<%= employee.id %>?month=<%= month %>&year=<%= year %>" data-employee-id="<%= employee.id %>" data-search="<%= `${employee.nomComplet} ${employee.matricule}`.toLowerCase() %>" role="listitem" aria-current="<%= isCurrent ? 'page' : 'false' %>">
+                    <span class="bulletin-employee-dot <%= isValidated ? 'is-validated' : 'is-draft' %>" title="<%= isValidated ? 'Validé' : 'Brouillon' %>" aria-label="<%= isValidated ? 'Validé' : 'Brouillon' %>"></span>
+                    <span class="bulletin-employee-copy">
+                        <strong><%= employee.nomComplet %></strong>
+                        <small><%= employee.matricule || 'Sans matricule' %></small>
+                    </span>
+                    <% if (employee.netAPayer !== null) { %><span class="bulletin-employee-net"><%= fmt(employee.netAPayer) %> DH</span><% } %>
+                </a>
+            <% }); %>
+            <% if (!bulletinEmployees.length) { %><p class="bulletin-employee-empty">Aucun employé dans cette période.</p><% } %>
+        </div>
+        <p class="bulletin-employee-no-results" id="bulletin-employee-no-results" hidden>Aucun résultat.</p>
+    </div>
+</aside>
 
 <div
     class="payroll-print"
@@ -740,6 +786,7 @@
             <% } else { %>
                 <button class="print-button bulletin-action" type="button" disabled title="Dernier employé de la liste">Suivant</button>
             <% } %>
+            <span class="save-confirmation" id="save-confirmation" role="status" aria-live="polite" hidden>Enregistré</span>
         </div>
 
         <% if (bulletin) { %>
@@ -817,16 +864,15 @@
             </thead>
             <tbody id="prime-lines">
                 <tr>
-                        <td class="description">Salaire de base<br><small><%= workingTimeMode === 'HOURS' ? 'Mode heures' : 'Mode jours' %></small></td>
+                        <td class="description">Salaire de base</td>
                         <td class="num">
                         <% if (workingTimeMode === 'HOURS') { %>
                             <input class="employee-edit live-input working-time-primary" name="workedHours" aria-label="Nombre d'heures travaillées" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyHours %>" step="0.01" required value="<%= values.workedHours ?? standardMonthlyHours %>" <%= locked ? 'disabled' : '' %>>
-                            <small class="working-time-unit">heures</small>
+                            <small class="working-time-unit">h</small>
                         <% } else { %>
                             <input class="employee-edit live-input working-time-primary" name="workedDays" aria-label="Nombre de jours travaillés" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyDays %>" step="0.01" required value="<%= values.workedDays ?? standardMonthlyDays %>" <%= locked ? 'disabled' : '' %>>
-                            <small class="working-time-unit">jours</small>
+                            <small class="working-time-unit">j</small>
                         <% } %>
-                        <div class="working-time-derived"><%= workingTimeMode === 'HOURS' ? 'Jours travaillés' : 'Heures travaillées' %> : <strong data-result="<%= workingTimeMode === 'HOURS' ? 'workedDays' : 'workedHours' %>"><%= Number(workingTimeMode === 'HOURS' ? (values.workedDays ?? standardMonthlyDays) : (values.workedHours ?? standardMonthlyHours)).toFixed(2) %></strong> <%= workingTimeMode === 'HOURS' ? 'j' : 'h' %></div>
                     </td>
                     <td class="num">—</td>
                     <td class="num">
@@ -838,7 +884,7 @@
                 <tr class="seniority-row">
                     <td class="description">Prime d'ancienneté</td>
                     <td class="num" data-result="baseSalary"><%= fmt(values.baseSalary ?? emp.baseSalary) %></td>
-                    <td class="num"><%= values.ancienneteRate ? `${fmt(values.ancienneteRate * 100)}%` : '—' %></td>
+                    <td class="num"><%= percent(values.ancienneteRate) %></td>
                     <td class="num" data-result="primeAnciennete"><%= fmt(values.primeAnciennete) %></td>
                     <td class="num">—</td>
                     <td class="num">—</td>
@@ -874,7 +920,7 @@
                 <tr>
                     <td class="description">CNSS </td>
                     <td class="num" data-result="cnssBase"><%= fmt(Math.min(values.sbi, 6000)) %></td>
-                    <td class="num">4,48%</td>
+                    <td class="num"><%= percent(values.cnssRate) %></td>
                     <td class="num">—</td>
                     <td class="num"><span data-result="cnss"><%= fmt(values.cnss) %></span></td>
                     <td class="num" data-result="cnssPatronale"><%= fmt(values.cnssPatronale) %></td>
@@ -882,7 +928,7 @@
                 <tr>
                     <td class="description">AMO </td>
                     <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
-                    <td class="num">2,26%</td>
+                    <td class="num"><%= percent(values.amoRate) %></td>
                     <td class="num">—</td>
                     <td class="num"><span data-result="amo"><%= fmt(values.amo) %></span></td>
                     <td class="num" data-result="amoPatronale"><%= fmt(values.amoPatronale) %></td>
@@ -899,21 +945,17 @@
                 <tr>
                     <td class="description" title="Déduction utilisée pour calculer le revenu imposable.">Frais professionnels (déduction fiscale)</td>
                     <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
-                    <td class="num" data-result="fraisProRate"><%= fmt(Number(values.fraisProRate || 0) * 100) %>%</td>
+                    <td class="num" data-result="fraisProRate"><%= percent(values.fraisProRate) %></td>
                     <td class="num">—</td>
                     <td class="num" data-result="fraisPro"><%= fmt(values.fraisPro) %></td>
                     <td class="num">—</td>
                 </tr>
 
                 <tr class="gross">
-                    <td colspan="3" class="description">SALAIRE NET IMPOSABLE (SNI)<br></td>
+                    <td class="description">SNI / IR</td>
                     <td class="num"><span data-result="sni"><%= fmt(values.sni) %></span></td>
+                    <td class="num" data-result="irTaux"><%= percent(values.irTaux) %></td>
                     <td class="num">—</td>
-                    <td class="num">—</td>
-                </tr>
-                <tr class="gross">
-                    <td colspan="3" class="description">IR<br></td>
-                    <td class="num"></td>
                     <td class="num"><span data-result="irNet"><%= fmt(values.irNet) %></span></td>
                     <td class="num">—</td>
                 </tr>
@@ -932,7 +974,7 @@
                             <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" <%= canEditIndemnityFields ? '' : 'disabled' %>>
                         </td>
                         <td class="num">—</td>
-                        <td class="num">—</td>
+                        <td class="num"><%= percent(representationRate(line)) %></td>
                         <td class="num"><input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" type="number" min="0" step="0.01" value="<%= line.amount %>" placeholder="Montant DH" <%= canEditIndemnityFields ? '' : 'disabled' %>></td>
                         <td class="num">—</td>
                         <td class="num">—</td>
@@ -1069,6 +1111,7 @@
 
     <% } %>
 </div>
+<% } %></div>
 <script src="/js/show-bulletin.js"></script>
 <%- include('../partials/footer') %>
                 

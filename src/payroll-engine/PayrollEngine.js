@@ -102,21 +102,17 @@ export const calculatePayroll = (employee, overrides = {}) => {
   );
   const heuresSupAmount = overtime.totalAmount;
 
-  // 6. Company-wide non-taxable indemnity. The rate is stored per company as
-  // a decimal (10% = 0.10) and is applied to the effective base salary.
+  // 6. Employee-specific representation indemnity.
   const nimpLines = [];
   const nimpLabels = new Set();
-  const indemnityRateRaw = employee.company?.indemniteNonImposableRate;
-  const indemnityRate = indemnityRateRaw === undefined || indemnityRateRaw === null || indemnityRateRaw === ''
-    ? 0.10
-    : Math.max(0, Number(indemnityRateRaw) || 0);
-  const indemnityEnabled = employee.indemniteNonImposable === true;
-  const indemniteNonImposable = indemnityEnabled
-    ? Number((effectiveBase * indemnityRate).toFixed(2))
+  const representationRate = Math.max(0, Number(employee.indemniteRepresentationRate) || 0);
+  const representationName = String(employee.indemniteRepresentationName || '').trim();
+  const representationAmount = representationName && representationRate > 0
+    ? Number((effectiveBase * representationRate).toFixed(2))
     : 0;
-  if (indemnityEnabled && indemniteNonImposable > 0) {
-    nimpLines.push({ label: 'Indemnité de représentation', amount: indemniteNonImposable });
-    nimpLabels.add('indemnité de représentation');
+  if (representationName && representationAmount > 0) {
+    nimpLines.push({ label: representationName, amount: representationAmount });
+    nimpLabels.add(representationName.toLowerCase());
   }
 
   // 7. Recurring employee bonuses from DB (EmployeeBonus + Bonus catalog)
@@ -129,6 +125,10 @@ export const calculatePayroll = (employee, overrides = {}) => {
         amt = Math.max(0, Number(overrides.niimpOverrides[bonusName]) || 0);
       }
       if (!isTaxable) {
+        // Representation is calculated from the employee percentage above.
+        // Ignore a legacy catalog assignment with the same label so it cannot
+        // be added a second time as a fixed amount.
+        if (representationName && bonusName.trim().toLowerCase() === representationName.toLowerCase()) return;
         nimpLines.push({ label: bonusName, amount: Number(amt.toFixed(2)) });
         nimpLabels.add(bonusName.toLowerCase());
       } else if (amt > 0 && !variableLabels.has(bonusName.toLowerCase())) {
@@ -244,8 +244,8 @@ export const calculatePayroll = (employee, overrides = {}) => {
     variablePrimes,
     nimpLines,
     bonusesIMP,
-    indemniteNonImposableRate: indemnityRate,
-    indemniteNonImposable,
+    indemniteNonImposableRate: representationRate,
+    indemniteNonImposable: representationAmount,
 
     heuresSup25: overtime.heuresSup25,
     heuresSup50: overtime.heuresSup50,

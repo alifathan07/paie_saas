@@ -8,6 +8,13 @@ import {
 } from "../services/employeeService.js";
 import { calculatePayroll } from "../payroll-engine/PayrollEngine.js";
 import { resolveCompanyId } from "../lib/company.js";
+import {
+    listIndemnites,
+    getRepresentationRate,
+    saveEmployeeIndemnites,
+    createIndemnite,
+    removeEmployeeIndemnite,
+} from "../services/indemniteService.js";
 
 const getSessionCompanyId = async (req) => resolveCompanyId(req);
 
@@ -45,11 +52,14 @@ export const renderCreateForm = async (req, res) => {
     try {
         const companyId = await getSessionCompanyId(req);
         const bonusTypes = await getAllBonusTypes(companyId);
+        const indemnites = await listIndemnites(companyId);
+        const representationRate = await getRepresentationRate(companyId);
         res.render("employees/create", {
             title: "Nouveau Salarié",
             currentPage: "employees",
             user: req.session.user,
             bonusTypes,
+            defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
             error: null
         });
     } catch (error) {
@@ -100,7 +110,8 @@ export const handleCreateEmployee = async (req, res) => {
                 ? true
                 : (req.body.actif === '1' || req.body.actif === 'true'),
             cimrReduitBaseImposable: Boolean(req.body.cimrReduitBaseImposable),
-            indemniteNonImposable: req.body.indemniteNonImposable === '1' || req.body.indemniteNonImposable === 'true',
+            indemniteRepresentationName: String(req.body.indemniteRepresentationName || '').trim(),
+            indemniteRepresentationRate: String(req.body.indemniteRepresentationRate || '').trim(),
             blocageSaisiePaie: req.body.blocageSaisiePaie === '1' || req.body.blocageSaisiePaie === 'true',
         });
         res.redirect("/employees");
@@ -155,6 +166,10 @@ export const renderEditForm = async (req, res) => {
         const employee = await getEmployee(parseInt(id), await getSessionCompanyId(req));
         const companyId = employee.companyId;
         const bonusTypes = await getAllBonusTypes(companyId);
+        const indemnites = await listIndemnites(companyId);
+        const representationRate = await getRepresentationRate(companyId);
+        employee.indemnitesNonImposables = employee.bonuses.filter(item => item.bonus && !item.bonus.taxable)
+            .map(item => ({ ...item, indemniteId: item.bonusId, indemnite: item.bonus }));
 
         res.render("employees/edit", {
             title: `Éditer: ${employee.nomComplet}`,
@@ -162,12 +177,45 @@ export const renderEditForm = async (req, res) => {
             user: req.session.user,
             employee,
             bonusTypes,
+            indemnites,
+            defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
             error: null
         });
     } catch (error) {
         console.error("Error rendering edit form:", error);
         res.redirect("/employees");
     }
+};
+
+// POST /employees/:id/indemnites — replace recurring non-taxable indemnities
+export const handleEmployeeIndemnites = async (req, res) => {
+    try {
+        const activeCompanyId = await getSessionCompanyId(req);
+        const ids = req.body.employeeIndemniteIds ? (Array.isArray(req.body.employeeIndemniteIds) ? req.body.employeeIndemniteIds : [req.body.employeeIndemniteIds]) : [];
+        const amounts = req.body.employeeIndemniteAmounts ? (Array.isArray(req.body.employeeIndemniteAmounts) ? req.body.employeeIndemniteAmounts : [req.body.employeeIndemniteAmounts]) : [];
+        const rows = ids.map((bonusId, index) => ({ bonusId, amount: amounts[index] }));
+        const names = req.body.newIndemniteNames ? (Array.isArray(req.body.newIndemniteNames) ? req.body.newIndemniteNames : [req.body.newIndemniteNames]) : [];
+        const newAmounts = req.body.newIndemniteAmounts ? (Array.isArray(req.body.newIndemniteAmounts) ? req.body.newIndemniteAmounts : [req.body.newIndemniteAmounts]) : [];
+        for (let i = 0; i < names.length; i += 1) {
+            if (!String(names[i] || '').trim()) continue;
+            const definition = await createIndemnite({ companyId: activeCompanyId, name: names[i], defaultAmount: newAmounts[i] });
+            rows.push({ bonusId: definition.id, amount: newAmounts[i] });
+        }
+        await saveEmployeeIndemnites(req.params.id, activeCompanyId, rows);
+        return res.redirect(`/employees/${req.params.id}/edit?tab=indemnites`);
+    } catch (error) {
+        console.error("Error saving employee indemnités:", error);
+        return res.redirect(`/employees/${req.params.id}/edit?tab=indemnites&error=indemnites`);
+    }
+};
+
+export const handleRemoveEmployeeIndemnite = async (req, res) => {
+    try {
+        await removeEmployeeIndemnite(req.params.id, req.params.bonusId, await getSessionCompanyId(req));
+    } catch (error) {
+        console.error("Error removing employee indemnité:", error);
+    }
+    return res.redirect(`/employees/${req.params.id}/edit?tab=indemnites`);
 };
 
 // POST /employees/:id/edit — Update employee
@@ -186,6 +234,7 @@ export const handleUpdateEmployee = async (req, res) => {
             ...employeeData
         } = req.body;
         const bonusList = [];
+        const bonusFieldsProvided = bonusIds !== undefined || bonusAmounts !== undefined || customBonusNames !== undefined || customBonusAmounts !== undefined;
 
         if (bonusIds) {
             const ids = Array.isArray(bonusIds) ? bonusIds : [bonusIds];
@@ -209,17 +258,24 @@ export const handleUpdateEmployee = async (req, res) => {
 
         await updateEmp(id, {
             ...employeeData,
-            bonusList,
+            ...(bonusFieldsProvided ? { bonusList } : {}),
             actif: req.body.actif === '1' || req.body.actif === 'true',
             cimrReduitBaseImposable: Boolean(req.body.cimrReduitBaseImposable),
-            indemniteNonImposable: req.body.indemniteNonImposable === '1' || req.body.indemniteNonImposable === 'true',
+            indemniteRepresentationName: req.body.representationEnabled === '1' || req.body.representationEnabled === 'true'
+                ? 'Indemnité de représentation'
+                : '',
+            indemniteRepresentationRate: req.body.representationEnabled === '1' || req.body.representationEnabled === 'true'
+                ? String(req.body.indemniteRepresentationRate || '').trim()
+                : '',
             blocageSaisiePaie: Boolean(req.body.blocageSaisiePaie),
         }, activeCompanyId);
-        res.redirect(`/employees/${id}`);
+        res.redirect(`/employees/${id}/edit`);
     } catch (error) {
         console.error("Error updating employee:", error);
         const companyId = await getSessionCompanyId(req);
         const bonusTypes = await getAllBonusTypes(companyId);
+        const indemnites = await listIndemnites(companyId);
+        const representationRate = await getRepresentationRate(companyId);
 
         res.status(400).render("employees/edit", {
             title: employee ? `Éditer: ${employee.nomComplet}` : "Éditer salarié",
@@ -227,6 +283,8 @@ export const handleUpdateEmployee = async (req, res) => {
             user: req.session.user,
             employee: employee || {},
             bonusTypes,
+            indemnites,
+            defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
             error: "Erreur lors de la mise à jour. Vérifiez les informations saisies."
         });
     }

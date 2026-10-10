@@ -15,22 +15,22 @@ datasource db {
 }
 
 model Company {
-  id        Int      @id @default(autoincrement())
-  name      String
-  adresse   String?
-  ville     String?
-  ice       String?  @unique
-  ifNumber  String?  @unique
-  rc        String?  @unique
+  id                    Int             @id @default(autoincrement())
+  name                  String
+  adresse               String?
+  ville                 String?
+  ice                   String?         @unique
+  ifNumber              String?         @unique
+  rc                    String?         @unique
   numeroAffiliationCnss String?
-  smig      Decimal? @db.Decimal(12, 2)
-  numeroAssurance String?
-  workingTimeMode WorkingTimeMode @default(DAYS)
-  standardMonthlyDays Decimal @default(26) @db.Decimal(8, 2)
-  standardMonthlyHours Decimal @default(191) @db.Decimal(8, 2)
-  indemniteNonImposableRate Decimal @default(0.1000) @db.Decimal(6, 4)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  smig                  Decimal?        @db.Decimal(12, 2)
+  numeroAssurance       String?
+  workingTimeMode       WorkingTimeMode @default(DAYS)
+  standardMonthlyDays   Decimal         @default(26) @db.Decimal(8, 2)
+  standardMonthlyHours  Decimal         @default(191) @db.Decimal(8, 2)
+  indemniteRepresentationRate Decimal   @default(0.10) @db.Decimal(6, 4)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   userCompanies UserCompany[]
   employees     Employee[]
@@ -42,20 +42,20 @@ model Company {
 }
 
 model Users {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  isAdmin   Boolean  @default(false)
-  isBlocked Boolean  @default(false)
-  blockReason String?
-  maxCompanies Int @default(1)
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  password     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  isAdmin      Boolean  @default(false)
+  isBlocked    Boolean  @default(false)
+  blockReason  String?
+  maxCompanies Int      @default(1)
 
   userCompanies UserCompany[]
   reports       Report[]
-  auditLogs     AuditLog[] @relation("AuditActor")
+  auditLogs     AuditLog[]    @relation("AuditActor")
 
   @@map("users")
 }
@@ -73,18 +73,18 @@ enum WorkingTimeMode {
 }
 
 model Report {
-  id         Int          @id @default(autoincrement())
-  subject    String
-  message    String       @db.Text
-  adminNote  String?      @db.Text
-  status     ReportStatus @default(OPEN)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  solvedAt   DateTime?
-  userId     Int
-  companyId  Int?
-  user       Users        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company    Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  id        Int          @id @default(autoincrement())
+  subject   String
+  message   String       @db.Text
+  adminNote String?      @db.Text
+  status    ReportStatus @default(OPEN)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  solvedAt  DateTime?
+  userId    Int
+  companyId Int?
+  user      Users        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
   @@index([status, createdAt])
@@ -159,7 +159,7 @@ enum ModePaiement {
 model Employee {
   id            Int      @id @default(autoincrement())
   matricule     String
-  nomComplet    String 
+  nomComplet    String
   cin           String   @unique
   dateNaissance DateTime
   sexe          Sexe
@@ -196,19 +196,20 @@ model Employee {
   agence       String?
   rib          String?      @unique
 
-  actif                   Boolean         @default(true)
-  indemniteNonImposable   Boolean         @default(false)
-  bulletinMasque          Boolean         @default(false)
-  cimrRate                Decimal?        @db.Decimal(6, 4)
-  cimrReduitBaseImposable Boolean         @default(false)
-  bonuses                 EmployeeBonus[]
-  payslips                Payslip[]
-  bulletinMasks           BulletinMask[]
-  baseSalary              Decimal         @db.Decimal(12, 2)
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
-  company                 Company         @relation(fields: [companyId], references: [id])
-  companyId               Int
+  actif                       Boolean         @default(true)
+  indemniteRepresentationName String?
+  indemniteRepresentationRate Decimal?        @db.Decimal(6, 4)
+  bulletinMasque              Boolean         @default(false)
+  cimrRate                    Decimal?        @db.Decimal(6, 4)
+  cimrReduitBaseImposable     Boolean         @default(false)
+  bonuses                     EmployeeBonus[]
+  payslips                    Payslip[]
+  bulletinMasks               BulletinMask[]
+  baseSalary                  Decimal         @db.Decimal(12, 2)
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+  company                     Company         @relation(fields: [companyId], references: [id])
+  companyId                   Int
 
   @@unique([companyId, matricule])
 }
@@ -217,6 +218,7 @@ model Bonus {
   id        Int      @id @default(autoincrement())
   companyId Int
   name      String
+  defaultAmount Decimal @default(0) @db.Decimal(12, 2)
   taxable   Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -245,18 +247,18 @@ model EmployeeBonus {
 // ================================
 
 model Payslip {
-  id            Int       @id @default(autoincrement())
-  employeeId    Int
-  month         Int // 1 - 12 (Count)
-  year          Int // e.g. 2026 (Count)
-  workedDays    Decimal   @default(26) @db.Decimal(8, 2) // Historical day-equivalent
-  workedHours   Decimal?  @db.Decimal(8, 2)
-  workingTimeMode WorkingTimeMode?
-  standardMonthlyDays Decimal? @db.Decimal(8, 2)
-  standardMonthlyHours Decimal? @db.Decimal(8, 2)
-  status        String    @default("DRAFT") // DRAFT, GENERATED, VALIDATED, CLOSED, ERROR
-  validatedAt   DateTime?
-  validatedById Int?
+  id                   Int              @id @default(autoincrement())
+  employeeId           Int
+  month                Int // 1 - 12 (Count)
+  year                 Int // e.g. 2026 (Count)
+  workedDays           Decimal          @default(26) @db.Decimal(8, 2) // Historical day-equivalent
+  workedHours          Decimal?         @db.Decimal(8, 2)
+  workingTimeMode      WorkingTimeMode?
+  standardMonthlyDays  Decimal?         @db.Decimal(8, 2)
+  standardMonthlyHours Decimal?         @db.Decimal(8, 2)
+  status               String           @default("DRAFT") // DRAFT, GENERATED, VALIDATED, CLOSED, ERROR
+  validatedAt          DateTime?
+  validatedById        Int?
 
   // Money amounts: Decimal(12, 2)
   baseSalary       Decimal @db.Decimal(12, 2)

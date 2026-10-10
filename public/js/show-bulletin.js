@@ -273,6 +273,11 @@
 
     function renderPayroll(result) {
         ['baseSalary', 'sbg', 'sbi', 'sni', 'cnss', 'amo', 'irNet', 'fraisPro', 'netAPayer', 'primeAnciennete', 'cnssPatronale', 'amoPatronale'].forEach(key => setResult(key, result[key]));
+        document.querySelectorAll('[data-result="irTaux"]').forEach(node => {
+            node.textContent = result.irTaux === undefined || result.irTaux === null
+                ? '—'
+                : `${Number(result.irTaux * 100).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+        });
         document.querySelectorAll('[data-result="arrondiGains"]').forEach(node => { node.textContent = Number(result.arrondi || 0) > 0 ? money(result.arrondi) : '—'; });
         document.querySelectorAll('[data-result="arrondiRetenues"]').forEach(node => { node.textContent = Number(result.arrondi || 0) < 0 ? money(Math.abs(result.arrondi)) : '—'; });
         document.querySelectorAll('[data-result="fraisProRate"]').forEach(node => {
@@ -385,5 +390,100 @@
         if (event.target === workingTimeInput && page.dataset.saved === 'true') return;
         calculate();
     });
+
+    const employeePanel = document.querySelector('#bulletin-employee-panel');
+    const employeeList = document.querySelector('#bulletin-employee-list');
+    const employeeSearch = document.querySelector('#bulletin-employee-search');
+    const panelToggle = document.querySelector('#bulletin-panel-toggle');
+    const noEmployeeResults = document.querySelector('#bulletin-employee-no-results');
+    const employeeLinks = [...document.querySelectorAll('.bulletin-employee-link')];
+    const panelStorageKey = employeePanel ? `bulletin-panel:${employeePanel.dataset.period}` : null;
+    const formSignature = () => JSON.stringify([...new FormData(form).entries()]);
+    let savedFormSignature = formSignature();
+    let switchingEmployee = false;
+
+    if (employeePanel && panelStorageKey) {
+        const panelState = JSON.parse(sessionStorage.getItem(panelStorageKey) || '{}');
+        if (panelState.collapsed) {
+            employeePanel.classList.add('is-collapsed');
+            panelToggle?.setAttribute('aria-expanded', 'false');
+            panelToggle?.setAttribute('title', 'Afficher la liste');
+        }
+        if (employeeList && Number.isFinite(panelState.scrollTop)) employeeList.scrollTop = panelState.scrollTop;
+        employeeList?.addEventListener('scroll', () => {
+            const state = JSON.parse(sessionStorage.getItem(panelStorageKey) || '{}');
+            sessionStorage.setItem(panelStorageKey, JSON.stringify({ ...state, scrollTop: employeeList.scrollTop }));
+        });
+        panelToggle?.addEventListener('click', () => {
+            const collapsed = employeePanel.classList.toggle('is-collapsed');
+            panelToggle.setAttribute('aria-expanded', String(!collapsed));
+            panelToggle.setAttribute('title', collapsed ? 'Afficher la liste' : 'Réduire la liste');
+            const state = JSON.parse(sessionStorage.getItem(panelStorageKey) || '{}');
+            sessionStorage.setItem(panelStorageKey, JSON.stringify({ ...state, collapsed }));
+        });
+        employeeSearch?.addEventListener('input', () => {
+            const query = employeeSearch.value.trim().toLowerCase();
+            let visible = 0;
+            employeeLinks.forEach(link => {
+                const matches = !query || link.dataset.search.includes(query);
+                link.hidden = !matches;
+                if (matches) visible++;
+            });
+            if (noEmployeeResults) noEmployeeResults.hidden = visible !== 0;
+        });
+    }
+
+    const saveConfirmation = document.querySelector('#save-confirmation');
+    const saveConfirmationStorageKey = 'bulletin-save-confirmation';
+    const showSavedConfirmation = () => {
+        if (!saveConfirmation) return;
+        saveConfirmation.hidden = false;
+        clearTimeout(showSavedConfirmation.timer);
+        showSavedConfirmation.timer = setTimeout(() => { saveConfirmation.hidden = true; }, 2200);
+    };
+    if (sessionStorage.getItem(saveConfirmationStorageKey) === 'true') {
+        sessionStorage.removeItem(saveConfirmationStorageKey);
+        showSavedConfirmation();
+    }
+    const hasPendingChanges = () => !locked && formSignature() !== savedFormSignature;
+    const saveBeforeSwitch = async () => {
+        if (!hasPendingChanges()) return true;
+        if (switchingEmployee) return false;
+        switchingEmployee = true;
+        const state = document.querySelector('#calculation-state');
+        const error = document.querySelector('#calculation-error');
+        state.textContent = 'Enregistrement…';
+        error.hidden = true;
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: { Accept: 'text/html' },
+                body: new FormData(form),
+            });
+            if (!response.ok || !response.url.includes(`/bulletins/${page.dataset.employeeId}`)) {
+                throw new Error('Impossible d’enregistrer les modifications.');
+            }
+            savedFormSignature = formSignature();
+            page.dataset.saved = 'true';
+            state.textContent = 'Enregistré';
+            sessionStorage.setItem(saveConfirmationStorageKey, 'true');
+            showSavedConfirmation();
+            return true;
+        } catch (failure) {
+            state.textContent = 'Modification non enregistrée';
+            error.textContent = failure.message;
+            error.hidden = false;
+            return false;
+        } finally {
+            switchingEmployee = false;
+        }
+    };
+    employeeLinks.forEach(link => link.addEventListener('click', async event => {
+        if (locked || !hasPendingChanges()) return;
+        event.preventDefault();
+        link.setAttribute('aria-busy', 'true');
+        if (await saveBeforeSwitch()) window.location.assign(link.href);
+        link.removeAttribute('aria-busy');
+    }));
     if (page.dataset.saved !== 'true') calculate();
 })();
