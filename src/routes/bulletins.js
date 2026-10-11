@@ -19,6 +19,7 @@ import {
     addMonthlyIndemnity,
     stickMonthlyIndemnity,
     deleteMonthlyIndemnity,
+    restoreEmployeeIndemnity,
     updateMonthlyIndemnity,
     downloadPdfBulletin,
     maskBulletin,
@@ -48,6 +49,7 @@ bulletins.post("/:id/primes/delete", deleteMonthlyPrime);
 bulletins.post("/:id/indemnities", addMonthlyIndemnity);
 bulletins.post("/:id/indemnities/stick", stickMonthlyIndemnity);
 bulletins.post("/:id/indemnities/delete", deleteMonthlyIndemnity);
+bulletins.post("/:id/indemnities/restore", restoreEmployeeIndemnity);
 bulletins.post("/:id/indemnities/update", updateMonthlyIndemnity);
 
 // PDF Download route

@@ -16,12 +16,20 @@ import { isAuth } from "../../middlewares/auth.js";
 import { calculateNetToBase } from "../controllers/netToBase.controller.js";
 import { employeeImportUpload } from "../../middlewares/employeeImportUpload.js";
 import { importPage, importEmployees } from "../controllers/employeeImport.controller.js";
+import { index as categoryIndex, create as createCategory, createInline as createCategoryInline, update as updateCategory, remove as removeCategory } from "../controllers/employeeCategory.controller.js";
+import { createInline as createFunctionInline } from "../controllers/employeeFunction.controller.js";
 
 export const employee = express.Router();
 employee.post("/net-to-base", isAuth, calculateNetToBase);
 
 // CRUD Routes
 employee.get("/", listEmployees);
+employee.get("/categories", categoryIndex);
+employee.post("/categories", createCategory);
+employee.post("/categories/inline", createCategoryInline);
+employee.post("/functions/inline", createFunctionInline);
+employee.post("/categories/:id/edit", updateCategory);
+employee.post("/categories/:id/delete", removeCategory);
 employee.get("/create", renderCreateForm);
 employee.post("/create", handleCreateEmployee);
 employee.get("/import", importPage);

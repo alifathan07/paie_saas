@@ -1,5 +1,6 @@
 import XLSX from "xlsx";
 import prisma from "../../db.ts";
+import { getOrCreateEmployeeCategory, getOrCreateEmployeeFunction } from "./employeeService.js";
 
 function responseHeader(response, name) {
     return typeof response?.headers?.get === "function"
@@ -100,7 +101,7 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         dateSortie: "YYYY-MM-DD or null",
         fonction: "string or null",
         codeService: "string or null",
-        statut: "TITULAIRE, NON_TITULAIRE, or VACATAIRE",
+        category: "string, required; use the employee category name",
         natureEmploi: "PERMANENT, OCCASIONNEL, STAGIAIRE, EXONERE, or DOCTORANT",
         contratDateDebut: "YYYY-MM-DD or null",
         contratDateFin: "YYYY-MM-DD or null",
@@ -134,7 +135,7 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
             messages: [
                 {
                     role: "system",
-                    content: `You normalize employee spreadsheet rows into JSON. Respond with JSON only: no Markdown, no triple-backtick json fences, no explanations before or after the JSON. The exact root shape is {"employees":[...]}; do not return any other root shape. Map any language, spelling, abbreviations, column order, and French date/number formats to the allowed fields. Never invent a value that is not present except defaults explicitly requested. Preserve CIN, matricule, bank numbers, and names as strings. Use null for missing optional fields. Required fields must be null when absent so the application can report them. If the spreadsheet does not contain a value for nbPersonacharge, return null; the application will calculate it as nbEnfantCharge + 1. Every output object must include sourceRow from the input. Allowed fields and formats: ${JSON.stringify(fields)}. Defaults: sexe=M, statut=TITULAIRE, natureEmploi=PERMANENT, situationFam=CELIBATAIRE, nbEnfantCharge=0, modePaiement=VIREMENT. For date-only values return YYYY-MM-DD. Convert decimal commas to numbers.`
+                    content: `You normalize employee spreadsheet rows into JSON. Respond with JSON only: no Markdown, no triple-backtick json fences, no explanations before or after the JSON. The exact root shape is {"employees":[...]}; do not return any other root shape. Map any language, spelling, abbreviations, column order, and French date/number formats to the allowed fields. Never invent a value that is not present except defaults explicitly requested. Preserve CIN, matricule, bank numbers, and names as strings. Use null for missing optional fields. Required fields must be null when absent so the application can report them. If the spreadsheet does not contain a value for nbPersonacharge, return null; the application will calculate it as nbEnfantCharge + 1. Every output object must include sourceRow from the input. Allowed fields and formats: ${JSON.stringify(fields)}. Defaults: category=Employé, natureEmploi=PERMANENT, situationFam=CELIBATAIRE, nbEnfantCharge=0, modePaiement=VIREMENT. For date-only values return YYYY-MM-DD. Convert decimal commas to numbers.`
                 },
                 { role: "user", content: JSON.stringify({ sheet: sheetName, headers, rows }) }
             ]
@@ -203,7 +204,6 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
     log("info", "ai.mapping.completed", { mappedRowCount: parsed.employees.length });
 
     const allowedSexes = new Set(["M", "F"]);
-    const allowedStatuses = new Set(["TITULAIRE", "NON_TITULAIRE", "VACATAIRE"]);
     const allowedNature = new Set(["PERMANENT", "OCCASIONNEL", "STAGIAIRE", "EXONERE", "DOCTORANT"]);
     const allowedFamily = new Set(["CELIBATAIRE", "MARIE", "DIVORCE", "VEUF"]);
     const allowedPayment = new Set(["VIREMENT", "CHEQUE", "ESPECE"]);
@@ -220,7 +220,7 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         employee.cin = String(employee.cin || "").trim();
         employee.matricule = String(employee.matricule || `EMP-${Date.now()}-${index + 1}`).trim();
         employee.sexe = String(employee.sexe || "M").toUpperCase();
-        employee.statut = String(employee.statut || "TITULAIRE").toUpperCase();
+        employee.category = String(employee.category || "Employé").trim();
         employee.natureEmploi = String(employee.natureEmploi || "PERMANENT").toUpperCase();
         employee.situationFam = String(employee.situationFam || "CELIBATAIRE").toUpperCase();
         employee.modePaiement = String(employee.modePaiement || "VIREMENT").toUpperCase();
@@ -239,7 +239,7 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         if (!employee.dateEmbauche) errors.push(`Ligne ${sourceRow}: dateEmbauche est obligatoire.`);
         if (!Number.isFinite(employee.baseSalary) || employee.baseSalary < 0) errors.push(`Ligne ${sourceRow}: baseSalary est invalide.`);
         if (!allowedSexes.has(employee.sexe)) errors.push(`Ligne ${sourceRow}: sexe est invalide.`);
-        if (!allowedStatuses.has(employee.statut)) errors.push(`Ligne ${sourceRow}: statut est invalide.`);
+        if (!employee.category) errors.push(`Ligne ${sourceRow}: catégorie est obligatoire.`);
         if (!allowedNature.has(employee.natureEmploi)) errors.push(`Ligne ${sourceRow}: natureEmploi est invalide.`);
         if (!allowedFamily.has(employee.situationFam)) errors.push(`Ligne ${sourceRow}: situationFam est invalide.`);
         if (!allowedPayment.has(employee.modePaiement)) errors.push(`Ligne ${sourceRow}: modePaiement est invalide.`);
@@ -262,6 +262,19 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
     }
     if (errors.length) { log("warn", "duplicates.found", { errorCount: errors.length }); const error = new Error("IMPORT_DUPLICATES"); error.details = errors; throw error; }
 
+    const categoryIds = new Map();
+    const functionIds = new Map();
+    for (const employee of clean) {
+        if (!categoryIds.has(employee.category)) {
+            const category = await getOrCreateEmployeeCategory(targetCompanyId, employee.category);
+            categoryIds.set(employee.category, category.id);
+        }
+        const functionName = String(employee.fonction || '').trim();
+        if (functionName && !functionIds.has(functionName)) {
+            const employeeFunction = await getOrCreateEmployeeFunction(targetCompanyId, undefined, functionName, employee.codeService);
+            functionIds.set(functionName, employeeFunction.id);
+        }
+    }
     log("info", "database.transaction.started", { employeeCount: clean.length, companyId: targetCompanyId });
     const created = await prisma.$transaction(clean.map((employee) => prisma.employee.create({ data: {
         matricule: employee.matricule,
@@ -272,9 +285,9 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         dateEmbauche: new Date(employee.dateEmbauche),
         dateAnciennete: new Date(employee.dateAnciennete),
         dateSortie: employee.dateSortie ? new Date(employee.dateSortie) : null,
-        fonction: employee.fonction || null,
+        functionId: functionIds.get(String(employee.fonction || '').trim()) || null,
         codeService: employee.codeService || null,
-        statut: employee.statut,
+        categoryId: categoryIds.get(employee.category),
         natureEmploi: employee.natureEmploi,
         contratDateDebut: employee.contratDateDebut ? new Date(employee.contratDateDebut) : null,
         contratDateFin: employee.contratDateFin ? new Date(employee.contratDateFin) : null,

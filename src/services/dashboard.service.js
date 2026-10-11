@@ -33,7 +33,8 @@ export const getDashboardStats = async (companyId) => {
             where,
             orderBy: { createdAt: 'desc' },
             include: {
-                company: true
+                company: true,
+                employeeFunction: true
             }
         });
 

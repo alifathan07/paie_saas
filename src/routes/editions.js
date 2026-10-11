@@ -95,7 +95,7 @@ async function pdfDataFromPayslip(payslip) {
         employeeName: emp.nomComplet,
         employeeMatricule: emp.matricule,
         employeeCNSS: emp.numeroCNSS || "—",
-        employeeFonction: emp.fonction || "—",
+        employeeFonction: emp.employeeFunction ? emp.employeeFunction.name : "—",
         employeeAddress: emp.adresse || "—",
         codeService: emp.codeService || "—",
         birthDate: emp.dateNaissance ? new Date(emp.dateNaissance).toLocaleDateString("fr-MA") : "—",
@@ -140,7 +140,7 @@ editions.post("/bulletins/pdf", async (req, res) => {
                 year,
                 employee: { companyId },
             },
-            include: { bonuses: true, employee: { include: { company: true } } },
+            include: { bonuses: true, employee: { include: { company: true, employeeFunction: true } } },
             orderBy: { employee: { matricule: "asc" } },
         });
         const selected = payslips.filter(payslip => {

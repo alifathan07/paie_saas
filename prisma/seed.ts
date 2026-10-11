@@ -43,6 +43,27 @@ async function main() {
 
   console.log(`✅ Companies seeded: "${company1.name}", "${company2.name}"`);
 
+  const categoryTitulaire1 = await prisma.employeeCategory.upsert({
+    where: { companyId_name: { companyId: company1.id, name: "Titulaire" } },
+    update: {}, create: { companyId: company1.id, name: "Titulaire" },
+  });
+  const categoryNonTitulaire1 = await prisma.employeeCategory.upsert({
+    where: { companyId_name: { companyId: company1.id, name: "Non Titulaire" } },
+    update: {}, create: { companyId: company1.id, name: "Non Titulaire" },
+  });
+  const categoryTitulaire2 = await prisma.employeeCategory.upsert({
+    where: { companyId_name: { companyId: company2.id, name: "Titulaire" } },
+    update: {}, create: { companyId: company2.id, name: "Titulaire" },
+  });
+  const seedFunction = async (companyId: number, name: string, code: string) => prisma.employeeFunction.upsert({
+    where: { companyId_name: { companyId, name } }, update: { code }, create: { companyId, name, code },
+  });
+  const functionEngineer = await seedFunction(company1.id, "Ingénieur d'État", "ING-01");
+  const functionTechnician = await seedFunction(company1.id, "Technicien Supérieur", "TECH-01");
+  const functionTraining = await seedFunction(company2.id, "Conseillère en Formation", "FORM-01");
+  const functionDirector = await seedFunction(company1.id, "Directeur Technique", "DIR-01");
+  const functionDeveloper = await seedFunction(company1.id, "Développeuse Web", "IT-01");
+
   // 2. Seed Reusable Non-Taxable Bonus Catalog per Company
   const bonusRendement = await prisma.bonus.upsert({
     where: { companyId_name: { companyId: company1.id, name: "Prime de Rendement (Exonérée)" } },
@@ -121,9 +142,9 @@ async function main() {
       dateNaissance: new Date("1985-09-22"),
       sexe: "M",
       dateEmbauche: new Date("2019-06-15"),
-      fonction: "Ingénieur d'État",
+      functionId: functionEngineer.id,
       codeService: "ING-01",
-      statut: "TITULAIRE",
+      categoryId: categoryTitulaire1.id,
       natureEmploi: "PERMANENT",
       situationFam: "MARIE",
       nbPersonacharge: 3,
@@ -157,9 +178,9 @@ async function main() {
       dateNaissance: new Date("1990-03-30"),
       sexe: "M",
       dateEmbauche: new Date("2021-02-10"),
-      fonction: "Technicien Supérieur",
+      functionId: functionTechnician.id,
       codeService: "TECH-01",
-      statut: "TITULAIRE",
+      categoryId: categoryTitulaire1.id,
       natureEmploi: "PERMANENT",
       situationFam: "MARIE",
       nbPersonacharge: 1,
@@ -192,9 +213,9 @@ async function main() {
       dateNaissance: new Date("1995-07-19"),
       sexe: "F",
       dateEmbauche: new Date("2023-09-01"),
-      fonction: "Conseillère en Formation",
+      functionId: functionTraining.id,
       codeService: "FORM-01",
-      statut: "TITULAIRE",
+      categoryId: categoryTitulaire2.id,
       natureEmploi: "PERMANENT",
       situationFam: "MARIE",
       nbPersonacharge: 2,
@@ -222,9 +243,9 @@ async function main() {
       dateNaissance: new Date("1988-02-18"),
       sexe: "M",
       dateEmbauche: new Date("2021-08-24"),
-      fonction: "Directeur Technique",
+      functionId: functionDirector.id,
       codeService: "DIR-01",
-      statut: "TITULAIRE",
+      categoryId: categoryTitulaire1.id,
       natureEmploi: "PERMANENT",
       situationFam: "MARIE",
       nbPersonacharge: 4,
@@ -260,9 +281,9 @@ async function main() {
       dateNaissance: new Date("2000-01-25"),
       sexe: "F",
       dateEmbauche: new Date("2025-11-15"),
-      fonction: "Développeuse Web",
+      functionId: functionDeveloper.id,
       codeService: "IT-01",
-      statut: "NON_TITULAIRE",
+      categoryId: categoryNonTitulaire1.id,
       natureEmploi: "STAGIAIRE",
       situationFam: "CELIBATAIRE",
       nbPersonacharge: 0,

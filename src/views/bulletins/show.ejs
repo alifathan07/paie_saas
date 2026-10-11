@@ -260,6 +260,30 @@
         border-radius: 6px;
     }
 
+    .payroll-print .restore-indemnity-list {
+        display: grid;
+        gap: 7px;
+        margin: 0 0 18px;
+        padding: 12px;
+        border: 1px solid #cbd3da;
+        border-radius: 6px;
+        background: #f7f9fa;
+    }
+
+    .payroll-print .restore-indemnity {
+        border: 0;
+        padding: 7px 9px;
+        text-align: left;
+        color: var(--ink);
+        background: #fff;
+        cursor: pointer;
+        font: inherit;
+    }
+
+    .payroll-print .restore-indemnity:hover {
+        background: #eaf2f7;
+    }
+
     @media (max-width: 760px) {
         .payroll-print {
             margin: 12px;
@@ -704,6 +728,7 @@
         .map(item => `${String(item.bonus ? item.bonus.name : item.name || '').toLowerCase()}|${Number(item.amount)}`));
     const nimpLines = bulletin ? (bulletin.fixedNimpLines || []) : (values.nimpLines || []);
     const monthlyNimpLines = bulletin ? (bulletin.monthlyNimpLines || []) : [];
+    const excludedNimpLines = bulletin ? (bulletin.excludedNimpLines || []) : [];
     const annual = annualCumulative || values.annualCumulative || {};
     const arrondi = Number(values.arrondi || 0);
     const totalGains = Number(values.sbg || 0) + Math.max(0, arrondi);
@@ -819,7 +844,7 @@
             </div>
             <div class="item">
                 <span class="label">FONCTION</span>
-                <%= emp.fonction || '—' %>
+                <%= emp.employeeFunction ? emp.employeeFunction.name : '—' %>
             </div>
             <div class="item">
                 <span class="label">N° CIN</span>
@@ -977,7 +1002,9 @@
                         <td class="num"><%= percent(representationRate(line)) %></td>
                         <td class="num"><input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" type="number" min="0" step="0.01" value="<%= line.amount %>" placeholder="Montant DH" <%= canEditIndemnityFields ? '' : 'disabled' %>></td>
                         <td class="num">—</td>
-                        <td class="num">—</td>
+                        <td class="num">
+                            <% if (canManageIndemnity) { %><button type="button" class="remove-prime" aria-label="Supprimer l'indemnité">×</button><% } else { %>—<% } %>
+                        </td>
                     </tr>
                 <% }); %>
                 <% monthlyNimpLines.forEach(line => { %>
@@ -1090,7 +1117,14 @@
         <dialog class="prime-dialog" id="indemnity-dialog">
             <form method="dialog" id="indemnity-dialog-form" class="prime-dialog-content">
                 <h2>Ajouter une indemnité non imposable</h2>
-                <p>Elle sera ajoutée uniquement au bulletin du mois courant, après l'IR.</p>
+                <% if (canManageIndemnity && excludedNimpLines.length) { %>
+                    <div class="restore-indemnity-list">
+                        <strong>Remettre une indemnité supprimée</strong>
+                        <% excludedNimpLines.forEach(line => { %>
+                            <button type="button" class="restore-indemnity" data-label="<%= line.label %>">Remettre cette indemnité : <%= line.label %></button>
+                        <% }); %>
+                    </div>
+                <% } %>
                 <div class="prime-dialog-fields">
                     <label>
                         Libellé de l'indemnité

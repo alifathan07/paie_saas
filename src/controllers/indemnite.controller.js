@@ -6,6 +6,7 @@ import {
     deleteIndemnite,
     getRepresentationRate,
     updateRepresentationRate,
+    REPRESENTATION_NAME,
 } from "../services/indemniteService.js";
 
 const companyId = req => resolveCompanyId(req);
@@ -20,6 +21,8 @@ export async function index(req, res) {
             currentPage: "indemnites",
             user: req.session.user,
             indemnites,
+            representationConfigured: indemnites.some(item => item.isRepresentation),
+            representationName: REPRESENTATION_NAME,
             representationRate: Number((representationRate * 100).toFixed(2)),
             error: null,
         });
@@ -28,6 +31,8 @@ export async function index(req, res) {
         return res.status(500).render("indemnites/index", {
             title: "Indemnités non imposables", currentPage: "indemnites", user: req.session.user,
             indemnites: [], representationRate: 10, error: "Impossible de charger les indemnités.",
+            representationConfigured: false,
+            representationName: REPRESENTATION_NAME,
         });
     }
 }
@@ -53,6 +58,8 @@ export async function create(req, res) {
         return res.status(400).render("indemnites/index", {
             title: "Indemnités non imposables", currentPage: "indemnites", user: req.session.user,
             indemnites,
+            representationConfigured: indemnites.some(item => item.isRepresentation),
+            representationName: REPRESENTATION_NAME,
             representationRate: Number((representationRate * 100).toFixed(2)),
             error: error.code === "P2002" ? "Cette indemnité existe déjà." : "Le nom et le montant par défaut sont obligatoires.",
         });

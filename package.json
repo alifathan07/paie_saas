@@ -9,6 +9,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:representation": "node test_representation_indemnity_flow.js",
+    "seed:employees": "tsx prisma/seed-employees.ts",
     "postinstall": "prisma generate && (prisma skills sync || true)"
   },
   "prisma": {

@@ -11,6 +11,7 @@
 
 <% if (error) { %><div class="alert alert-error" role="alert"><%= error %></div><% } %>
 
+<% if (!representationConfigured) { %>
 <section class="catalog-create-card representation-settings-card">
     <div class="catalog-create-copy">
         <span class="catalog-create-icon">%</span>
@@ -26,6 +27,7 @@
         <button class="btn-primary" type="submit">Enregistrer</button>
     </form>
 </section>
+<% } %>
 
 <section class="catalog-create-card">
     <div class="catalog-create-copy"><span class="catalog-create-icon">+</span><div><h2>Ajouter une indemnité</h2><p>Créez un libellé réutilisable dans les fiches salariés.</p></div></div>
@@ -43,14 +45,14 @@
     <% if (indemnites.length) { %>
         <div class="data-table-wrapper catalog-table-wrapper">
             <table class="data-table catalog-table">
-                <thead><tr><th>Nom</th><th>Montant par défaut</th><th>Salariés affectés</th><th class="catalog-actions-heading">Actions</th></tr></thead>
+                <thead><tr><th>Nom</th><th>Valeur par défaut</th><th>Salariés affectés</th><th class="catalog-actions-heading">Actions</th></tr></thead>
                 <tbody>
                     <% indemnites.forEach(function (item) { %>
                         <tr>
-                            <td><form id="edit-indemnite-<%= item.id %>" action="/indemnites/<%= item.id %>/edit" method="POST"></form><input form="edit-indemnite-<%= item.id %>" class="form-input catalog-name-input" name="name" value="<%= item.name %>" required maxlength="191"></td>
-                            <td><input form="edit-indemnite-<%= item.id %>" class="form-input catalog-amount-input" type="number" name="defaultAmount" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>" required> <span class="currency-label">DH</span></td>
+                            <td><form id="edit-indemnite-<%= item.id %>" action="/indemnites/<%= item.id %>/edit" method="POST"></form><input form="edit-indemnite-<%= item.id %>" class="form-input catalog-name-input" name="name" value="<%= item.name %>" <%= item.isRepresentation ? 'readonly' : '' %> required maxlength="191"></td>
+                            <td><input form="edit-indemnite-<%= item.id %>" class="form-input catalog-amount-input" type="number" name="defaultAmount" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>" required> <span class="currency-label"><%= item.isRepresentation ? '%' : 'DH' %></span><% if (item.isRepresentation) { %><small class="catalog-value-help">Taux par défaut</small><% } %></td>
                             <td><span class="assignment-count"><%= item._count.employees %></span> <%= item._count.employees === 1 ? 'salarié' : 'salariés' %></td>
-                            <td class="catalog-actions"><button class="btn-secondary btn-compact" form="edit-indemnite-<%= item.id %>" type="submit">Enregistrer</button><form id="delete-indemnite-<%= item.id %>" action="/indemnites/<%= item.id %>/delete" method="POST"></form><button class="btn-icon-delete btn-compact" type="submit" form="delete-indemnite-<%= item.id %>" data-delete-indemnite="<%= item.name %>"><span aria-hidden="true">⌫</span> Supprimer</button></td>
+                            <td class="catalog-actions"><button class="btn-secondary btn-compact" form="edit-indemnite-<%= item.id %>" type="submit">Enregistrer</button><form id="delete-indemnite-<%= item.id %>" action="/indemnites/<%= item.id %>/delete" method="POST"></form><button class="btn-icon-delete btn-compact" type="submit" form="delete-indemnite-<%= item.id %>" data-delete-indemnite="<%= item.name %>" data-is-representation="<%= item.isRepresentation ? '1' : '0' %>"><span aria-hidden="true">⌫</span> Supprimer</button></td>
                         </tr>
                     <% }); %>
                 </tbody>
@@ -77,7 +79,9 @@ let pendingCatalogDeleteForm = null;
 document.querySelectorAll('[data-delete-indemnite]').forEach(button => button.addEventListener('click', event => {
     event.preventDefault();
     pendingCatalogDeleteForm = button.form;
-    catalogDeleteMessage.textContent = `« ${button.dataset.deleteIndemnite} » et ses affectations seront supprimées du catalogue.`;
+    catalogDeleteMessage.textContent = button.dataset.isRepresentation === '1'
+        ? `« ${button.dataset.deleteIndemnite} » sera retirée du catalogue. Les taux déjà attribués aux employés seront conservés.`
+        : `« ${button.dataset.deleteIndemnite} » et ses affectations seront supprimées du catalogue.`;
     catalogDeleteConfirm.hidden = false;
 }));
 document.querySelectorAll('[data-close-catalog-delete]').forEach(button => button.addEventListener('click', () => { catalogDeleteConfirm.hidden = true; pendingCatalogDeleteForm = null; }));

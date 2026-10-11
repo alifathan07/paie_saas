@@ -33,6 +33,7 @@ const BULLETIN_STATUS = Object.freeze({
 
 const isLockedBulletin = (status) => status === BULLETIN_STATUS.VALIDATED || status === BULLETIN_STATUS.CLOSED;
 const isClosedBulletin = (status) => status === BULLETIN_STATUS.CLOSED;
+const EXCLUDED_NIMP_PREFIX = "__bulletin_excluded_employee_indemnity__:";
 
 function rejectLockedBulletin(res, payslip, action = "modifier") {
     if (!payslip || !isLockedBulletin(payslip.status)) return false;
@@ -220,7 +221,11 @@ async function applyCumulativeIR(employeeId, month, year, calc, dependents) {
     };
 }
 
-async function persistPayslipBonuses(payslipId, calc, client = prisma) {
+async function persistPayslipBonuses(payslipId, calc, client = prisma, excludedNimpLabels = []) {
+    const existingExclusions = await client.payslipBonus.findMany({
+        where: { payslipId, name: { startsWith: EXCLUDED_NIMP_PREFIX } },
+        select: { name: true, amount: true },
+    });
     await client.payslipBonus.deleteMany({ where: { payslipId } });
     const taxable = (calc.variablePrimes || [])
         .filter(p => p.amount > 0)
@@ -228,20 +233,53 @@ async function persistPayslipBonuses(payslipId, calc, client = prisma) {
     const nimp = (calc.nimpLines || [])
         .filter(p => p.amount > 0)
         .map(p => ({ payslipId, name: p.label, amount: p.amount, taxable: false }));
-    const rows = [...taxable, ...nimp];
+    const exclusionRows = [
+        ...existingExclusions.map(item => ({
+            label: String(item.name).slice(EXCLUDED_NIMP_PREFIX.length),
+            amount: Number(item.amount) || 0,
+        })),
+        ...excludedNimpLabels.map(item => typeof item === 'string'
+            ? { label: item, amount: 0 }
+            : { label: item.label, amount: Number(item.amount) || 0 }),
+    ];
+    const exclusions = [...new Map(exclusionRows
+        .map(item => [String(item.label || '').trim().toLowerCase(), item])
+        .filter(([label]) => label))
+        .values()]
+        .map(item => ({ payslipId, name: `${EXCLUDED_NIMP_PREFIX}${String(item.label).trim()}`, amount: item.amount, taxable: false }));
+    const rows = [...taxable, ...nimp, ...exclusions];
     if (rows.length > 0) {
         await client.payslipBonus.createMany({ data: rows });
         
     }
 }
 
-async function savePayslipWithBonuses(payslipData, payslipId, calc) {
+async function savePayslipWithBonuses(payslipData, payslipId, calc, excludedNimpLabels = [], clearExcludedNimpLabels = []) {
     return prisma.$transaction(async transaction => {
         const payslip = payslipId
             ? await transaction.payslip.update({ where: { id: payslipId }, data: payslipData })
             : await transaction.payslip.create({ data: payslipData });
-        await persistPayslipBonuses(payslip.id, calc, transaction);
-        return payslip;
+        const clearLabels = new Set(clearExcludedNimpLabels.map(label => String(label || '').trim().toLowerCase()));
+        if (clearLabels.size) {
+            const markers = await transaction.payslipBonus.findMany({
+                where: { payslipId: payslip.id, name: { startsWith: EXCLUDED_NIMP_PREFIX } },
+                select: { id: true, name: true },
+            });
+            await transaction.payslipBonus.deleteMany({
+                where: {
+                    id: { in: markers
+                        .filter(marker => clearLabels.has(String(marker.name).slice(EXCLUDED_NIMP_PREFIX.length).trim().toLowerCase()))
+                        .map(marker => marker.id) },
+                },
+            });
+        }
+        await persistPayslipBonuses(payslip.id, calc, transaction, excludedNimpLabels);
+        // Reload the relation after replacing the lines. The bulletin view uses
+        // these persisted rows to display recurring and monthly indemnities.
+        return transaction.payslip.findUnique({
+            where: { id: payslip.id },
+            include: { bonuses: true },
+        });
     });
 }
 
@@ -306,10 +344,22 @@ function runEmployeeCalculation(emp, overrides = {}) {
 async function refreshOpenBulletinFromEmployee(emp, payslip) {
     if (!payslip || isLockedBulletin(payslip.status)) return payslip;
 
-    const fixedTaxableLabels = new Set((emp.bonuses || [])
+    const excludedNimpLabels = new Set((payslip.bonuses || [])
+        .filter(item => String(item.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
+        .map(item => String(item.name).slice(EXCLUDED_NIMP_PREFIX.length).trim().toLowerCase()));
+    const calculationEmployee = {
+        ...emp,
+        bonuses: (emp.bonuses || []).filter(item => !excludedNimpLabels.has(
+            String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()
+        )),
+        ...(excludedNimpLabels.has(String(emp.indemniteRepresentationName || '').trim().toLowerCase())
+            ? { indemniteRepresentationName: null, indemniteRepresentationRate: null }
+            : {}),
+    };
+    const fixedTaxableLabels = new Set((calculationEmployee.bonuses || [])
         .filter(item => item.bonus ? Boolean(item.bonus.taxable) : Boolean(item.taxable))
         .map(item => String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()));
-    const fixedNimpLabels = new Set((emp.bonuses || [])
+    const fixedNimpLabels = new Set((calculationEmployee.bonuses || [])
         .filter(item => item.bonus ? !Boolean(item.bonus.taxable) : !Boolean(item.taxable))
         .map(item => String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()));
     const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
@@ -320,13 +370,14 @@ async function refreshOpenBulletinFromEmployee(emp, payslip) {
     const monthlyNimpLines = (payslip.bonuses || [])
         .filter(item => !item.taxable
             && !fixedNimpLabels.has(String(item.name).trim().toLowerCase())
-            && (!representationLabel || String(item.name).trim().toLowerCase() !== representationLabel))
+            && (!representationLabel || String(item.name).trim().toLowerCase() !== representationLabel)
+            && !String(item.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
         .map(item => ({ label: item.name, amount: Number(item.amount) }));
 
-    const monthlyCalc = runEmployeeCalculation(emp, {
+    const monthlyCalc = runEmployeeCalculation(calculationEmployee, {
         month: payslip.month,
         year: payslip.year,
-        ...resolveWorkingTimeForPayslip(emp, payslip),
+        ...resolveWorkingTimeForPayslip(calculationEmployee, payslip),
         // No baseSalary override: use the employee's current base salary.
         heuresSup25: Number(payslip.heuresSup25 || 0),
         heuresSup50: Number(payslip.heuresSup50 || 0),
@@ -335,9 +386,9 @@ async function refreshOpenBulletinFromEmployee(emp, payslip) {
         variablePrimes,
         monthlyNimpLines,
     });
-    const calc = await applyCumulativeIR(emp.id, payslip.month, payslip.year, monthlyCalc, emp.nbPersonacharge);
+    const calc = await applyCumulativeIR(calculationEmployee.id, payslip.month, payslip.year, monthlyCalc, calculationEmployee.nbPersonacharge);
     const rates = await getPayrollRates();
-    const data = await buildPayslipData(emp, calc, payslip.month, payslip.year, rates, payslip.status);
+    const data = await buildPayslipData(calculationEmployee, calc, payslip.month, payslip.year, rates, payslip.status);
     return savePayslipWithBonuses(data, payslip.id, calc);
 }
 
@@ -361,11 +412,14 @@ function resolveWorkingTimeForPayslip(emp, payslip = null, input = {}) {
 export function mapPayslipToViewModel(p) {
     if (!p) return null;
     const variablePrimes = (p.bonuses || [])
-        .filter(b => b.taxable)
+        .filter(b => b.taxable && !String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
         .map(b => ({ label: b.name, amount: Number(b.amount) }));
     const nimpLines = (p.bonuses || [])
-        .filter(b => !b.taxable)
+        .filter(b => !b.taxable && !String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX) && Number(b.amount) > 0)
         .map(b => ({ label: b.name, amount: Number(b.amount) }));
+    const excludedNimpLines = (p.bonuses || [])
+        .filter(b => String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
+        .map(b => ({ label: String(b.name).slice(EXCLUDED_NIMP_PREFIX.length), amount: Number(b.amount) }));
 
     const sniNum = Number(p.sni);
     const irRateNum = p.irRate ? Number(p.irRate) : 0;
@@ -464,6 +518,7 @@ export function mapPayslipToViewModel(p) {
         avances: Number(p.avances || 0),
         variablePrimes,
         nimpLines,
+        excludedNimpLines,
         createdAt: p.createdAt ? p.createdAt.toISOString() : null,
         validatedAt: p.validatedAt ? p.validatedAt.toISOString() : null,
     };
@@ -1258,6 +1313,7 @@ export const deleteMonthlyIndemnity = async (req, res) => {
         const year = parseInt(req.body.year) || currentYear();
         const label = String(req.body.label || '').trim();
         const amount = Number(req.body.amount);
+        const removeEmployee = req.body.removeEmployee === true || req.body.removeEmployee === 'true';
 
         if (!label || !Number.isFinite(amount) || amount <= 0) {
             return res.status(400).json({ ok: false, error: "L'indemnité à supprimer est invalide." });
@@ -1278,11 +1334,45 @@ export const deleteMonthlyIndemnity = async (req, res) => {
             return res.status(403).json({ ok: false, error: "Ce bulletin ne peut pas être modifié." });
         }
 
-        const fixedNimpLabels = new Set((emp.bonuses || [])
+        const targetLabel = label.toLowerCase();
+        const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+        const storedBonus = (emp.bonuses || []).find(b =>
+            !(b.bonus ? b.bonus.taxable : b.taxable)
+            && String(b.bonus ? b.bonus.name : b.name || '').trim().toLowerCase() === targetLabel
+            && Number(b.amount) === amount
+        );
+        const isRepresentation = Boolean(representationLabel && representationLabel === targetLabel);
+
+        if (removeEmployee && !storedBonus && !isRepresentation) {
+            return res.status(404).json({ ok: false, error: "Cette indemnité n'est pas récurrente." });
+        }
+
+        let calculationEmployee = emp;
+        if (removeEmployee && storedBonus) {
+            await prisma.employeeBonus.delete({
+                where: { employeeId_bonusId: { employeeId: emp.id, bonusId: storedBonus.bonusId } },
+            });
+            calculationEmployee = await getActiveEmployee(req, empId, { bonuses: { include: { bonus: true } } });
+        } else if (removeEmployee && isRepresentation) {
+            await prisma.employee.update({
+                where: { id: emp.id },
+                data: { indemniteRepresentationName: null, indemniteRepresentationRate: null },
+            });
+            calculationEmployee = await getActiveEmployee(req, empId, { bonuses: { include: { bonus: true } } });
+        } else if (storedBonus) {
+            calculationEmployee = { ...emp, bonuses: (emp.bonuses || []).filter(b => b !== storedBonus) };
+        } else if (isRepresentation) {
+            calculationEmployee = { ...emp, indemniteRepresentationName: null, indemniteRepresentationRate: null };
+        }
+
+        const fixedNimpLabels = new Set((calculationEmployee.bonuses || [])
             .filter(b => !(b.bonus ? b.bonus.taxable : b.taxable))
             .map(b => String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()));
+        const calculationRepresentationLabel = String(calculationEmployee.indemniteRepresentationName || '').trim().toLowerCase();
         const monthlyNimpLines = existing.bonuses
-            .filter(b => !b.taxable && !fixedNimpLabels.has(String(b.name).toLowerCase()))
+            .filter(b => !b.taxable
+                && !fixedNimpLabels.has(String(b.name).toLowerCase())
+                && (!calculationRepresentationLabel || String(b.name).toLowerCase() !== calculationRepresentationLabel))
             .map(b => ({ label: b.name, amount: Number(b.amount) }));
         const deleteIndex = monthlyNimpLines.findIndex(line =>
             line.label.toLowerCase() === label.toLowerCase() && line.amount === amount
@@ -1295,6 +1385,87 @@ export const deleteMonthlyIndemnity = async (req, res) => {
         const variablePrimes = existing.bonuses
             .filter(b => b.taxable)
             .map(b => ({ label: b.name, amount: Number(b.amount) }));
+        const monthlyCalc = runEmployeeCalculation(calculationEmployee, {
+            month,
+            year,
+            baseSalary: Number(existing.baseSalary),
+            ...resolveWorkingTimeForPayslip(emp, existing),
+            heuresSup25: existing.heuresSup25 || 0,
+            heuresSup50: existing.heuresSup50 || 0,
+            heuresSup100: existing.heuresSup100 || 0,
+            avances: existing.avances || 0,
+            variablePrimes,
+            monthlyNimpLines,
+        });
+        const calc = await applyCumulativeIR(calculationEmployee.id, month, year, monthlyCalc, calculationEmployee.nbPersonacharge);
+        const rates = await getPayrollRates();
+        const payslipData = await buildPayslipData(
+            calculationEmployee,
+            calc,
+            month,
+            year,
+            rates,
+            existing.status === BULLETIN_STATUS.VALIDATED
+                ? BULLETIN_STATUS.VALIDATED
+                : (isClosedBulletin(existing.status) ? BULLETIN_STATUS.CLOSED : BULLETIN_STATUS.GENERATED)
+        );
+        const payslip = await savePayslipWithBonuses(
+            payslipData,
+            existing.id,
+            calc,
+            [{ label, amount }]
+        );
+        return res.json({ ok: true, payroll: calc });
+    } catch (err) {
+        console.error("Delete monthly indemnity error:", err);
+        return res.status(500).json({ ok: false, error: "Impossible de supprimer l'indemnité." });
+    }
+};
+
+// POST /bulletins/:id/indemnities/restore — restore an employee indemnity
+// removed only from the current bulletin.
+export const restoreEmployeeIndemnity = async (req, res) => {
+    try {
+        const empId = parseInt(req.params.id);
+        const month = parseInt(req.body.month) || currentMonth();
+        const year = parseInt(req.body.year) || currentYear();
+        const label = String(req.body.label || '').trim();
+        const key = label.toLowerCase();
+        if (!label) return res.status(400).json({ ok: false, error: "Indemnité invalide." });
+
+        const emp = await getActiveEmployee(req, empId, { bonuses: { include: { bonus: true } } });
+        if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
+        const existing = await prisma.payslip.findUnique({
+            where: { employeeId_month_year: { employeeId: empId, month, year } },
+            include: { bonuses: true },
+        });
+        if (!existing) return res.status(404).json({ ok: false, error: "Bulletin introuvable." });
+        if (isLockedBulletin(existing.status)) return res.status(403).json({ ok: false, error: "Bulletin verrouillé." });
+
+        const deletedLine = (existing.bonuses || []).find(bonus =>
+            String(bonus.name || '').startsWith(EXCLUDED_NIMP_PREFIX)
+            && String(bonus.name).slice(EXCLUDED_NIMP_PREFIX.length).trim().toLowerCase() === key
+        );
+        if (!deletedLine) {
+            return res.status(404).json({ ok: false, error: "Cette indemnité n'est pas supprimée du bulletin." });
+        }
+
+        const fixedNimpLabels = new Set((emp.bonuses || [])
+            .filter(bonus => !(bonus.bonus ? bonus.bonus.taxable : bonus.taxable))
+            .map(bonus => String(bonus.bonus ? bonus.bonus.name : bonus.name || '').trim().toLowerCase()));
+        const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+        const monthlyNimpLines = existing.bonuses
+            .filter(bonus => !bonus.taxable
+                && !String(bonus.name || '').startsWith(EXCLUDED_NIMP_PREFIX)
+                && !fixedNimpLabels.has(String(bonus.name).trim().toLowerCase())
+                && (!representationLabel || String(bonus.name).trim().toLowerCase() !== representationLabel))
+            .map(bonus => ({ label: bonus.name, amount: Number(bonus.amount) }));
+        if (!fixedNimpLabels.has(key) && key !== representationLabel && Number(deletedLine.amount) > 0) {
+            monthlyNimpLines.push({ label, amount: Number(deletedLine.amount) });
+        }
+        const variablePrimes = existing.bonuses
+            .filter(bonus => bonus.taxable)
+            .map(bonus => ({ label: bonus.name, amount: Number(bonus.amount) }));
         const monthlyCalc = runEmployeeCalculation(emp, {
             month,
             year,
@@ -1309,21 +1480,12 @@ export const deleteMonthlyIndemnity = async (req, res) => {
         });
         const calc = await applyCumulativeIR(emp.id, month, year, monthlyCalc, emp.nbPersonacharge);
         const rates = await getPayrollRates();
-        const payslipData = await buildPayslipData(
-            emp,
-            calc,
-            month,
-            year,
-            rates,
-            existing.status === BULLETIN_STATUS.VALIDATED
-                ? BULLETIN_STATUS.VALIDATED
-                : (isClosedBulletin(existing.status) ? BULLETIN_STATUS.CLOSED : BULLETIN_STATUS.GENERATED)
-        );
-        const payslip = await savePayslipWithBonuses(payslipData, existing.id, calc);
-        return res.json({ ok: true, payroll: calc });
+        const payslipData = await buildPayslipData(emp, calc, month, year, rates, existing.status);
+        const payslip = await savePayslipWithBonuses(payslipData, existing.id, calc, [], [label]);
+        return res.json({ ok: true, payroll: calc, payslipId: payslip.id });
     } catch (err) {
-        console.error("Delete monthly indemnity error:", err);
-        return res.status(500).json({ ok: false, error: "Impossible de supprimer l'indemnité." });
+        console.error("Restore employee indemnity error:", err);
+        return res.status(500).json({ ok: false, error: "Impossible de restaurer l'indemnité." });
     }
 };
 
@@ -1442,7 +1604,7 @@ export const updateBulletinWorkedDays = async (req, res) => {
         if (!companyId) return res.status(400).json({ ok: false, error: 'Aucune entreprise associée à cette session.' });
         const existing = await prisma.payslip.findFirst({
             where: { employeeId, month, year, employee: { companyId } },
-            include: { employee: { include: { company: true } }, bonuses: true },
+            include: { employee: { include: { company: true, employeeFunction: true } }, bonuses: true },
         });
         if (!existing) return res.status(404).json({ ok: false, error: 'Générez le bulletin avant de modifier les jours.' });
         if (existing.employee.blocageSaisiePaie || ![BULLETIN_STATUS.DRAFT, BULLETIN_STATUS.GENERATED].includes(existing.status)) {
@@ -1841,7 +2003,7 @@ export const downloadPdfBulletin = async (req, res) => {
             include: {
                 bonuses: true,
                 employee: {
-                    include: { company: true }
+                    include: { company: true, employeeFunction: true }
                 }
             }
         });
@@ -1867,7 +2029,7 @@ export const downloadPdfBulletin = async (req, res) => {
             employeeName: emp.nomComplet,
             employeeMatricule: emp.matricule,
             employeeCNSS: emp.numeroCNSS || '—',
-            employeeFonction: emp.fonction || '—',
+            employeeFonction: emp.employeeFunction ? emp.employeeFunction.name : '—',
             employeeAddress: emp.adresse || '—',
             codeService: emp.codeService || '—',
             birthDate: emp.dateNaissance ? new Date(emp.dateNaissance).toLocaleDateString('fr-MA') : '—',

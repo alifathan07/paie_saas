@@ -34,6 +34,8 @@ model Company {
 
   userCompanies UserCompany[]
   employees     Employee[]
+  employeeCategories EmployeeCategory[]
+  employeeFunctions EmployeeFunction[]
   bonuses       Bonus[]
   reports       Report[]
   auditLogs     AuditLog[]
@@ -136,12 +138,6 @@ enum SituationFamiliale {
   VEUF
 }
 
-enum StatutEmploye {
-  TITULAIRE // "Oui" in the form
-  NON_TITULAIRE // "Non"
-  VACATAIRE
-}
-
 enum NatureEmploi {
   PERMANENT
   OCCASIONNEL
@@ -168,9 +164,11 @@ model Employee {
   dateEmbauche      DateTime // Dte Embauche
   dateAnciennete    DateTime? // Dte Ancienneté — separate from hire date (rehires, transferred seniority)
   dateSortie        DateTime? // Date Sortie
-  fonction          String? // Fonction (job title)
+  functionId        Int?
+  employeeFunction  EmployeeFunction? @relation(fields: [functionId], references: [id])
   codeService       String? // Code Service (department/cost center)
-  statut            StatutEmploye @default(TITULAIRE) // Titulaire: Oui/Non/Vacataire
+  categoryId        Int
+  category          EmployeeCategory @relation(fields: [categoryId], references: [id])
   natureEmploi      NatureEmploi  @default(PERMANENT) // gates CNSS/AMO logic — stagiaire/exonere ≠ same contributions
   contratDateDebut  DateTime? // Contrat Du
   contratDateFin    DateTime? // Contrat Au (nullable = CDI)
@@ -212,6 +210,38 @@ model Employee {
   companyId                   Int
 
   @@unique([companyId, matricule])
+  @@index([categoryId])
+  @@index([functionId])
+}
+
+model EmployeeCategory {
+  id        Int      @id @default(autoincrement())
+  name      String
+  companyId Int
+  createdAt DateTime @default(now())
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("employee_categories")
+}
+
+model EmployeeFunction {
+  id        Int      @id @default(autoincrement())
+  name      String
+  code      String
+  companyId Int
+  createdAt DateTime @default(now())
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([companyId, name])
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("employee_functions")
 }
 
 model Bonus {

@@ -2,6 +2,7 @@ import prisma from "../../db.ts";
 import { refreshDraftPayslips } from "./employeePayrollRefresh.service.js";
 
 export const DEFAULT_REPRESENTATION_RATE = 0.10;
+export const REPRESENTATION_NAME = 'Indemnité de représentation';
 
 function companyKey(companyId) {
     const id = Number(companyId);
@@ -40,10 +41,31 @@ export async function getRepresentationRate(companyId) {
 }
 
 export async function updateRepresentationRate(companyId, rate) {
-    return prisma.company.update({
-        where: { id: companyKey(companyId) },
-        data: { indemniteRepresentationRate: cleanRate(rate) },
-        select: { indemniteRepresentationRate: true },
+    const cId = companyKey(companyId);
+    const normalizedRate = cleanRate(rate);
+    const catalogueRate = Number((normalizedRate * 100).toFixed(2));
+    return prisma.$transaction(async tx => {
+        const company = await tx.company.update({
+            where: { id: cId },
+            data: { indemniteRepresentationRate: normalizedRate },
+            select: { indemniteRepresentationRate: true },
+        });
+        const definitions = await tx.bonus.findMany({
+            where: { companyId: cId, taxable: false },
+            select: { id: true, name: true },
+        });
+        const existingDefinition = definitions.find(definition => isRepresentationName(definition.name));
+        if (existingDefinition) {
+            await tx.bonus.update({
+                where: { id: existingDefinition.id },
+                data: { name: REPRESENTATION_NAME, defaultAmount: catalogueRate, taxable: false },
+            });
+        } else {
+            await tx.bonus.create({
+                data: { companyId: cId, name: REPRESENTATION_NAME, defaultAmount: catalogueRate, taxable: false },
+            });
+        }
+        return company;
     });
 }
 
@@ -54,7 +76,11 @@ export async function listIndemnites(companyId) {
         orderBy: { name: "asc" },
         include: { _count: { select: { employeeBonuses: true } } },
     });
-    return rows.map(row => ({ ...row, _count: { employees: row._count.employeeBonuses } }));
+    return rows.map(row => ({
+        ...row,
+        isRepresentation: isRepresentationName(row.name),
+        _count: { employees: row._count.employeeBonuses },
+    }));
 }
 
 export async function createIndemnite({ companyId, name, defaultAmount }) {
@@ -66,6 +92,9 @@ export async function createIndemnite({ companyId, name, defaultAmount }) {
 export async function updateIndemnite(id, { companyId, name, defaultAmount }) {
     const existing = await prisma.bonus.findFirst({ where: { id: Number(id), companyId: companyKey(companyId), taxable: false } });
     if (!existing) throw new Error("INDEMNITE_NOT_FOUND");
+    if (isRepresentationName(existing.name)) {
+        return updateRepresentationRate(companyId, defaultAmount);
+    }
     const clean = cleanName(name);
     if (!clean) throw new Error("INVALID_INDEMNITE_NAME");
     return prisma.bonus.update({ where: { id: existing.id }, data: { name: clean, defaultAmount: cleanAmount(defaultAmount) } });

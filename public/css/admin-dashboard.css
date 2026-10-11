@@ -336,6 +336,14 @@ body.admin-dashboard-shell .table-link:hover {
   border-color: #a5b4fc;
 }
 
+body.admin-dashboard-shell .table-link-danger {
+  color: var(--admin-danger);
+}
+
+body.admin-dashboard-shell .table-link-danger:hover {
+  color: #9f3449;
+}
+
 body.admin-dashboard-shell .data-table-wrapper {
   overflow-x: auto;
   background: #fff;

@@ -11,6 +11,90 @@ export const getAllBonusTypes = async (companyId) => {
     });
 };
 
+const cleanCategoryName = name => String(name || '').trim().slice(0, 191);
+
+export const getEmployeeCategories = async (companyId) => {
+    const cId = Number(companyId);
+    if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    return prisma.employeeCategory.findMany({
+        where: { companyId: cId }, orderBy: { name: 'asc' },
+        include: { _count: { select: { employees: true } } },
+    });
+};
+
+export const getOrCreateEmployeeCategory = async (companyId, categoryId) => {
+    const cId = Number(companyId);
+    if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    if (categoryId !== undefined && categoryId !== null && String(categoryId).trim() !== '') {
+        const category = await prisma.employeeCategory.findFirst({ where: { id: Number(categoryId), companyId: cId } });
+        if (!category) throw new Error('EMPLOYEE_CATEGORY_NOT_FOUND');
+        return category;
+    }
+    return prisma.employeeCategory.upsert({
+        where: { companyId_name: { companyId: cId, name: 'Employé' } },
+        create: { companyId: cId, name: 'Employé' }, update: {},
+    });
+};
+
+export const createEmployeeCategory = async (companyId, name) => {
+    const clean = cleanCategoryName(name);
+    if (!clean) throw new Error('INVALID_EMPLOYEE_CATEGORY');
+    return prisma.employeeCategory.create({ data: { companyId: Number(companyId), name: clean } });
+};
+
+export const updateEmployeeCategory = async (id, companyId, name) => {
+    const clean = cleanCategoryName(name);
+    if (!clean) throw new Error('INVALID_EMPLOYEE_CATEGORY');
+    const category = await prisma.employeeCategory.findFirst({ where: { id: Number(id), companyId: Number(companyId) } });
+    if (!category) throw new Error('EMPLOYEE_CATEGORY_NOT_FOUND');
+    return prisma.employeeCategory.update({ where: { id: category.id }, data: { name: clean } });
+};
+
+export const deleteEmployeeCategory = async (id, companyId) => {
+    const category = await prisma.employeeCategory.findFirst({
+        where: { id: Number(id), companyId: Number(companyId) },
+        include: { _count: { select: { employees: true } } },
+    });
+    if (!category) throw new Error('EMPLOYEE_CATEGORY_NOT_FOUND');
+    if (category._count.employees > 0) throw new Error('EMPLOYEE_CATEGORY_IN_USE');
+    return prisma.employeeCategory.delete({ where: { id: category.id } });
+};
+
+export const getEmployeeFunctions = async (companyId) => {
+    const cId = Number(companyId);
+    if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    return prisma.employeeFunction.findMany({
+        where: { companyId: cId }, orderBy: { name: 'asc' },
+        include: { _count: { select: { employees: true } } },
+    });
+};
+
+export const getOrCreateEmployeeFunction = async (companyId, functionId, name, code) => {
+    const cId = Number(companyId);
+    if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    if (functionId !== undefined && functionId !== null && String(functionId).trim() !== '') {
+        const employeeFunction = await prisma.employeeFunction.findFirst({ where: { id: Number(functionId), companyId: cId } });
+        if (!employeeFunction) throw new Error('EMPLOYEE_FUNCTION_NOT_FOUND');
+        return employeeFunction;
+    }
+    const clean = String(name || '').trim().slice(0, 191);
+    if (!clean) return null;
+    const existing = await prisma.employeeFunction.findUnique({ where: { companyId_name: { companyId: cId, name: clean } } });
+    if (existing) return existing;
+    const generatedCode = String(code || `FONCTION-${Date.now()}`).trim().slice(0, 64);
+    return prisma.employeeFunction.upsert({
+        where: { companyId_name: { companyId: cId, name: clean } },
+        create: { companyId: cId, name: clean, code: generatedCode }, update: {},
+    });
+};
+
+export const createEmployeeFunction = async (companyId, name, code) => {
+    const clean = String(name || '').trim().slice(0, 191);
+    const cleanCode = String(code || '').trim().slice(0, 64);
+    if (!clean || !cleanCode) throw new Error('INVALID_EMPLOYEE_FUNCTION');
+    return prisma.employeeFunction.create({ data: { companyId: Number(companyId), name: clean, code: cleanCode } });
+};
+
 // Find or create a bonus definition scoped to a specific company
 export const findOrCreateBonusDefinition = async (name, companyId) => {
     const cleanName = name.trim();
@@ -35,7 +119,7 @@ export const findOrCreateBonusDefinition = async (name, companyId) => {
 };
 
 export const getEmployees = async (query = {}) => {
-    const { search, statut, companyId } = query;
+    const { search, categoryId, companyId } = query;
     const where = {};
 
     if (search) {
@@ -45,7 +129,7 @@ export const getEmployees = async (query = {}) => {
             { cin: { contains: search } }
         ];
     }
-    if (statut) where.statut = statut;
+    if (categoryId) where.categoryId = Number(categoryId);
     const cId = Number(companyId);
     if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
     where.companyId = cId;
@@ -55,6 +139,8 @@ export const getEmployees = async (query = {}) => {
         orderBy: { createdAt: 'desc' },
         include: {
             company: true,
+            category: true,
+            employeeFunction: true,
             bonuses: {
                 include: { bonus: true }
             }
@@ -69,6 +155,8 @@ export const getEmployee = async (id, companyId) => {
         where: { id: Number(id), companyId: cId },
         include: {
             company: true,
+            category: true,
+            employeeFunction: true,
             bonuses: {
                 include: { bonus: true }
             }
@@ -105,9 +193,9 @@ async function resolveBonusList(bonusList, fallbackCompanyId) {
 export const createEmployee = async (data) => {
     const {
         matricule, nomComplet, cin, dateNaissance, sexe,
-        dateEmbauche, dateAnciennete, dateSortie, fonction, codeService,
+        dateEmbauche, dateAnciennete, dateSortie, fonction, functionId, codeService,
         contratDateDebut, contratDateFin,
-        statut, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
+        categoryId, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
         cimrRate, cimrReduitBaseImposable,
@@ -116,6 +204,8 @@ export const createEmployee = async (data) => {
 
     const targetCompanyId = Number(companyId);
     if (!Number.isInteger(targetCompanyId) || targetCompanyId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    const category = await getOrCreateEmployeeCategory(targetCompanyId, categoryId);
+    const employeeFunction = await getOrCreateEmployeeFunction(targetCompanyId, functionId, fonction);
 
     const employeeBonusData = bonusList?.length > 0
         ? await resolveBonusList(bonusList, targetCompanyId)
@@ -131,11 +221,11 @@ export const createEmployee = async (data) => {
             dateEmbauche: new Date(dateEmbauche),
             dateAnciennete: dateAnciennete ? new Date(dateAnciennete) : new Date(dateEmbauche),
             dateSortie: dateSortie ? new Date(dateSortie) : null,
-            fonction,
-            codeService,
+            functionId: employeeFunction?.id || null,
+            codeService: employeeFunction?.code || null,
             contratDateDebut: contratDateDebut ? new Date(contratDateDebut) : null,
             contratDateFin: contratDateFin ? new Date(contratDateFin) : null,
-            statut: statut || 'TITULAIRE',
+            categoryId: category.id,
             natureEmploi: natureEmploi || 'PERMANENT',
             situationFam: situationFam || 'CELIBATAIRE',
             nbPersonacharge: Number(nbPersonacharge || 0),
@@ -166,6 +256,8 @@ export const createEmployee = async (data) => {
         },
         include: {
             company: true,
+            category: true,
+            employeeFunction: true,
             bonuses: { include: { bonus: true } }
         }
     });
@@ -174,9 +266,9 @@ export const createEmployee = async (data) => {
 export const updateEmployee = async (id, data, activeCompanyId) => {
     const {
         matricule, nomComplet, cin, dateNaissance, sexe,
-        dateEmbauche, dateAnciennete, dateSortie, fonction, codeService,
+        dateEmbauche, dateAnciennete, dateSortie, fonction, functionId, codeService,
         contratDateDebut, contratDateFin,
-        statut, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
+        categoryId, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
         cimrRate, cimrReduitBaseImposable,
@@ -188,6 +280,12 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
     // Get employee's companyId as fallback for new bonus creation
     const targetCompanyId = Number(activeCompanyId);
     if (!Number.isInteger(targetCompanyId) || targetCompanyId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    const category = categoryId !== undefined && categoryId !== ''
+        ? await getOrCreateEmployeeCategory(targetCompanyId, categoryId)
+        : null;
+    const employeeFunction = functionId !== undefined || fonction !== undefined
+        ? await getOrCreateEmployeeFunction(targetCompanyId, functionId, fonction)
+        : undefined;
     const existing = await prisma.employee.findFirst({
         where: { id: empId, companyId: targetCompanyId },
         select: { companyId: true, baseSalary: true, indemniteRepresentationRate: true }
@@ -218,11 +316,11 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
             dateEmbauche: dateEmbauche ? new Date(dateEmbauche) : undefined,
             dateAnciennete: dateAnciennete ? new Date(dateAnciennete) : undefined,
             dateSortie: dateSortie ? new Date(dateSortie) : null,
-            fonction,
-            codeService,
+            functionId: employeeFunction === undefined ? undefined : (employeeFunction?.id || null),
+            codeService: employeeFunction === undefined ? undefined : (employeeFunction?.code || null),
             contratDateDebut: contratDateDebut ? new Date(contratDateDebut) : null,
             contratDateFin: contratDateFin ? new Date(contratDateFin) : null,
-            statut,
+            categoryId: category ? category.id : undefined,
             natureEmploi,
             situationFam,
             nbPersonacharge: nbPersonacharge !== undefined ? Number(nbPersonacharge) : undefined,
@@ -261,6 +359,8 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
             },
             include: {
                 company: true,
+                category: true,
+                employeeFunction: true,
                 bonuses: { include: { bonus: true } }
             }
         });

@@ -1240,6 +1240,23 @@ select.form-input {
   color: var(--color-primary-hover);
 }
 
+.table-link-button {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.table-link-danger {
+  color: #be5367;
+}
+
+.table-link-danger:hover {
+  color: #9f3449;
+}
+
 .btn-mask {
   display: inline-flex;
   align-items: center;
@@ -4039,3 +4056,16 @@ select.form-input {
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 @media (max-width: 760px) { .catalog-create-card { align-items: stretch; flex-direction: column; } .catalog-create-form { width: 100%; flex-wrap: wrap; } .catalog-create-form .form-input { flex: 1 1 210px; } .catalog-card { padding: 16px; } .catalog-card-header { flex-direction: column; } .catalog-table { min-width: 760px; } .catalog-table-wrapper { overflow-x: auto; } }
 @media (max-width: 640px) { .employee-tabs { grid-template-columns: 1fr; } .employee-tab { min-height: 56px; } .indemnites-bottom-action { align-items: flex-start; flex-direction: column; } }
+.category-select-with-add { display: flex; align-items: center; gap: 8px; }
+.category-select-with-add .form-input { flex: 1; min-width: 0; }
+.category-add-button { flex: 0 0 auto; width: 38px; height: 38px; padding: 0; font-size: 22px; line-height: 1; }
+.category-inline-create { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.category-inline-create .form-input { flex: 1; min-width: 0; }
+.category-modal-card { width: min(460px, 100%); padding: 24px; }
+.category-modal-field { display: grid; gap: 7px; }
+.category-modal-field label { color: var(--color-text); font-size: 13px; font-weight: 600; }
+.category-modal-field .form-input { width: 100%; box-sizing: border-box; }
+.btn-import-excel { display: inline-flex; align-items: center; gap: 7px; padding: 10px 15px; border: 1px solid #248a4b; border-radius: var(--radius-md); color: #fff; background: linear-gradient(180deg, #35b866, #218943); box-shadow: 0 4px 10px rgba(33,137,67,.22); font-weight: 600; text-decoration: none; }
+.btn-import-excel:hover { background: linear-gradient(180deg, #2fa85c, #197638); color: #fff; transform: translateY(-1px); }
+.btn-import-excel:active { transform: translateY(0); }
+.employee-category-badge { display: inline-block; min-width: 0; padding: 4px 9px; font-size: 12px; line-height: 1.2; white-space: nowrap; }

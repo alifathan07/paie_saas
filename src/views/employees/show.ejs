@@ -10,8 +10,7 @@
                 <h1 class="page-title">
                     <%= employee.nomComplet %>
                 </h1>
-                <p class="page-subtitle">Matricule: <%= employee.matricule %> | CIN: <%= employee.cin %> | Status: <%=
-                                employee.statut %>
+                <p class="page-subtitle">Matricule: <%= employee.matricule %> | CIN: <%= employee.cin %> | Catégorie: <%= employee.category ? employee.category.name : '—' %>
                 </p>
             </div>
             <div class="header-actions">
@@ -44,7 +43,7 @@
                     <div>
                         <span style="color: var(--color-text-subtle); display: block;">Fonction / Poste:</span>
                         <strong>
-                            <%= employee.fonction || 'Non défini' %>
+                            <%= employee.employeeFunction ? employee.employeeFunction.name : 'Non défini' %>
                         </strong>
                     </div>
                     <div>
@@ -70,6 +69,10 @@
                         <strong>
                             <%= employee.natureEmploi %>
                         </strong>
+                    </div>
+                    <div>
+                        <span style="color: var(--color-text-subtle); display: block;">Catégorie:</span>
+                        <strong><%= employee.category ? employee.category.name : 'Non définie' %></strong>
                     </div>
                     <div>
                         <span style="color: var(--color-text-subtle); display: block;">Situation Familiale:</span>

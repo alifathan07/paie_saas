@@ -91,6 +91,22 @@
         indemnityLabelInput?.focus();
     });
     document.querySelector('#indemnity-dialog-cancel')?.addEventListener('click', () => indemnityDialog?.close());
+    document.querySelectorAll('.restore-indemnity').forEach(button => button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+            const response = await fetch(`/bulletins/${page.dataset.employeeId}/indemnities/restore`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ label: button.dataset.label, month: page.dataset.month, year: page.dataset.year }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || "Impossible de restaurer l'indemnité.");
+            window.location.reload();
+        } catch (errorObject) {
+            button.disabled = false;
+            window.AppDialog.alert(errorObject.message);
+        }
+    }));
     indemnityDialogForm?.addEventListener('submit', async event => {
         if (event.submitter?.value !== 'add') return;
         event.preventDefault();
@@ -111,7 +127,7 @@
             indemnityDialog?.close();
             const keepForEmployee = await window.AppDialog.confirm(
                 "L’ajouter aux prochains bulletins de cet employé ?",
-                { title: "Conserver l’indemnité", confirmLabel: "Oui, conserver" }
+                { title: "Conserver l’indemnité", confirmLabel: "Oui, conserver", cancelLabel: "Non, seulement ce bulletin" }
             );
             if (keepForEmployee) {
                 const stickResponse = await fetch(`/bulletins/${page.dataset.employeeId}/indemnities/stick`, {
@@ -215,7 +231,21 @@
             const labelInput = row.querySelector('[name="nimpLabels"]');
             const amountInput = row.querySelector('[name="nimpAmounts"]');
             const label = labelInput?.value || 'cette indemnité';
-            if (!(await confirmDeletion(`Voulez-vous vraiment supprimer l'indemnité non imposable « ${label} » ?`))) return;
+            let removeEmployee = false;
+            if (!(await window.AppDialog.confirm(`Voulez-vous supprimer « ${label} » ?`, {
+                title: 'Confirmer la suppression',
+                confirmLabel: 'Oui, supprimer',
+                cancelLabel: 'Annuler',
+                danger: true,
+            }))) return;
+            if (row.dataset.sticky === 'true') {
+                const choice = await window.AppDialog.choice(
+                    'La supprimer aussi de l’employé ?',
+                    { title: 'Suppression définitive', confirmLabel: 'Oui, de la fiche employé', cancelLabel: 'Non, bulletin seulement', abortLabel: 'Annuler', danger: true }
+                );
+                if (choice === null) return;
+                removeEmployee = choice;
+            }
             const removeButton = event.target;
             removeButton.disabled = true;
             try {
@@ -225,6 +255,7 @@
                     body: JSON.stringify({
                         label: labelInput?.value,
                         amount: amountInput?.value,
+                        removeEmployee,
                         month: page.dataset.month,
                         year: page.dataset.year,
                     }),
