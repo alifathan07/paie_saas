@@ -15,6 +15,7 @@
 <% } %>
 
 <form action="/employees/<%= employee.id %>/edit" method="POST" class="enterprise-form">
+    <input type="hidden" name="returnTab" id="employee-return-tab" value="general">
     <nav class="employee-tabs-shell" aria-label="Sections du salarié">
         <div class="employee-tabs-label"><span class="employee-tabs-label-icon">☰</span><div><strong>Sections de la fiche salarié</strong><small>Choisissez une section à modifier</small></div></div>
         <div class="employee-tabs">
@@ -283,11 +284,13 @@ const employeeTabButtons = document.querySelectorAll('.employee-tab');
 const employeePanels = document.querySelectorAll('.employee-tab-panel');
 const employeeGeneral = document.querySelector('.employee-general-content');
 const employeeSubmitBar = document.getElementById('employee-submit-bar');
+const employeeReturnTab = document.getElementById('employee-return-tab');
 employeeTabButtons.forEach(button => button.addEventListener('click', () => {
     employeeTabButtons.forEach(item => item.classList.toggle('active', item === button));
     employeePanels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === button.dataset.tab));
     employeeGeneral.hidden = button.dataset.tab !== 'general';
     employeeSubmitBar.hidden = !['general', 'indemnites'].includes(button.dataset.tab);
+    employeeReturnTab.value = button.dataset.tab;
 }));
 if (new URLSearchParams(window.location.search).get('tab') === 'indemnites') document.querySelector('[data-tab="indemnites"]').click();
 
@@ -300,6 +303,7 @@ if (representationEnabled && representationRate) {
     representationEnabled.addEventListener('change', () => {
         if (representationEnabled.checked && !representationRate.value) representationRate.value = representationRate.dataset.defaultRate || '10';
         representationRate.disabled = !representationEnabled.checked;
+        representationEnabled.form?.requestSubmit();
     });
 }
 document.querySelectorAll('.indemnite-picker-row').forEach(row => {

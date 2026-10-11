@@ -269,7 +269,8 @@ export const handleUpdateEmployee = async (req, res) => {
                 : '',
             blocageSaisiePaie: Boolean(req.body.blocageSaisiePaie),
         }, activeCompanyId);
-        res.redirect(`/employees/${id}/edit`);
+        const returnTab = req.body.returnTab === 'indemnites' ? '?tab=indemnites' : '';
+        res.redirect(`/employees/${id}/edit${returnTab}`);
     } catch (error) {
         console.error("Error updating employee:", error);
         const companyId = await getSessionCompanyId(req);
