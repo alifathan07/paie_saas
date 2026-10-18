@@ -1,0 +1,23 @@
+<%- include('../partials/header') %>
+
+<div class="simple-rubrique-page">
+    <div class="page-header">
+        <div class="header-title-area"><div class="eyebrow">Configuration paie</div><h1 class="page-title">Rubriques de paie</h1><p class="page-subtitle">Modifiez les codes affichés sur les bulletins de la société active.</p></div>
+    </div>
+    <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+    <% if (success) { %><div class="alert alert-success"><%= success %></div><% } %>
+
+    <section class="simple-rubrique-card" id="base"><div class="simple-rubrique-heading"><div><h2>Rubriques de base</h2><p>Salaire, ancienneté et totaux calculés automatiquement.</p></div><span><%= rubriques.base.length %></span></div>
+        <div class="simple-rubrique-table-wrap"><table class="simple-rubrique-table"><thead><tr><th>Libellé</th><th>Code rubrique</th><th></th></tr></thead><tbody><% rubriques.base.forEach(row => { %><tr><td><strong><%= row.name %></strong><small><%= row.key %></small></td><td><form id="base-<%= row.id %>" method="POST" action="/rubriques/fixed/base/<%= row.id %>"></form><input form="base-<%= row.id %>" name="code" value="<%= row.code %>" required maxlength="64" class="simple-code-input"></td><td><button form="base-<%= row.id %>" class="simple-save" type="submit">Enregistrer</button></td></tr><% }); %></tbody></table></div>
+    </section>
+
+    <section class="simple-rubrique-card" id="imposables"><div class="simple-rubrique-heading"><div><h2>Autre rubrique de base</h2><p>Pour les heures supplémentaires, commissions et autres ajouts au brut imposable.</p></div><span><%= rubriques.imposable.length %></span></div>
+        <form method="POST" action="/rubriques/imposable" class="simple-rubrique-create"><label>Libellé<input name="name" required maxlength="191" placeholder="Commission de vente"></label><button class="simple-primary" type="submit">Ajouter</button></form>
+        <div class="simple-rubrique-table-wrap"><table class="simple-rubrique-table"><thead><tr><th>Libellé</th><th>Code</th><th>Type</th><th></th></tr></thead><tbody><% rubriques.imposable.forEach(row => { %><tr><td><strong><%= row.name %></strong></td><td><form id="tax-<%= row.id %>" method="POST" action="/rubriques/imposable/<%= row.id %>"></form><input form="tax-<%= row.id %>" name="code" value="<%= row.code %>" required maxlength="64" class="simple-code-input"></td><td><%= row.entryType === 'CALCULATED' ? 'Calculé' : 'Manuel' %><input form="tax-<%= row.id %>" type="hidden" name="name" value="<%= row.name %>"><input form="tax-<%= row.id %>" type="hidden" name="entryType" value="<%= row.entryType %>"><input form="tax-<%= row.id %>" type="hidden" name="calculationKey" value="<%= row.calculationKey || '' %>"></td><td><button form="tax-<%= row.id %>" class="simple-save" type="submit">Enregistrer</button></td></tr><% }); %></tbody></table></div>
+    </section>
+
+    <section class="simple-rubrique-card" id="retenues"><div class="simple-rubrique-heading"><div><h2>Rubriques de retenue</h2><p>CNSS, AMO, CIMR, IR et autres retenues.</p></div><span><%= rubriques.retenu.length %></span></div>
+        <div class="simple-rubrique-table-wrap"><table class="simple-rubrique-table"><thead><tr><th>Libellé</th><th>Code rubrique</th><th></th></tr></thead><tbody><% rubriques.retenu.forEach(row => { %><tr><td><strong><%= row.name %></strong><small><%= row.key %></small></td><td><form id="retenu-<%= row.id %>" method="POST" action="/rubriques/fixed/retenu/<%= row.id %>"></form><input form="retenu-<%= row.id %>" name="code" value="<%= row.code %>" required maxlength="64" class="simple-code-input"></td><td><button form="retenu-<%= row.id %>" class="simple-save" type="submit">Enregistrer</button></td></tr><% }); %></tbody></table></div>
+    </section>
+</div>
+<%- include('../partials/footer') %>

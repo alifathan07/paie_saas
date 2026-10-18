@@ -102,8 +102,8 @@ function payslipData(employee, calc, payslip, rates) {
 async function replacePayslipLines(tx, payslipId, calc) {
     await tx.payslipBonus.deleteMany({ where: { payslipId } });
     const rows = [
-        ...(calc.variablePrimes || []).filter(line => line.amount > 0).map(line => ({ payslipId, name: line.label, amount: line.amount, taxable: true })),
-        ...(calc.nimpLines || []).filter(line => line.amount > 0).map(line => ({ payslipId, name: line.label, amount: line.amount, taxable: false })),
+        ...(calc.variablePrimes || []).filter(line => line.amount > 0).map(line => ({ payslipId, code: line.code || '', name: line.label, amount: line.amount, taxable: true })),
+        ...(calc.nimpLines || []).filter(line => line.amount > 0).map(line => ({ payslipId, code: line.code || '', name: line.label, amount: line.amount, taxable: false })),
     ];
     if (rows.length) await tx.payslipBonus.createMany({ data: rows });
 }

@@ -75,19 +75,22 @@ function drawPayrollTable(doc, data, startY) {
     const workedHours = amount(data.workedHours);
     const baseSalary = amount(data.rawBaseSalary ?? data.baseSalary);
     const seniority = amount(data.primeAnciennete);
+    const rubriqueCodes = data.rubriqueCodes || {};
 
-    push('010', 'TEMPS DE TRAVAIL', '', `${workedDays.toFixed(2)} J / ${workedHours.toFixed(2)} H`, '', data.effectiveBaseSalary ?? data.baseSalary, 0);
-    if (seniority > 0) push('075', 'ANCIENNETÉ LÉGALE', '', money(baseSalary), percent(data.ancienneteRate), seniority, 0);
-    push('019', 'SALAIRE BRUT IMPOSABLE', '', money(data.sbi), '', 0, 0);
-    (data.variablePrimes || []).forEach(prime => push('', prime.label, '', '', '', prime.amount, 0));
-    (data.nimpLines || []).forEach(line => push('', line.label, '', '', '', line.amount, 0));
-    if (amount(data.amo) > 0) push('196', 'RETENUE AMO', amount(data.amoPatronale), money(data.sbi), percent(data.amoRate), 0, data.amo);
-    if (amount(data.cnss) > 0) push('197', 'RETENUE CNSS', amount(data.cnssPatronale), money(Math.min(amount(data.sbi), 6000)), percent(data.cnssRate), 0, data.cnss);
-    if (amount(data.cimr) > 0) push('199', 'RETENUE CIMR', '', money(data.sbi), percent(data.cimrRate), 0, data.cimr);
-    if (amount(data.irNet) > 0) push('198', 'RETENUE IR', '', money(data.sni), percent(data.irTaux), 0, data.irNet);
-    if (amount(data.avances) > 0) push('400', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avances);
-    if (amount(data.arrondi) > 0) push('410', 'ARRONDI', '', '', '', data.arrondi, 0);
-    if (amount(data.arrondi) < 0) push('410', 'ARRONDI', '', '', '', 0, Math.abs(data.arrondi));
+    push(rubriqueCodes['Salaire de base'] || '', 'TEMPS DE TRAVAIL', '', `${workedDays.toFixed(2)} J / ${workedHours.toFixed(2)} H`, '', data.effectiveBaseSalary ?? data.baseSalary, 0);
+    if (seniority > 0) push(rubriqueCodes["Prime d'ancienneté"] || '', 'ANCIENNETÉ LÉGALE', '', money(baseSalary), percent(data.ancienneteRate), seniority, 0);
+    push(rubriqueCodes['Salaire brut imposable'] || '', 'SALAIRE BRUT IMPOSABLE', '', money(data.sbi), '', 0, 0);
+    (data.variablePrimes || []).forEach(prime => push(prime.code || '', prime.label, '', '', '', prime.amount, 0));
+    (data.taxableAdditions || []).forEach(line => push(line.code || '', line.label, '', '', '', line.amount, 0));
+    (data.nimpLines || []).forEach(line => push(line.code || '', line.label, '', '', '', line.amount, 0));
+    if (amount(data.amo) > 0) push(rubriqueCodes.AMO || '', 'RETENUE AMO', amount(data.amoPatronale), money(data.sbi), percent(data.amoRate), 0, data.amo);
+    if (amount(data.cnss) > 0) push(rubriqueCodes.CNSS || '', 'RETENUE CNSS', amount(data.cnssPatronale), money(Math.min(amount(data.sbi), 6000)), percent(data.cnssRate), 0, data.cnss);
+    if (amount(data.cimr) > 0) push(rubriqueCodes.CIMR || '', 'RETENUE CIMR', '', money(data.sbi), percent(data.cimrRate), 0, data.cimr);
+    if (amount(data.irNet) > 0) push(rubriqueCodes['Impôt sur le revenu'] || '', 'RETENUE IR', '', money(data.sni), percent(data.irTaux), 0, data.irNet);
+    if (amount(data.avances) > 0) push(rubriqueCodes['Avance sur salaire'] || '', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avances);
+    (data.retenus || []).forEach(line => push(line.code || '', line.label, '', '', '', 0, line.amount));
+    if (amount(data.arrondi) > 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', data.arrondi, 0);
+    if (amount(data.arrondi) < 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', 0, Math.abs(data.arrondi));
 
     let totalGains = 0;
     let totalDeductions = 0;
@@ -174,7 +177,7 @@ export function generateBulletinPdf(data, outputStream, options = {}) {
     doc.font('Helvetica').fontSize(8).fillColor(GRAY).text('Mode de paiement', LEFT + 12, endCumulative + 27);
     doc.font('Helvetica-Bold').fontSize(9).fillColor(NAVY).text(data.paymentMethod || 'Virement', LEFT + 12, endCumulative + 42);
     doc.roundedRect(PAGE_WIDTH - RIGHT - 205, endCumulative + 17, 205, 48, 7).fill(TEAL);
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#d8f5ef').text('NET À PAYER', PAGE_WIDTH - RIGHT - 190, endCumulative + 27, { width: 175, align: 'right' });
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#d8f5ef').text(`${rubriqueCodes['Salaire net à payer'] || ''}  NET À PAYER`, PAGE_WIDTH - RIGHT - 190, endCumulative + 27, { width: 175, align: 'right' });
     doc.font('Helvetica-Bold').fontSize(14).fillColor('#ffffff').text(money(data.netAPayer), PAGE_WIDTH - RIGHT - 190, endCumulative + 40, { width: 175, align: 'right' });
     doc.font('Helvetica').fontSize(8).fillColor(GRAY).text('Signature', PAGE_WIDTH / 2 - 30, endCumulative + 82);
 

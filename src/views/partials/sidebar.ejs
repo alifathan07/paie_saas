@@ -35,29 +35,32 @@
         </a>
         <% if (!isAdmin) { %>
         <a href="/companies" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'companies' ? 'active' : '' %>">
-            <span class="sidebar-link-icon">▦</span><span>Mes sociétés</span>
+            <svg class="sidebar-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V5.5L12 3l7 2.5V21M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01"/></svg><span>Mes sociétés</span>
         </a>
         <a href="/parametrage" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'parametrage' ? 'active' : '' %>">
-            <span class="sidebar-link-icon">⚙</span><span>Paramétrage</span>
+            <svg class="sidebar-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.7 1.7-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V20h-2.4v-.2a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-1.7-1.7.06-.06A1.7 1.7 0 0 0 8.4 15a1.7 1.7 0 0 0-1.56-1.03H6v-2.4h.84A1.7 1.7 0 0 0 8.4 10a1.7 1.7 0 0 0-.34-1.88L8 8.06l1.7-1.7.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 12.67 5.2V4h2.4v1.2a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 1.7 1.7-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.03H22v2.4h-.84A1.7 1.7 0 0 0 19.4 15Z"/></svg><span>Paramétrage</span>
         </a>
+        <a href="/rubriques" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'rubriques' ? 'active' : '' %>"><span class="sidebar-link-icon">#</span><span>Rubriques de paie</span></a>
         <% } %>
-        <a href="/employees"
-            class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'employees' ? 'active' : '' %>">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-            <span>Employés</span>
-        </a>
-        <a href="/employees/categories" class="sidebar-link">
-            <span>Catégories des employés</span>
-        </a>
-        <a href="/indemnites" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'indemnites' ? 'active' : '' %>">
-            <span class="sidebar-link-icon">◇</span><span>Indemnités non imposables</span>
-        </a>
+        <details class="sidebar-dropdown" <%= typeof currentPage !== 'undefined' && (currentPage === 'employees' || currentPage === 'employeeCategories') ? 'open' : '' %>>
+            <summary class="sidebar-dropdown-toggle">
+                <svg class="sidebar-nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3.87-4" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                <span>Employés</span><span class="sidebar-dropdown-arrow" aria-hidden="true"></span>
+            </summary>
+            <div class="sidebar-dropdown-children">
+                <a href="/employees" class="sidebar-sub-link <%= typeof currentPage !== 'undefined' && currentPage === 'employees' ? 'active' : '' %>"><svg class="sidebar-sub-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>Liste des employés</a>
+                <a href="/employees/categories" class="sidebar-sub-link <%= typeof currentPage !== 'undefined' && currentPage === 'employeeCategories' ? 'active' : '' %>"><svg class="sidebar-sub-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4 12 8 4.5 8-4.5M4 16.5l8 4.5 8-4.5"/></svg>Catégories des employés</a>
+            </div>
+        </details>
+        <details class="sidebar-dropdown" <%= typeof currentPage !== 'undefined' && (currentPage === 'indemnites' || currentPage === 'primes') ? 'open' : '' %>>
+            <summary class="sidebar-dropdown-toggle"><svg class="sidebar-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/><path d="M3 9h18M16 14h2"/></svg><span>Primes et indemnités</span><span class="sidebar-dropdown-arrow" aria-hidden="true"></span></summary>
+            <div class="sidebar-dropdown-children">
+                <a href="/indemnites" class="sidebar-sub-link <%= typeof currentPage !== 'undefined' && currentPage === 'indemnites' ? 'active' : '' %>"><svg class="sidebar-sub-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4.5 6.5v5c0 4.4 3 7.9 7.5 9.5 4.5-1.6 7.5-5.1 7.5-9.5v-5L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>Indemnités non imposables</a>
+                <a href="/primes" class="sidebar-sub-link <%= typeof currentPage !== 'undefined' && currentPage === 'primes' ? 'active' : '' %>"><svg class="sidebar-sub-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.3 5.1L20 10l-4.2 3.7L17 19l-5-2.8L7 19l1.2-5.3L4 10l5.7-1.9L12 3Z"/></svg>Primes imposables</a>
+            </div>
+        </details>
         <a href="/bulletins"
             class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'bulletins' ? 'active' : '' %>">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -79,7 +82,7 @@
             </svg>
             <span>Éditions</span>
         </a>
-        <a href="/reports" class="sidebar-link"><span>Rapporter un problème</span></a>
+        <a href="/reports" class="sidebar-link"><svg class="sidebar-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5a2 2 0 0 1 2-2h13v14H6a2 2 0 0 0-2 2Zm0 0a2 2 0 0 0 2 2h13"/><path d="M8 7h7M8 11h5"/></svg><span>Rapporter un problème</span></a>
         <% if (isAdmin && clientMode) { %>
         <a href="/admin" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'admin' ? 'active' : '' %>"><span>Administration</span></a>
         <% } %>

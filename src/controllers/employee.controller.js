@@ -5,6 +5,7 @@ import {
     updateEmployee as updateEmp,
     deleteEmployee as deleteEmp,
     getAllBonusTypes
+    ,createTaxablePrime
     ,getEmployeeCategories
     ,getEmployeeFunctions
 } from "../services/employeeService.js";
@@ -71,6 +72,7 @@ export const renderCreateForm = async (req, res) => {
             categories,
             functions,
             indemnites,
+            representationAvailable: indemnites.some(item => item.isRepresentation),
             defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
             error: null
         });
@@ -88,11 +90,29 @@ export const handleCreateEmployee = async (req, res) => {
         const {
             bonusIds, bonusAmounts,
             customBonusNames, customBonusAmounts,
+            employeePrimeIds, employeePrimeAmounts,
+            newPrimeNames, newPrimeAmounts, newPrimeCodes,
             employeeIndemniteIds, employeeIndemniteAmounts,
-            newIndemniteNames, newIndemniteAmounts,
+            newIndemniteNames, newIndemniteAmounts, newIndemniteCodes,
             ...employeeData
         } = req.body;
         const bonusList = [];
+
+        const primeIds = employeePrimeIds ? (Array.isArray(employeePrimeIds) ? employeePrimeIds : [employeePrimeIds]) : [];
+        const primeAmounts = employeePrimeAmounts ? (Array.isArray(employeePrimeAmounts) ? employeePrimeAmounts : [employeePrimeAmounts]) : [];
+        primeIds.forEach((bonusId, index) => {
+            if (bonusId && primeAmounts[index] && Number(primeAmounts[index]) > 0) {
+                bonusList.push({ bonusId, amount: primeAmounts[index] });
+            }
+        });
+        const primeNames = newPrimeNames ? (Array.isArray(newPrimeNames) ? newPrimeNames : [newPrimeNames]) : [];
+        const primeDefaults = newPrimeAmounts ? (Array.isArray(newPrimeAmounts) ? newPrimeAmounts : [newPrimeAmounts]) : [];
+        const primeCodes = newPrimeCodes ? (Array.isArray(newPrimeCodes) ? newPrimeCodes : [newPrimeCodes]) : [];
+        for (let i = 0; i < primeNames.length; i += 1) {
+            if (!String(primeNames[i] || '').trim() || !primeDefaults[i] || Number(primeDefaults[i]) <= 0) continue;
+            const definition = await createTaxablePrime(primeNames[i], primeDefaults[i], companyId, primeCodes[i]);
+            bonusList.push({ bonusId: definition.id, amount: primeDefaults[i] });
+        }
 
         // Indemnities selected from the employee picker.
         if (employeeIndemniteIds) {
@@ -111,9 +131,10 @@ export const handleCreateEmployee = async (req, res) => {
         if (newIndemniteNames) {
             const names = Array.isArray(newIndemniteNames) ? newIndemniteNames : [newIndemniteNames];
             const amounts = Array.isArray(newIndemniteAmounts) ? newIndemniteAmounts : [newIndemniteAmounts || []];
+            const codes = Array.isArray(newIndemniteCodes) ? newIndemniteCodes : [newIndemniteCodes || []];
             for (let i = 0; i < names.length; i += 1) {
                 if (!String(names[i] || '').trim() || !amounts[i] || Number(amounts[i]) <= 0) continue;
-                const definition = await createIndemnite({ companyId, name: names[i], defaultAmount: amounts[i] });
+                const definition = await createIndemnite({ companyId, code: codes[i], name: names[i], defaultAmount: amounts[i] });
                 bonusList.push({ bonusId: definition.id, amount: amounts[i] });
             }
         }
@@ -219,6 +240,7 @@ export const renderEditForm = async (req, res) => {
         const representationRate = await getRepresentationRate(companyId);
         employee.indemnitesNonImposables = employee.bonuses.filter(item => item.bonus && !item.bonus.taxable)
             .map(item => ({ ...item, indemniteId: item.bonusId, indemnite: item.bonus }));
+        employee.primesImposables = employee.bonuses.filter(item => item.bonus && item.bonus.taxable);
 
         res.render("employees/edit", {
             title: `Éditer: ${employee.nomComplet}`,
@@ -229,6 +251,7 @@ export const renderEditForm = async (req, res) => {
             categories,
             functions,
             indemnites,
+            representationAvailable: indemnites.some(item => item.isRepresentation),
             defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
             error: null
         });
@@ -247,9 +270,10 @@ export const handleEmployeeIndemnites = async (req, res) => {
         const rows = ids.map((bonusId, index) => ({ bonusId, amount: amounts[index] }));
         const names = req.body.newIndemniteNames ? (Array.isArray(req.body.newIndemniteNames) ? req.body.newIndemniteNames : [req.body.newIndemniteNames]) : [];
         const newAmounts = req.body.newIndemniteAmounts ? (Array.isArray(req.body.newIndemniteAmounts) ? req.body.newIndemniteAmounts : [req.body.newIndemniteAmounts]) : [];
+        const newCodes = req.body.newIndemniteCodes ? (Array.isArray(req.body.newIndemniteCodes) ? req.body.newIndemniteCodes : [req.body.newIndemniteCodes]) : [];
         for (let i = 0; i < names.length; i += 1) {
             if (!String(names[i] || '').trim()) continue;
-            const definition = await createIndemnite({ companyId: activeCompanyId, name: names[i], defaultAmount: newAmounts[i] });
+            const definition = await createIndemnite({ companyId: activeCompanyId, code: newCodes[i], name: names[i], defaultAmount: newAmounts[i] });
             rows.push({ bonusId: definition.id, amount: newAmounts[i] });
         }
         await saveEmployeeIndemnites(req.params.id, activeCompanyId, rows);
@@ -278,14 +302,33 @@ export const handleUpdateEmployee = async (req, res) => {
         const activeCompanyId = await getSessionCompanyId(req);
         employee = await getEmployee(parseInt(id), activeCompanyId);
         const companyId = employee.companyId;
+        const representationEnabled = req.body.representationEnabled === '1' || req.body.representationEnabled === 'true';
+        if (representationEnabled && !(await listIndemnites(companyId)).some(item => item.isRepresentation)) {
+            throw new Error('REPRESENTATION_INDEMNITY_NOT_IN_CATALOG');
+        }
 
         const {
             bonusIds, bonusAmounts,
             customBonusNames, customBonusAmounts,
+            employeePrimeIds, employeePrimeAmounts,
+            newPrimeNames, newPrimeAmounts, newPrimeCodes,
             ...employeeData
         } = req.body;
         const bonusList = [];
-        const bonusFieldsProvided = bonusIds !== undefined || bonusAmounts !== undefined || customBonusNames !== undefined || customBonusAmounts !== undefined;
+        const primeIds = employeePrimeIds ? (Array.isArray(employeePrimeIds) ? employeePrimeIds : [employeePrimeIds]) : [];
+        const primeAmounts = employeePrimeAmounts ? (Array.isArray(employeePrimeAmounts) ? employeePrimeAmounts : [employeePrimeAmounts]) : [];
+        primeIds.forEach((bonusId, index) => {
+            if (bonusId && primeAmounts[index] && Number(primeAmounts[index]) > 0) bonusList.push({ bonusId, amount: primeAmounts[index] });
+        });
+        const primeNames = newPrimeNames ? (Array.isArray(newPrimeNames) ? newPrimeNames : [newPrimeNames]) : [];
+        const primeDefaults = newPrimeAmounts ? (Array.isArray(newPrimeAmounts) ? newPrimeAmounts : [newPrimeAmounts]) : [];
+        const primeCodes = newPrimeCodes ? (Array.isArray(newPrimeCodes) ? newPrimeCodes : [newPrimeCodes]) : [];
+        for (let i = 0; i < primeNames.length; i += 1) {
+            if (!String(primeNames[i] || '').trim() || !primeDefaults[i] || Number(primeDefaults[i]) <= 0) continue;
+            const definition = await createTaxablePrime(primeNames[i], primeDefaults[i], companyId, primeCodes[i]);
+            bonusList.push({ bonusId: definition.id, amount: primeDefaults[i] });
+        }
+        const bonusFieldsProvided = bonusIds !== undefined || bonusAmounts !== undefined || customBonusNames !== undefined || customBonusAmounts !== undefined || employeePrimeIds !== undefined || employeePrimeAmounts !== undefined || newPrimeNames !== undefined || newPrimeAmounts !== undefined || newPrimeCodes !== undefined;
 
         if (bonusIds) {
             const ids = Array.isArray(bonusIds) ? bonusIds : [bonusIds];
@@ -320,7 +363,7 @@ export const handleUpdateEmployee = async (req, res) => {
                 : '',
             blocageSaisiePaie: Boolean(req.body.blocageSaisiePaie),
         }, activeCompanyId);
-        const returnTab = req.body.returnTab === 'indemnites' ? '?tab=indemnites' : '';
+        const returnTab = ['indemnites', 'primes'].includes(req.body.returnTab) ? '?tab=' + req.body.returnTab : '';
         res.redirect(`/employees/${id}/edit${returnTab}`);
     } catch (error) {
         console.error("Error updating employee:", error);

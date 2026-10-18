@@ -43,6 +43,21 @@ async function main() {
 
   console.log(`✅ Companies seeded: "${company1.name}", "${company2.name}"`);
 
+  const bulletinRubriques = [
+    { name: "Salaire de base", code: "1001" },
+    { name: "Prime d'ancienneté", code: "1002" },
+    { name: "Salaire brut imposable", code: "RUB-3001" },
+    { name: "Salaire net à payer", code: "RUB-4001" },
+  ];
+  for (const rubrique of bulletinRubriques) {
+    await prisma.bulletinRubrique.upsert({
+      where: { name: rubrique.name },
+      update: { code: rubrique.code },
+      create: rubrique,
+    });
+  }
+  console.log("✅ Bulletin rubriques seeded.");
+
   const categoryTitulaire1 = await prisma.employeeCategory.upsert({
     where: { companyId_name: { companyId: company1.id, name: "Titulaire" } },
     update: {}, create: { companyId: company1.id, name: "Titulaire" },

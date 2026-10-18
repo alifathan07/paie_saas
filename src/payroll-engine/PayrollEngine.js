@@ -10,6 +10,8 @@ import { normalizeWorkingTime, workingTimeConfigFromCompany } from "./utils/work
 
 export const PAYROLL_WORKED_DAYS = 26;
 
+const prorateAmount = (amount, ratio) => Number((Math.max(0, Number(amount) || 0) * ratio).toFixed(2));
+
 export const normalizeWorkedDays = (value) => {
   if (value === undefined || value === null || value === '') {
     return PAYROLL_WORKED_DAYS;
@@ -75,6 +77,11 @@ export const calculatePayroll = (employee, overrides = {}) => {
   const workedDays = workingTime.workedDays;
   const workedHours = workingTime.workedHours;
   const effectiveBase = Number((rawBase * workingTime.ratio).toFixed(2));
+  // Fixed indemnities follow the entered working-time unit directly. In hours
+  // mode this preserves the exact worked-hours ratio (e.g. 130 / 191).
+  const indemnityRatio = workingTime.mode === 'HOURS'
+    ? workedHours / workingTime.standardMonthlyHours
+    : workingTime.ratio;
 
   // 3. Seniority (Prime d'ancienneté) based on effective base and dateEmbauche relative to payroll period
   const months = calculateMonths(employee.dateEmbauche, targetDate);
@@ -87,8 +94,10 @@ export const calculatePayroll = (employee, overrides = {}) => {
   if (Array.isArray(overrides.variablePrimes)) {
     variablePrimes = overrides.variablePrimes.map(p => ({
       label: String(p.label || p.name || 'Prime'),
+      code: String(p.code || ''),
+      rubriqueImposableId: p.rubriqueImposableId ? Number(p.rubriqueImposableId) : null,
       amount: Math.max(0, Number(p.amount) || 0)
-    })).filter(p => p.amount > 0);
+    })).filter(p => p.amount > 0 || p.rubriqueImposableId);
   }
   const variableLabels = new Set(variablePrimes.map(p => p.label.toLowerCase()));
 
@@ -107,11 +116,19 @@ export const calculatePayroll = (employee, overrides = {}) => {
   const nimpLabels = new Set();
   const representationRate = Math.max(0, Number(employee.indemniteRepresentationRate) || 0);
   const representationName = String(employee.indemniteRepresentationName || '').trim();
+  const representationBonus = (employee.bonuses || []).find(item => {
+    const name = String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase();
+    return name === representationName.toLowerCase();
+  });
+  const representationCode = String(representationBonus?.bonus?.code || representationBonus?.code || '');
+  const representationBaseAmount = representationName && representationRate > 0
+    ? Number((rawBase * representationRate).toFixed(2))
+    : 0;
   const representationAmount = representationName && representationRate > 0
     ? Number((effectiveBase * representationRate).toFixed(2))
     : 0;
   if (representationName && representationAmount > 0) {
-    nimpLines.push({ label: representationName, amount: representationAmount });
+    nimpLines.push({ code: representationCode, label: representationName, baseAmount: representationBaseAmount, amount: representationAmount });
     nimpLabels.add(representationName.toLowerCase());
   }
 
@@ -129,10 +146,15 @@ export const calculatePayroll = (employee, overrides = {}) => {
         // Ignore a legacy catalog assignment with the same label so it cannot
         // be added a second time as a fixed amount.
         if (representationName && bonusName.trim().toLowerCase() === representationName.toLowerCase()) return;
-        nimpLines.push({ label: bonusName, amount: Number(amt.toFixed(2)) });
+        nimpLines.push({
+          code: String(eb.bonus ? eb.bonus.code || '' : eb.code || ''),
+          label: bonusName,
+          baseAmount: Number(amt.toFixed(2)),
+          amount: prorateAmount(amt, indemnityRatio),
+        });
         nimpLabels.add(bonusName.toLowerCase());
       } else if (amt > 0 && !variableLabels.has(bonusName.toLowerCase())) {
-        variablePrimes.push({ label: bonusName, amount: Number(amt.toFixed(2)) });
+        variablePrimes.push({ code: String(eb.bonus ? eb.bonus.code || '' : eb.code || ''), label: bonusName, amount: Number(amt.toFixed(2)) });
         variableLabels.add(bonusName.toLowerCase());
       }
     });
@@ -142,9 +164,9 @@ export const calculatePayroll = (employee, overrides = {}) => {
   if (Array.isArray(overrides.monthlyNimpLines)) {
     overrides.monthlyNimpLines.forEach(line => {
       const label = String(line.label || line.name || 'Indemnité').trim();
-      const amount = Math.max(0, Number(line.amount) || 0);
-      if (label && amount > 0 && !nimpLabels.has(label.toLowerCase())) {
-        nimpLines.push({ label, amount: Number(amount.toFixed(2)) });
+      const baseAmount = Math.max(0, Number(line.baseAmount ?? line.amount) || 0);
+      if (label && baseAmount > 0 && !nimpLabels.has(label.toLowerCase())) {
+        nimpLines.push({ code: String(line.code || ''), label, baseAmount: Number(baseAmount.toFixed(2)), amount: prorateAmount(baseAmount, indemnityRatio) });
         nimpLabels.add(label.toLowerCase());
       }
     });
@@ -152,7 +174,7 @@ export const calculatePayroll = (employee, overrides = {}) => {
 
   let bonusesNIMP = nimpLines.reduce((sum, p) => sum + p.amount, 0);
   if ((!employee.bonuses || employee.bonuses.length === 0) && overrides.bonusesNIMP !== undefined) {
-    bonusesNIMP = Math.max(0, Number(overrides.bonusesNIMP) || 0);
+    bonusesNIMP = prorateAmount(overrides.bonusesNIMP, indemnityRatio);
   }
   bonusesNIMP = Number(bonusesNIMP.toFixed(2));
   const bonusesIMP = Number(variablePrimes.reduce((sum, p) => sum + p.amount, 0).toFixed(2));

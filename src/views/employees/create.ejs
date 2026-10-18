@@ -24,6 +24,7 @@
                     <div class="employee-tabs">
                         <button type="button" class="employee-tab active" data-tab="general"><span class="employee-tab-icon">●</span><span><strong>Informations générales</strong><small>État civil, contrat et coordonnées</small></span></button>
                         <button type="button" class="employee-tab" data-tab="indemnites"><span class="employee-tab-icon">＋</span><span><strong>Indemnités non imposables</strong><small>Montants récurrents du salarié</small></span><span class="employee-tab-arrow">→</span></button>
+                        <button type="button" class="employee-tab" data-tab="primes"><span class="employee-tab-icon">＋</span><span><strong>Primes imposables</strong><small>Primes fixes récurrentes</small></span><span class="employee-tab-arrow">→</span></button>
                     </div>
                 </nav>
                 <div class="employee-general-content">
@@ -211,8 +212,20 @@
                         <label class="representation-rate-control"><span>Taux</span><input type="number" name="indemniteRepresentationRate" value="" data-default-rate="<%= defaultRepresentationRate ?? 10 %>" placeholder="<%= defaultRepresentationRate ?? 10 %>" min="0" max="100" step="0.01" disabled><strong>%</strong></label>
                     </div>
                     <div class="section-heading-row"><div><h2 class="section-title" style="margin-bottom: 4px;">Indemnités non imposables</h2><p style="font-size: 13px; color: var(--color-text-subtle); margin: 0;">Attribuez les indemnités récurrentes à ce salarié et ajustez son montant mensuel.</p></div><button type="button" class="btn-primary open-indemnites-modal">+ Ajouter des indemnités</button></div>
-                    <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Indemnité</th><th>Montant salarié</th><th>Montant par défaut</th><th>Statut</th></tr></thead><tbody><tr><td colspan="4" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr></tbody></table></div>
+                    <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Indemnité</th><th>Montant salarié</th><th>Statut</th></tr></thead><tbody id="employee-indemnity-preview"><tr><td colspan="4" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr></tbody></table></div>
                     <div class="indemnites-bottom-action"><span>Vous souhaitez ajouter ou modifier une indemnité ?</span><button type="button" class="btn-primary open-indemnites-modal">+ Ajouter des indemnités</button></div>
+                </div>
+
+                <div class="form-section employee-tab-panel" data-panel="primes">
+                    <div class="section-heading-row"><div><h2 class="section-title" style="margin-bottom: 4px;">Primes imposables fixes</h2><p style="font-size: 13px; color: var(--color-text-subtle); margin: 0;">Attribuez les primes récurrentes imposables à ce salarié.</p></div></div>
+                    <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Prime</th><th>Montant salarié</th><th>Montant par défaut</th></tr></thead><tbody>
+                        <% const taxableBonuses = (bonusTypes || []).filter(item => item.taxable); %>
+                        <% if (taxableBonuses.length) { taxableBonuses.forEach(function (item) { %>
+                            <tr class="employee-prime-row"><td><%= item.code %></td><td><label><input type="checkbox" name="employeePrimeIds" value="<%= item.id %>"> <strong><%= item.name %></strong></label></td><td><input type="number" name="employeePrimeAmounts" class="form-input" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>"></td><td><%= Number(item.defaultAmount).toFixed(2) %> DH</td></tr>
+                        <% }); } else { %><tr><td colspan="4" class="empty-state">Aucune prime imposable dans le catalogue.</td></tr><% } %>
+                        <tr><td><input type="text" name="newPrimeCodes" class="form-input" placeholder="Code rubrique"></td><td><input type="text" name="newPrimeNames" class="form-input" placeholder="Nouvelle prime imposable"></td><td><input type="number" name="newPrimeAmounts" class="form-input" min="0.01" step="0.01" placeholder="Montant DH"></td><td>Créer dans le catalogue</td></tr>
+                    </tbody></table></div>
+                    <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Prime imposable</th><th>Montant salarié</th><th>Statut</th></tr></thead><tbody id="employee-prime-preview"><tr><td colspan="4" class="empty-state">Aucune prime fixe attribuée à ce salarié.</td></tr></tbody></table></div>
                 </div>
 
                 <!-- Submit Bar -->
@@ -229,7 +242,7 @@
                     <div class="app-modal-header"><div><h2>Ajouter des indemnités</h2><p>Sélectionnez une indemnité, puis personnalisez son montant.</p></div><button type="button" class="modal-close" data-close-indemnites>×</button></div>
                     <div class="indemnite-picker">
                         <% if (indemnites && indemnites.length) { indemnites.forEach(function (item) { %>
-                            <label class="indemnite-picker-row"><input type="checkbox" form="employee-create-form" name="employeeIndemniteIds" value="<%= item.id %>"><span class="indemnite-picker-name"><strong><%= item.name %></strong><small><%= item.isRepresentation ? 'Taux proposé' : 'Défaut' %> : <%= Number(item.defaultAmount).toFixed(2) %> <%= item.isRepresentation ? '%' : 'DH' %></small></span><input type="number" form="employee-create-form" name="employeeIndemniteAmounts" class="form-input" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>" required><span><%= item.isRepresentation ? '%' : 'DH' %></span></label>
+                            <label class="indemnite-picker-row"><input type="checkbox" form="employee-create-form" name="employeeIndemniteIds" value="<%= item.id %>"><span class="indemnite-picker-code"><%= item.code %></span><span class="indemnite-picker-name"><strong><%= item.name %></strong><small><%= item.isRepresentation ? 'Taux proposé' : 'Défaut' %> : <%= Number(item.defaultAmount).toFixed(2) %> <%= item.isRepresentation ? '%' : 'DH' %></small></span><input type="number" form="employee-create-form" name="employeeIndemniteAmounts" class="form-input" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>" required><span><%= item.isRepresentation ? '%' : 'DH' %></span></label>
                         <% }); } else { %><p class="empty-state">Aucune indemnité dans le catalogue. Créez-en une ci-dessous.</p><% } %>
                     </div>
                     <div class="inline-create-panel"><strong>Créer depuis cette fenêtre</strong><div id="new-indemnite-rows"></div><button type="button" class="btn-secondary" id="add-new-indemnite">+ Nouvelle indemnité</button></div>
@@ -247,7 +260,7 @@
                     employeeTabButtons.forEach(item => item.classList.toggle('active', item === button));
                     employeePanels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === button.dataset.tab));
                     employeeGeneral.hidden = button.dataset.tab !== 'general';
-                    employeeSubmitBar.hidden = !['general', 'indemnites'].includes(button.dataset.tab);
+                    employeeSubmitBar.hidden = !['general', 'indemnites', 'primes'].includes(button.dataset.tab);
                     employeeReturnTab.value = button.dataset.tab;
                 }));
 
@@ -267,14 +280,58 @@
                     checkbox.addEventListener('change', sync);
                     sync();
                 });
+                document.querySelectorAll('.employee-prime-row').forEach(row => {
+                    const checkbox = row.querySelector('input[type="checkbox"]');
+                    const amount = row.querySelector('input[type="number"]');
+                    const sync = () => { amount.disabled = !checkbox.checked; };
+                    checkbox.addEventListener('change', sync);
+                    sync();
+                });
+                const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+                const renderEmployeeDraftBenefits = () => {
+                    const indemnityRows = [...document.querySelectorAll('.indemnite-picker-row')]
+                        .filter(row => row.querySelector('input[type="checkbox"]')?.checked)
+                        .map(row => ({
+                            code: row.querySelector('.indemnite-picker-code')?.textContent.trim(),
+                            name: row.querySelector('.indemnite-picker-name strong')?.textContent.trim(),
+                            amount: row.querySelector('input[type="number"]')?.value,
+                        }));
+                    document.querySelectorAll('#new-indemnite-rows .new-indemnite-row').forEach(row => {
+                        const inputs = row.querySelectorAll('input');
+                        if (inputs[0]?.value.trim() && inputs[1]?.value.trim() && Number(inputs[2]?.value) > 0) {
+                            indemnityRows.push({ code: inputs[0].value, name: inputs[1].value, amount: inputs[2].value });
+                        }
+                    });
+                    document.getElementById('employee-indemnity-preview').innerHTML = indemnityRows.length
+                        ? indemnityRows.map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td>${Number(item.amount).toFixed(2)} DH</td><td><span class="badge badge-actif">En mémoire</span></td></tr>`).join('')
+                        : '<tr><td colspan="4" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr>';
+
+                    const primeRows = [...document.querySelectorAll('.employee-prime-row')]
+                        .filter(row => row.querySelector('input[type="checkbox"]')?.checked)
+                        .map(row => ({ code: row.cells[0]?.textContent.trim(), name: row.querySelector('strong')?.textContent.trim(), amount: row.querySelector('input[type="number"]')?.value }));
+                    const newPrimeCode = document.querySelector('[name="newPrimeCodes"]')?.value.trim();
+                    const newPrimeName = document.querySelector('[name="newPrimeNames"]')?.value.trim();
+                    const newPrimeAmount = document.querySelector('[name="newPrimeAmounts"]')?.value;
+                    if (newPrimeCode && newPrimeName && Number(newPrimeAmount) > 0) primeRows.push({ code: newPrimeCode, name: newPrimeName, amount: newPrimeAmount });
+                    document.getElementById('employee-prime-preview').innerHTML = primeRows.length
+                        ? primeRows.map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td>${Number(item.amount).toFixed(2)} DH</td><td><span class="badge badge-actif">En mémoire</span></td></tr>`).join('')
+                        : '<tr><td colspan="4" class="empty-state">Aucune prime fixe attribuée à ce salarié.</td></tr>';
+                };
+                document.querySelectorAll('.employee-prime-row input, [name="newPrimeCodes"], [name="newPrimeNames"], [name="newPrimeAmounts"]').forEach(input => input.addEventListener('input', renderEmployeeDraftBenefits));
                 document.getElementById('add-new-indemnite').addEventListener('click', () => {
                     const row = document.createElement('div');
                     row.className = 'new-indemnite-row';
-                    row.innerHTML = '<input type="text" name="newIndemniteNames" form="employee-create-form" class="form-input" placeholder="Nom de l’indemnité" required><input type="number" name="newIndemniteAmounts" form="employee-create-form" class="form-input" min="0.01" step="0.01" placeholder="Montant DH" required><button type="button" class="remove-inline-row">×</button>';
-                    row.querySelector('.remove-inline-row').addEventListener('click', () => row.remove());
+                    row.innerHTML = '<input type="text" name="newIndemniteCodes" form="employee-create-form" class="form-input" placeholder="Code rubrique" required><input type="text" name="newIndemniteNames" form="employee-create-form" class="form-input" placeholder="Nom de l’indemnité" required><input type="number" name="newIndemniteAmounts" form="employee-create-form" class="form-input" min="0.01" step="0.01" placeholder="Montant DH" required><button type="button" class="remove-inline-row">×</button>';
+                    row.querySelector('.remove-inline-row').addEventListener('click', () => { row.remove(); renderEmployeeDraftBenefits(); });
                     document.getElementById('new-indemnite-rows').appendChild(row);
+                    row.querySelectorAll('input').forEach(input => input.addEventListener('input', renderEmployeeDraftBenefits));
                 });
-                document.getElementById('apply-indemnites').addEventListener('click', () => { indemnitesModal.hidden = true; document.querySelector('[data-tab="indemnites"]').click(); });
+                document.getElementById('apply-indemnites').addEventListener('click', () => { renderEmployeeDraftBenefits(); indemnitesModal.hidden = true; document.querySelector('[data-tab="indemnites"]').click(); });
+                document.querySelectorAll('.indemnite-picker-row input').forEach(input => {
+                    input.addEventListener('input', renderEmployeeDraftBenefits);
+                    input.addEventListener('change', renderEmployeeDraftBenefits);
+                });
+                renderEmployeeDraftBenefits();
 
                 const categoryModal = document.getElementById('category-modal');
                 const categoryInput = document.querySelector('[data-category-input]');

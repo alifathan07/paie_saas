@@ -1,0 +1,103 @@
+<%- include('../partials/header') %>
+
+<div class="page-header indemnites-page-header">
+    <div class="header-title-area">
+        <div class="eyebrow">Catalogue paie</div>
+        <h1 class="page-title">Primes imposables</h1>
+        <p class="page-subtitle">Créez les libellés de primes réutilisables dans les fiches salariés.</p>
+    </div>
+    <div class="header-actions"><a href="/employees" class="btn-secondary">Retour aux employés</a></div>
+</div>
+
+<% if (error) { %><div class="alert alert-error" role="alert"><%= error %></div><% } %>
+
+<section class="catalog-create-card">
+    <div class="catalog-create-copy"><span class="catalog-create-icon">+</span><div><h2>Ajouter une prime imposable</h2><p>Ajoutez une ou plusieurs primes avec leur code, libellé et montant par défaut.</p></div></div>
+    <button id="open-prime-modal" class="btn-primary" type="button">Ajouter une nouvelle prime</button>
+</section>
+
+<div id="prime-create-modal" class="app-modal" <%= createRows && createRows.length ? '' : 'hidden' %>>
+    <div class="app-modal-backdrop" data-close-prime-modal></div>
+    <div class="app-modal-card catalog-modal-card" role="dialog" aria-modal="true" aria-labelledby="prime-modal-title">
+        <div class="app-modal-header">
+            <div><h2 id="prime-modal-title">Ajouter des primes imposables</h2><p>Ajoutez autant de lignes que nécessaire, puis cliquez sur « Enregistrer ».</p></div>
+            <button type="button" class="modal-close" data-close-prime-modal aria-label="Fermer">×</button>
+        </div>
+        <form action="/primes" method="POST" id="prime-create-form">
+            <div id="prime-create-rows" class="catalog-create-rows">
+                <% (createRows || []).forEach(function(row) { %>
+                    <div class="catalog-create-row">
+                        <input name="code[]" class="form-input" required maxlength="64" placeholder="Rubrique (ex. 2001)" value="<%= row.code %>">
+                        <input name="name[]" class="form-input" required maxlength="191" placeholder="Libellé (ex. Prime de rendement)" value="<%= row.name %>">
+                        <div class="catalog-amount-field"><input name="defaultAmount[]" class="form-input" type="number" min="0.01" step="0.01" required placeholder="Montant par défaut" value="<%= row.defaultAmount %>"><span class="currency-label">DH</span></div>
+                        <button class="remove-indemnite-row" type="button" aria-label="Supprimer cette prime">×</button>
+                    </div>
+                <% }); %>
+            </div>
+            <div class="catalog-create-form-actions">
+                <button id="add-another-prime" class="btn-secondary" type="button">+ Ajouter une prime</button>
+                <button class="btn-primary" type="submit">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<section class="catalog-card">
+    <div class="catalog-card-header"><div><h2>Primes disponibles</h2><p>Ces libellés apparaîtront dans les fiches salariés et seront soumis aux retenues imposables.</p></div><span class="catalog-count"><%= primes.length %> <%= primes.length === 1 ? 'prime' : 'primes' %></span></div>
+    <% if (primes.length) { %>
+        <div class="data-table-wrapper catalog-table-wrapper">
+            <table class="data-table catalog-table">
+                <thead><tr><th>Rubrique</th><th>Libellé</th><th>Montant par défaut</th><th>Salariés affectés</th><th class="catalog-actions-heading">Actions</th></tr></thead>
+                <tbody>
+                    <% primes.forEach(function (item) { %>
+                        <tr>
+                            <td><form id="edit-prime-<%= item.id %>" action="/primes/<%= item.id %>/edit" method="POST"></form><input form="edit-prime-<%= item.id %>" class="form-input catalog-name-input" name="code" value="<%= item.code %>" required maxlength="64"></td>
+                            <td><input form="edit-prime-<%= item.id %>" class="form-input catalog-name-input" name="name" value="<%= item.name %>" required maxlength="191"></td>
+                            <td><input form="edit-prime-<%= item.id %>" class="form-input catalog-amount-input" type="number" name="defaultAmount" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>" required> <span class="currency-label">DH</span></td>
+                            <td><span class="assignment-count"><%= item._count.employeeBonuses %></span> <%= item._count.employeeBonuses === 1 ? 'salarié' : 'salariés' %></td>
+                            <td class="catalog-actions"><button class="btn-secondary btn-compact" form="edit-prime-<%= item.id %>" type="submit">Enregistrer</button><form id="delete-prime-<%= item.id %>" action="/primes/<%= item.id %>/delete" method="POST"></form><button class="btn-icon-delete btn-compact" type="submit" form="delete-prime-<%= item.id %>" data-delete-prime="<%= item.name %>"><span aria-hidden="true">⌫</span> Supprimer</button></td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div class="catalog-empty-state"><div class="catalog-empty-icon">◆</div><h3>Votre catalogue est vide</h3><p>Ajoutez votre première prime imposable pour pouvoir l’affecter à un salarié.</p></div>
+    <% } %>
+</section>
+
+<div id="prime-delete-confirm" class="confirm-modal" hidden>
+    <div class="confirm-modal-backdrop" data-close-prime-delete></div>
+    <div class="confirm-modal-card" role="dialog" aria-modal="true" aria-labelledby="prime-delete-title">
+        <div class="confirm-modal-icon">⌫</div><div class="confirm-modal-content"><h2 id="prime-delete-title">Supprimer du catalogue ?</h2><p id="prime-delete-message">Cette prime sera retirée du catalogue.</p></div>
+        <div class="confirm-modal-actions"><button type="button" class="btn-secondary" data-close-prime-delete>Annuler</button><button type="button" class="btn-icon-delete" id="confirm-prime-delete">Supprimer</button></div>
+    </div>
+</div>
+
+<script>
+const primeCreateModal = document.getElementById('prime-create-modal');
+const primeCreateRows = document.getElementById('prime-create-rows');
+const addPrimeRow = () => {
+    const row = document.createElement('div');
+    row.className = 'catalog-create-row';
+    row.innerHTML = `<input name="code[]" class="form-input" required maxlength="64" placeholder="Rubrique (ex. 2001)">
+        <input name="name[]" class="form-input" required maxlength="191" placeholder="Libellé (ex. Prime de rendement)">
+        <div class="catalog-amount-field"><input name="defaultAmount[]" class="form-input" type="number" min="0.01" step="0.01" required placeholder="Montant par défaut"><span class="currency-label">DH</span></div>
+        <button class="remove-indemnite-row" type="button" aria-label="Supprimer cette prime">×</button>`;
+    primeCreateRows.appendChild(row);
+    row.querySelector('input').focus();
+};
+document.getElementById('open-prime-modal').addEventListener('click', () => { primeCreateModal.hidden = false; if (!primeCreateRows.children.length) addPrimeRow(); });
+document.getElementById('add-another-prime').addEventListener('click', addPrimeRow);
+document.querySelectorAll('[data-close-prime-modal]').forEach(button => button.addEventListener('click', () => { primeCreateModal.hidden = true; }));
+primeCreateRows.addEventListener('click', event => { if (event.target.closest('.remove-indemnite-row')) event.target.closest('.catalog-create-row').remove(); });
+
+const primeDeleteConfirm = document.getElementById('prime-delete-confirm');
+const primeDeleteMessage = document.getElementById('prime-delete-message');
+let pendingPrimeDeleteForm = null;
+document.querySelectorAll('[data-delete-prime]').forEach(button => button.addEventListener('click', event => { event.preventDefault(); pendingPrimeDeleteForm = button.form; primeDeleteMessage.textContent = `« ${button.dataset.deletePrime} » et ses affectations seront supprimées du catalogue.`; primeDeleteConfirm.hidden = false; }));
+document.querySelectorAll('[data-close-prime-delete]').forEach(button => button.addEventListener('click', () => { primeDeleteConfirm.hidden = true; pendingPrimeDeleteForm = null; }));
+document.getElementById('confirm-prime-delete').addEventListener('click', () => { if (pendingPrimeDeleteForm) pendingPrimeDeleteForm.submit(); });
+</script>
+
+<%- include('../partials/footer') %>

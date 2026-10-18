@@ -13,6 +13,8 @@ import { calculatePayroll, normalizeWorkedDays, PAYROLL_WORKED_DAYS } from "../p
 import { calculateWorkedHoursFromDays, DEFAULT_STANDARD_MONTHLY_HOURS, DEFAULT_STANDARD_MONTHLY_DAYS, normalizeWorkingTime } from "../payroll-engine/utils/workingTime.js";
 import { calculateCumulativeIR } from "../payroll-engine/calculators/cumulativeIr.calculator.js";
 import { generateBulletinPdf } from "../pdf/bulletinPdf.js";
+import { getBulletinRubriqueCodes } from "../services/bulletinRubrique.service.js";
+import { getRubriqueMaps } from "../services/rubrique.service.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -34,6 +36,35 @@ const BULLETIN_STATUS = Object.freeze({
 const isLockedBulletin = (status) => status === BULLETIN_STATUS.VALIDATED || status === BULLETIN_STATUS.CLOSED;
 const isClosedBulletin = (status) => status === BULLETIN_STATUS.CLOSED;
 const EXCLUDED_NIMP_PREFIX = "__bulletin_excluded_employee_indemnity__:";
+const payslipBonusBaseAmount = bonus => Number(bonus.baseAmount ?? bonus.amount ?? 0);
+
+function taxableAdditionLines(values, catalogue = []) {
+    const byKey = new Map(catalogue.map(row => [row.calculationKey, row]));
+    const effectiveBase = Number(values.baseSalary || 0);
+    const standardHours = Number(values.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS);
+    const hourlyRate = standardHours > 0 ? effectiveBase / standardHours : 0;
+    const definitions = [
+        ['overtime_25', Number(values.heuresSup25 || 0), 1.25],
+        ['overtime_50', Number(values.heuresSup50 || 0), 1.5],
+        ['overtime_100', Number(values.heuresSup100 || 0), 2],
+    ];
+    return definitions.map(([key, hours, multiplier]) => {
+        const definition = byKey.get(key);
+        const amount = Number((hours * hourlyRate * multiplier).toFixed(2));
+        return definition && amount > 0
+            ? { code: definition.code, label: definition.name, amount, rubriqueImposableId: definition.id, calculationKey: key }
+            : null;
+    }).filter(Boolean);
+}
+
+const manualRetenueTotal = rows => (rows || []).reduce((total, row) => total + Number(row.amount || 0), 0);
+
+async function applyManualRetenuesToNet(payslipId, calculatedNet, client = prisma) {
+    const rows = await client.payslipRetenu.findMany({ where: { payslipId }, select: { amount: true } });
+    const netAPayer = Math.max(0, Number((Number(calculatedNet || 0) - manualRetenueTotal(rows)).toFixed(2)));
+    await client.payslip.update({ where: { id: payslipId }, data: { netAPayer } });
+    return netAPayer;
+}
 
 function rejectLockedBulletin(res, payslip, action = "modifier") {
     if (!payslip || !isLockedBulletin(payslip.status)) return false;
@@ -228,11 +259,11 @@ async function persistPayslipBonuses(payslipId, calc, client = prisma, excludedN
     });
     await client.payslipBonus.deleteMany({ where: { payslipId } });
     const taxable = (calc.variablePrimes || [])
-        .filter(p => p.amount > 0)
-        .map(p => ({ payslipId, name: p.label, amount: p.amount, taxable: true }));
+        .filter(p => p.amount > 0 || p.rubriqueImposableId)
+        .map(p => ({ payslipId, rubriqueImposableId: p.rubriqueImposableId || null, code: p.code || '', name: p.label, amount: p.amount, taxable: true }));
     const nimp = (calc.nimpLines || [])
-        .filter(p => p.amount > 0)
-        .map(p => ({ payslipId, name: p.label, amount: p.amount, taxable: false }));
+        .filter(p => Number(p.baseAmount ?? p.amount) > 0)
+        .map(p => ({ payslipId, code: p.code || '', name: p.label, amount: p.amount, baseAmount: p.baseAmount ?? p.amount, taxable: false }));
     const exclusionRows = [
         ...existingExclusions.map(item => ({
             label: String(item.name).slice(EXCLUDED_NIMP_PREFIX.length),
@@ -274,11 +305,12 @@ async function savePayslipWithBonuses(payslipData, payslipId, calc, excludedNimp
             });
         }
         await persistPayslipBonuses(payslip.id, calc, transaction, excludedNimpLabels);
+        await applyManualRetenuesToNet(payslip.id, calc.netAPayer, transaction);
         // Reload the relation after replacing the lines. The bulletin view uses
         // these persisted rows to display recurring and monthly indemnities.
         return transaction.payslip.findUnique({
             where: { id: payslip.id },
-            include: { bonuses: true },
+            include: { bonuses: true, retenus: true },
         });
     });
 }
@@ -366,13 +398,13 @@ async function refreshOpenBulletinFromEmployee(emp, payslip) {
 
     const variablePrimes = (payslip.bonuses || [])
         .filter(item => item.taxable && !fixedTaxableLabels.has(String(item.name).trim().toLowerCase()))
-        .map(item => ({ label: item.name, amount: Number(item.amount) }));
-    const monthlyNimpLines = (payslip.bonuses || [])
+        .map(item => ({ rubriqueImposableId: item.rubriqueImposableId || null, code: item.code || '', label: item.name, amount: Number(item.amount), baseAmount: payslipBonusBaseAmount(item) }));
+        const monthlyNimpLines = (payslip.bonuses || [])
         .filter(item => !item.taxable
             && !fixedNimpLabels.has(String(item.name).trim().toLowerCase())
             && (!representationLabel || String(item.name).trim().toLowerCase() !== representationLabel)
             && !String(item.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
-        .map(item => ({ label: item.name, amount: Number(item.amount) }));
+        .map(item => ({ code: item.code || '', label: item.name, amount: Number(item.amount), baseAmount: payslipBonusBaseAmount(item) }));
 
     const monthlyCalc = runEmployeeCalculation(calculationEmployee, {
         month: payslip.month,
@@ -413,10 +445,17 @@ export function mapPayslipToViewModel(p) {
     if (!p) return null;
     const variablePrimes = (p.bonuses || [])
         .filter(b => b.taxable && !String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
-        .map(b => ({ label: b.name, amount: Number(b.amount) }));
+        .map(b => ({ rubriqueImposableId: b.rubriqueImposableId || null, code: b.code || '', label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
     const nimpLines = (p.bonuses || [])
-        .filter(b => !b.taxable && !String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX) && Number(b.amount) > 0)
-        .map(b => ({ label: b.name, amount: Number(b.amount) }));
+        .filter(b => !b.taxable && !String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX) && payslipBonusBaseAmount(b) > 0)
+        .map(b => ({ code: b.code || '', label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
+    const retenus = (p.retenus || []).map(row => ({
+        id: row.id,
+        rubriqueRetenuId: row.rubriqueRetenuId,
+        code: row.code,
+        label: row.name,
+        amount: Number(row.amount),
+    }));
     const excludedNimpLines = (p.bonuses || [])
         .filter(b => String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
         .map(b => ({ label: String(b.name).slice(EXCLUDED_NIMP_PREFIX.length), amount: Number(b.amount) }));
@@ -518,6 +557,8 @@ export function mapPayslipToViewModel(p) {
         avances: Number(p.avances || 0),
         variablePrimes,
         nimpLines,
+        retenus,
+        manualRetenusTotal: manualRetenueTotal(retenus),
         excludedNimpLines,
         createdAt: p.createdAt ? p.createdAt.toISOString() : null,
         validatedAt: p.validatedAt ? p.validatedAt.toISOString() : null,
@@ -918,7 +959,7 @@ export const generateBulletin = async (req, res) => {
         }
 
         const rates = await getPayrollRates();
-        const payslipData = await buildPayslipData(emp, calc, month, year, rates);
+        const payslipData = await buildPayslipData(emp, calc, month, year, rates, existing?.status || BULLETIN_STATUS.GENERATED);
 
         let payslip;
         if (existing) {
@@ -933,10 +974,17 @@ export const generateBulletin = async (req, res) => {
         }
 
         await persistPayslipBonuses(payslip.id, calc);
+        await applyManualRetenuesToNet(payslip.id, calc.netAPayer);
 
+        if (String(req.headers.accept || '').includes('application/json')) {
+            return res.json({ ok: true, payslipId: payslip.id });
+        }
         res.redirect(`/bulletins/${empId}?month=${month}&year=${year}`);
     } catch (err) {
         console.error("Single generate error:", err);
+        if (String(req.headers.accept || '').includes('application/json')) {
+            return res.status(500).json({ ok: false, error: err.message || "Impossible d'enregistrer le bulletin." });
+        }
         res.redirect("/bulletins");
     }
 };
@@ -949,18 +997,26 @@ export const addMonthlyPrime = async (req, res) => {
         const empId = parseInt(req.params.id);
         const month = parseInt(req.body.month) || currentMonth();
         const year = parseInt(req.body.year) || currentYear();
-        const label = String(req.body.label || '').trim();
+        const rubriqueImposableId = req.body.rubriqueImposableId ? Number(req.body.rubriqueImposableId) : null;
+        let code = String(req.body.code || '').trim();
+        let label = String(req.body.label || '').trim();
         const amount = Number(req.body.amount);
-
-        if (!label || !Number.isFinite(amount) || amount <= 0) {
-            return res.status(400).json({ ok: false, error: "Le libellé et le montant de la prime sont obligatoires." });
-        }
 
         const emp = await getActiveEmployee(req, empId, {
             bonuses: { include: { bonus: true } }
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
         if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée pour cet employé." });
+        let taxableDefinition = null;
+        if (rubriqueImposableId) {
+            taxableDefinition = await prisma.rubriqueImposable.findFirst({ where: { id: rubriqueImposableId, companyId: emp.companyId, active: true } });
+            if (!taxableDefinition) return res.status(400).json({ ok: false, error: "Rubrique imposable introuvable pour cette société." });
+            code = taxableDefinition.code;
+            label = taxableDefinition.name;
+        }
+        if (!code || !label || !Number.isFinite(amount) || amount < 0 || (!amount && !rubriqueImposableId)) {
+            return res.status(400).json({ ok: false, error: "Le code rubrique, le libellé et le montant de la prime sont obligatoires." });
+        }
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -974,7 +1030,7 @@ export const addMonthlyPrime = async (req, res) => {
 
         const previousMonthlyPrimes = (existing?.bonuses || [])
             .filter(bonus => bonus.taxable)
-            .map(bonus => ({ label: bonus.name, amount: Number(bonus.amount) }));
+        .map(bonus => ({ code: bonus.code || '', label: bonus.name, amount: Number(bonus.amount), baseAmount: payslipBonusBaseAmount(bonus), rubriqueImposableId: bonus.rubriqueImposableId || null }));
         // Keep the bulletin's monthly non-taxable lines when adding a taxable
         // prime. Without passing them back to the engine, the recalculation
         // rebuilt the payslip with only taxable lines and deleted the NIMP
@@ -984,8 +1040,8 @@ export const addMonthlyPrime = async (req, res) => {
             .map(b => String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()));
         const monthlyNimpLines = (existing?.bonuses || [])
             .filter(bonus => !bonus.taxable && !fixedNimpLabels.has(String(bonus.name).toLowerCase()))
-            .map(bonus => ({ label: bonus.name, amount: Number(bonus.amount) }));
-        const variablePrimes = [...previousMonthlyPrimes, { label, amount }];
+            .map(bonus => ({ code: bonus.code || '', label: bonus.name, amount: Number(bonus.amount), baseAmount: payslipBonusBaseAmount(bonus) }));
+        const variablePrimes = [...previousMonthlyPrimes, { code, label, amount, rubriqueImposableId: taxableDefinition?.id || null }];
         const monthlyCalc = runEmployeeCalculation(emp, {
             month,
             year,
@@ -1006,7 +1062,8 @@ export const addMonthlyPrime = async (req, res) => {
             : await prisma.payslip.create({ data: payslipData });
 
         await persistPayslipBonuses(payslip.id, calc);
-        return res.json({ ok: true, bonus: { label, amount }, payroll: calc });
+        await applyManualRetenuesToNet(payslip.id, calc.netAPayer);
+        return res.json({ ok: true, bonus: { code, label, amount, rubriqueImposableId: taxableDefinition?.id || null }, payroll: calc });
     } catch (err) {
         console.error("Add monthly prime error:", err);
         return res.status(500).json({ ok: false, error: "Impossible d'enregistrer la prime." });
@@ -1046,7 +1103,7 @@ export const deleteMonthlyPrime = async (req, res) => {
             .map(b => `${String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()}|${Number(b.amount)}`));
         const variablePrimes = existing.bonuses
             .filter(b => b.taxable && !fixedPrimeKeys.has(`${String(b.name).toLowerCase()}|${Number(b.amount)}`))
-            .map(b => ({ label: b.name, amount: Number(b.amount) }));
+            .map(b => ({ code: b.code || '', label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
         const deleteIndex = variablePrimes.findIndex(prime =>
             prime.label.toLowerCase() === label.toLowerCase() && prime.amount === amount
         );
@@ -1057,7 +1114,7 @@ export const deleteMonthlyPrime = async (req, res) => {
 
         const monthlyNimpLines = existing.bonuses
             .filter(b => !b.taxable)
-            .map(b => ({ label: b.name, amount: Number(b.amount) }));
+            .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
         const monthlyCalc = runEmployeeCalculation(emp, {
             month,
             year,
@@ -1076,6 +1133,7 @@ export const deleteMonthlyPrime = async (req, res) => {
         const payslip = await prisma.payslip.update({ where: { id: existing.id }, data: payslipData });
 
         await persistPayslipBonuses(payslip.id, calc);
+        await applyManualRetenuesToNet(payslip.id, calc.netAPayer);
         return res.json({ ok: true, payroll: calc });
     } catch (err) {
         console.error("Delete monthly prime error:", err);
@@ -1091,10 +1149,11 @@ export const addMonthlyIndemnity = async (req, res) => {
         const empId = parseInt(req.params.id);
         const month = parseInt(req.body.month) || currentMonth();
         const year = parseInt(req.body.year) || currentYear();
+        const code = String(req.body.code || '').trim();
         const label = String(req.body.label || '').trim();
         const amount = Number(req.body.amount);
-        if (!label || !Number.isFinite(amount) || amount <= 0) {
-            return res.status(400).json({ ok: false, error: "Le libellé et le montant sont obligatoires." });
+        if (!code || !label || !Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ ok: false, error: "Le code rubrique, le libellé et le montant sont obligatoires." });
         }
 
         const emp = await getActiveEmployee(req, empId, { bonuses: { include: { bonus: true } } });
@@ -1112,8 +1171,8 @@ export const addMonthlyIndemnity = async (req, res) => {
         const fixedNimpLabels = new Set((emp.bonuses || []).filter(b => !(b.bonus ? b.bonus.taxable : b.taxable)).map(b => String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()));
         const monthlyNimpLines = (existing?.bonuses || [])
             .filter(b => !b.taxable && !fixedNimpLabels.has(String(b.name).toLowerCase()))
-            .map(b => ({ label: b.name, amount: Number(b.amount) }));
-        monthlyNimpLines.push({ label, amount });
+            .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
+        monthlyNimpLines.push({ code, label, amount });
         const variablePrimes = (existing?.bonuses || []).filter(b => b.taxable).map(b => ({ label: b.name, amount: Number(b.amount) }));
         const monthlyCalc = runEmployeeCalculation(emp, {
             month, year,
@@ -1139,7 +1198,7 @@ export const addMonthlyIndemnity = async (req, res) => {
                 : (isClosedBulletin(existing?.status) ? BULLETIN_STATUS.CLOSED : BULLETIN_STATUS.GENERATED)
         );
         const payslip = await savePayslipWithBonuses(payslipData, existing?.id, calc);
-        return res.json({ ok: true, bonus: { label, amount }, payroll: calc });
+        return res.json({ ok: true, bonus: { code, label, amount }, payroll: calc });
     } catch (err) {
         console.error("Add monthly indemnity error:", err);
         return res.status(500).json({ ok: false, error: "Impossible d'enregistrer l'indemnité." });
@@ -1260,19 +1319,19 @@ export const updateMonthlyIndemnity = async (req, res) => {
                 && !fixedNimpLabels.has(String(b.name).toLowerCase())
                 && !(saveEmployee && storedBonus
                     && String(b.name).toLowerCase() === oldLabel.toLowerCase()
-                    && Number(b.amount) === oldAmount))
-            .map(b => ({ label: b.name, amount: Number(b.amount) }));
+                    && payslipBonusBaseAmount(b) === oldAmount))
+            .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
         if (!saveEmployee || !storedBonus) {
             const updateIndex = monthlyNimpLines.findIndex(line =>
-                line.label.toLowerCase() === oldLabel.toLowerCase() && line.amount === oldAmount
+                line.label.toLowerCase() === oldLabel.toLowerCase() && line.baseAmount === oldAmount
             );
             if (updateIndex === -1) return res.status(404).json({ ok: false, error: "Cette indemnité n'existe pas sur ce bulletin." });
-            monthlyNimpLines[updateIndex] = { label, amount };
+            monthlyNimpLines[updateIndex] = { label, amount, baseAmount: amount };
         }
 
         const variablePrimes = existing.bonuses
             .filter(b => b.taxable)
-            .map(b => ({ label: b.name, amount: Number(b.amount) }));
+            .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
         const monthlyCalc = runEmployeeCalculation(calculationEmployee, {
             month,
             year,
@@ -1373,9 +1432,9 @@ export const deleteMonthlyIndemnity = async (req, res) => {
             .filter(b => !b.taxable
                 && !fixedNimpLabels.has(String(b.name).toLowerCase())
                 && (!calculationRepresentationLabel || String(b.name).toLowerCase() !== calculationRepresentationLabel))
-            .map(b => ({ label: b.name, amount: Number(b.amount) }));
+            .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
         const deleteIndex = monthlyNimpLines.findIndex(line =>
-            line.label.toLowerCase() === label.toLowerCase() && line.amount === amount
+            line.label.toLowerCase() === label.toLowerCase() && line.baseAmount === amount
         );
         if (deleteIndex === -1) {
             return res.status(404).json({ ok: false, error: "Cette indemnité n'existe pas sur ce bulletin." });
@@ -1384,7 +1443,7 @@ export const deleteMonthlyIndemnity = async (req, res) => {
 
         const variablePrimes = existing.bonuses
             .filter(b => b.taxable)
-            .map(b => ({ label: b.name, amount: Number(b.amount) }));
+            .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
         const monthlyCalc = runEmployeeCalculation(calculationEmployee, {
             month,
             year,
@@ -1459,9 +1518,9 @@ export const restoreEmployeeIndemnity = async (req, res) => {
                 && !String(bonus.name || '').startsWith(EXCLUDED_NIMP_PREFIX)
                 && !fixedNimpLabels.has(String(bonus.name).trim().toLowerCase())
                 && (!representationLabel || String(bonus.name).trim().toLowerCase() !== representationLabel))
-            .map(bonus => ({ label: bonus.name, amount: Number(bonus.amount) }));
+            .map(bonus => ({ label: bonus.name, amount: Number(bonus.amount), baseAmount: payslipBonusBaseAmount(bonus) }));
         if (!fixedNimpLabels.has(key) && key !== representationLabel && Number(deletedLine.amount) > 0) {
-            monthlyNimpLines.push({ label, amount: Number(deletedLine.amount) });
+            monthlyNimpLines.push({ label, amount: Number(deletedLine.amount), baseAmount: payslipBonusBaseAmount(deletedLine) });
         }
         const variablePrimes = existing.bonuses
             .filter(bonus => bonus.taxable)
@@ -1629,7 +1688,7 @@ export const updateBulletinWorkedDays = async (req, res) => {
             heuresSup100: Number(existing.heuresSup100 || 0),
             avances: Number(existing.avances || 0),
             variablePrimes: existing.bonuses.filter(b => b.taxable).map(b => ({ label: b.name, amount: Number(b.amount) })),
-            monthlyNimpLines: existing.bonuses.filter(b => !b.taxable).map(b => ({ label: b.name, amount: Number(b.amount) })),
+        monthlyNimpLines: existing.bonuses.filter(b => !b.taxable).map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) })),
         });
         const calc = await applyCumulativeIR(employeeId, month, year, monthlyCalc, employee.nbPersonacharge);
         if (req.method === 'POST') {
@@ -1667,6 +1726,8 @@ export const calculateLive = async (req, res) => {
         if (!emp) {
             return res.status(404).json({ ok: false, error: "Employé introuvable" });
         }
+        const rubriqueMaps = await getRubriqueMaps(emp.companyId);
+        const rubriqueCodes = rubriqueMaps.codes;
 
         const month = parseInt(req.query.month) || currentMonth();
         const year = parseInt(req.query.year) || currentYear();
@@ -1725,6 +1786,11 @@ export const calculateLive = async (req, res) => {
 
         const monthlyResult = runEmployeeCalculation(emp, overrides);
         const result = await applyCumulativeIR(emp.id, month, year, monthlyResult, overrides.dependents ?? emp.nbPersonacharge);
+        const savedManualRetenus = await prisma.payslip.findUnique({
+            where: { employeeId_month_year: { employeeId: emp.id, month, year } },
+            select: { retenus: { select: { amount: true } } },
+        });
+        const manualRetenusTotal = manualRetenueTotal(savedManualRetenus?.retenus);
 
         res.json({
             ok: true,
@@ -1760,7 +1826,8 @@ export const calculateLive = async (req, res) => {
             chargesDeFamille: result.chargesDeFamille,
             irNet: result.irNet,
             avances: result.avances,
-            netAPayer: result.netAPayer,
+            netAPayer: Math.max(0, Number((Number(result.netAPayer || 0) - manualRetenusTotal).toFixed(2))),
+            manualRetenusTotal,
             annualCumulative: result.annualCumulative,
             periode: result.periode,
         });
@@ -1801,6 +1868,8 @@ export const showBulletin = async (req, res) => {
             console.warn("[bulletin-show] employee.not-found", { requestId, employeeId: empId, companyId: resolveCompanyId(req) });
             return res.status(404).send("Employé introuvable dans cette entreprise.");
         }
+        const rubriqueMaps = await getRubriqueMaps(emp.companyId);
+        const rubriqueCodes = rubriqueMaps.codes;
 
         const month = req.query.month ? parseInt(req.query.month) : null;
         const year = req.query.year ? parseInt(req.query.year) : null;
@@ -1876,7 +1945,7 @@ export const showBulletin = async (req, res) => {
             const dbHistory = await prisma.payslip.findMany({
                 where: { employeeId: empId },
                 orderBy: [{ year: 'desc' }, { month: 'desc' }],
-                include: { bonuses: true }
+                include: { bonuses: true, retenus: true }
             });
 
             const history = dbHistory.map(mapPayslipToViewModel);
@@ -1901,18 +1970,22 @@ export const showBulletin = async (req, res) => {
                 monthNames: MONTH_NAMES_FR,
 
                 fmt,
+                rubriqueCodes,
+                taxableRubriques: rubriqueMaps.imposableRows,
+                manualRetenuRubriques: rubriqueMaps.retenuRows.filter(row => row.entryType === 'MANUAL' && row.active),
             });
         }
 
         // Single bulletin mode
         const dbPayslip = await prisma.payslip.findFirst({
             where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } },
-            include: { bonuses: true }
+            include: { bonuses: true, retenus: true }
         });
         console.info("[bulletin-show] payslip.loaded", { requestId, employeeId: empId, month, year, found: Boolean(dbPayslip) });
 
         const refreshedPayslip = await refreshOpenBulletinFromEmployee(emp, dbPayslip);
         const bulletin = mapPayslipToViewModel(refreshedPayslip);
+        const addTaxableLines = values => taxableAdditionLines(values || {}, rubriqueMaps.imposableRows);
         if (bulletin) {
             const fixedNimpLabels = new Set((emp.bonuses || [])
                 .filter(bonus => !(bonus.bonus ? bonus.bonus.taxable : bonus.taxable))
@@ -1946,10 +2019,10 @@ export const showBulletin = async (req, res) => {
             previewResult
         );
         const bulletinViewModel = bulletin
-            ? { ...bulletin, annualCumulative }
+            ? { ...bulletin, annualCumulative, taxableAdditions: addTaxableLines(bulletin) }
             : null;
         const previewViewModel = previewResult
-            ? { ...previewResult, annualCumulative }
+            ? { ...previewResult, annualCumulative, taxableAdditions: addTaxableLines(previewResult) }
             : null;
 
         res.render("bulletins/show", {
@@ -1974,6 +2047,9 @@ export const showBulletin = async (req, res) => {
             annualCumulative,
             periode: bulletin?.periode ?? previewResult?.periode ?? 1,
             fmt,
+            rubriqueCodes,
+            taxableRubriques: rubriqueMaps.imposableRows,
+            manualRetenuRubriques: rubriqueMaps.retenuRows.filter(row => row.entryType === 'MANUAL' && row.active),
         });
     } catch (err) {
         console.error("[bulletin-show] request.failed", {
@@ -1991,6 +2067,53 @@ export const showBulletin = async (req, res) => {
 // ---------------------------------------------------------------------------
 // GET /bulletins/:id/pdf  — Download bulletin PDF (saved real Payslips only)
 // ---------------------------------------------------------------------------
+export const addManualRetenu = async (req, res) => {
+    try {
+        const employeeId = Number(req.params.id);
+        const month = Number(req.body.month) || currentMonth();
+        const year = Number(req.body.year) || currentYear();
+        const rubriqueRetenuId = Number(req.body.rubriqueRetenuId);
+        const amount = Number(req.body.amount);
+        const payslip = await prisma.payslip.findFirst({
+            where: { employeeId, month, year, employee: { companyId: resolveCompanyId(req) } },
+            include: { retenus: true },
+        });
+        if (!payslip) return res.status(400).json({ ok: false, error: "Générez d'abord le bulletin avant d'ajouter une retenue." });
+        if (isLockedBulletin(payslip.status)) return res.status(403).json({ ok: false, error: "Ce bulletin est verrouillé." });
+        if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "Le montant doit être positif." });
+        const rubrique = await prisma.rubriqueRetenu.findFirst({ where: { id: rubriqueRetenuId, companyId: resolveCompanyId(req), entryType: 'MANUAL', active: true } });
+        if (!rubrique) return res.status(400).json({ ok: false, error: "Cette retenue n'est pas disponible." });
+        const row = await prisma.payslipRetenu.create({ data: { payslipId: payslip.id, rubriqueRetenuId: rubrique.id, code: rubrique.code, name: rubrique.name, amount: Number(amount.toFixed(2)) } });
+        const netAPayer = await applyManualRetenuesToNet(payslip.id, Number(payslip.netAPayer) + manualRetenueTotal(payslip.retenus));
+        if (String(req.headers.accept || '').includes('text/html')) return res.redirect(`/bulletins/${employeeId}?month=${month}&year=${year}`);
+        return res.json({ ok: true, retenu: { id: row.id, code: row.code, label: row.name, amount: Number(row.amount) }, netAPayer });
+    } catch (error) {
+        console.error("Add manual retenu error:", error);
+        return res.status(500).json({ ok: false, error: "Impossible d'ajouter la retenue." });
+    }
+};
+
+export const deleteManualRetenu = async (req, res) => {
+    try {
+        const employeeId = Number(req.params.id);
+        const month = Number(req.body.month) || currentMonth();
+        const year = Number(req.body.year) || currentYear();
+        const retenuId = Number(req.body.retenuId);
+        const payslip = await prisma.payslip.findFirst({ where: { employeeId, month, year, employee: { companyId: resolveCompanyId(req) } }, include: { retenus: true } });
+        if (!payslip) return res.status(404).json({ ok: false, error: "Bulletin introuvable." });
+        if (isLockedBulletin(payslip.status)) return res.status(403).json({ ok: false, error: "Ce bulletin est verrouillé." });
+        const row = payslip.retenus.find(item => item.id === retenuId);
+        if (!row) return res.status(404).json({ ok: false, error: "Retenue introuvable." });
+        await prisma.payslipRetenu.delete({ where: { id: row.id } });
+        const netAPayer = await applyManualRetenuesToNet(payslip.id, Number(payslip.netAPayer) + manualRetenueTotal(payslip.retenus));
+        if (String(req.headers.accept || '').includes('text/html')) return res.redirect(`/bulletins/${employeeId}?month=${month}&year=${year}`);
+        return res.json({ ok: true, netAPayer });
+    } catch (error) {
+        console.error("Delete manual retenu error:", error);
+        return res.status(500).json({ ok: false, error: "Impossible de supprimer la retenue." });
+    }
+};
+
 export const downloadPdfBulletin = async (req, res) => {
     try {
         const empId = parseInt(req.params.id);
@@ -2002,6 +2125,7 @@ export const downloadPdfBulletin = async (req, res) => {
             where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } },
             include: {
                 bonuses: true,
+                retenus: true,
                 employee: {
                     include: { company: true, employeeFunction: true }
                 }
@@ -2015,17 +2139,20 @@ export const downloadPdfBulletin = async (req, res) => {
         const emp = payslip.employee;
         const comp = emp.company || {};
         const monthName = MONTH_NAMES_FR[month] || "Mois";
+        const rubriqueMaps = await getRubriqueMaps(emp.companyId);
+        const rubriqueCodes = rubriqueMaps.codes;
 
         const hireDate = new Date(emp.dateEmbauche);
         const seniorityYears = Math.max(0, Math.floor((new Date() - hireDate) / (1000 * 60 * 60 * 24 * 365.25)));
 
         const variablePrimes = (payslip.bonuses || [])
             .filter(b => b.taxable)
-            .map(b => ({ label: b.name, amount: Number(b.amount) }));
+            .map(b => ({ code: b.code || '', label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
+        const bulletinData = mapPayslipToViewModel(payslip);
         const cumulative = await getBulletinPdfCumulative(empId, year, month, payslip);
 
         const pdfData = {
-            ...mapPayslipToViewModel(payslip),
+            ...bulletinData,
             employeeName: emp.nomComplet,
             employeeMatricule: emp.matricule,
             employeeCNSS: emp.numeroCNSS || '—',
@@ -2050,7 +2177,9 @@ export const downloadPdfBulletin = async (req, res) => {
             paymentDate: `${year}-${String(month).padStart(2, '0')}-25`,
             paymentMethod: emp.modePaiement || 'Virement',
             variablePrimes,
+            taxableAdditions: taxableAdditionLines(bulletinData, rubriqueMaps.imposableRows),
             cumulative,
+            rubriqueCodes,
         };
 
         const fileName = `bulletin-${emp.nomComplet.toLowerCase()}-${month}-${year}.pdf`;

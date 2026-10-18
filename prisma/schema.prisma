@@ -15,30 +15,33 @@ datasource db {
 }
 
 model Company {
-  id                    Int             @id @default(autoincrement())
-  name                  String
-  adresse               String?
-  ville                 String?
-  ice                   String?         @unique
-  ifNumber              String?         @unique
-  rc                    String?         @unique
-  numeroAffiliationCnss String?
-  smig                  Decimal?        @db.Decimal(12, 2)
-  numeroAssurance       String?
-  workingTimeMode       WorkingTimeMode @default(DAYS)
-  standardMonthlyDays   Decimal         @default(26) @db.Decimal(8, 2)
-  standardMonthlyHours  Decimal         @default(191) @db.Decimal(8, 2)
-  indemniteRepresentationRate Decimal   @default(0.10) @db.Decimal(6, 4)
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  id                          Int             @id @default(autoincrement())
+  name                        String
+  adresse                     String?
+  ville                       String?
+  ice                         String?         @unique
+  ifNumber                    String?         @unique
+  rc                          String?         @unique
+  numeroAffiliationCnss       String?
+  smig                        Decimal?        @db.Decimal(12, 2)
+  numeroAssurance             String?
+  workingTimeMode             WorkingTimeMode @default(DAYS)
+  standardMonthlyDays         Decimal         @default(26) @db.Decimal(8, 2)
+  standardMonthlyHours        Decimal         @default(191) @db.Decimal(8, 2)
+  indemniteRepresentationRate Decimal         @default(0.10) @db.Decimal(6, 4)
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
 
-  userCompanies UserCompany[]
-  employees     Employee[]
-  employeeCategories EmployeeCategory[]
-  employeeFunctions EmployeeFunction[]
-  bonuses       Bonus[]
-  reports       Report[]
-  auditLogs     AuditLog[]
+  userCompanies       UserCompany[]
+  employees           Employee[]
+  employeeCategories  EmployeeCategory[]
+  employeeFunctions   EmployeeFunction[]
+  bonuses             Bonus[]
+  rubriqueBases       RubriqueBase[]
+  rubriqueRetenus     RubriqueRetenu[]
+  rubriquesImposables RubriqueImposable[]
+  reports             Report[]
+  auditLogs           AuditLog[]
 
   @@map("company")
 }
@@ -168,11 +171,11 @@ model Employee {
   employeeFunction  EmployeeFunction? @relation(fields: [functionId], references: [id])
   codeService       String? // Code Service (department/cost center)
   categoryId        Int
-  category          EmployeeCategory @relation(fields: [categoryId], references: [id])
-  natureEmploi      NatureEmploi  @default(PERMANENT) // gates CNSS/AMO logic — stagiaire/exonere ≠ same contributions
+  category          EmployeeCategory  @relation(fields: [categoryId], references: [id])
+  natureEmploi      NatureEmploi      @default(PERMANENT) // gates CNSS/AMO logic — stagiaire/exonere ≠ same contributions
   contratDateDebut  DateTime? // Contrat Du
   contratDateFin    DateTime? // Contrat Au (nullable = CDI)
-  blocageSaisiePaie Boolean       @default(false) // locks employee out of active payroll run
+  blocageSaisiePaie Boolean           @default(false) // locks employee out of active payroll run
 
   // --- État civil ---
   situationFam        SituationFamiliale
@@ -220,7 +223,7 @@ model EmployeeCategory {
   companyId Int
   createdAt DateTime @default(now())
 
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employees Employee[]
 
   @@unique([companyId, name])
@@ -235,7 +238,7 @@ model EmployeeFunction {
   companyId Int
   createdAt DateTime @default(now())
 
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employees Employee[]
 
   @@unique([companyId, name])
@@ -245,12 +248,13 @@ model EmployeeFunction {
 }
 
 model Bonus {
-  id        Int      @id @default(autoincrement())
-  companyId Int
-  name      String
-  defaultAmount Decimal @default(0) @db.Decimal(12, 2)
-  taxable   Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  companyId     Int
+  code          String   @default("") @db.VarChar(64)
+  name          String
+  defaultAmount Decimal  @default(0) @db.Decimal(12, 2)
+  taxable       Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   employeeBonuses EmployeeBonus[]
@@ -334,6 +338,7 @@ model Payslip {
 
   employee Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   bonuses  PayslipBonus[]
+  retenus  PayslipRetenu[]
 
   @@unique([employeeId, month, year])
   @@index([employeeId])
@@ -359,16 +364,21 @@ model BulletinMask {
 // ================================
 
 model PayslipBonus {
-  id        Int      @id @default(autoincrement())
-  payslipId Int
-  name      String
-  amount    Decimal  @db.Decimal(12, 2)
-  taxable   Boolean  @default(true) // true = Imposable, false = Non-imposable / Exonéré
-  createdAt DateTime @default(now())
+  id                  Int      @id @default(autoincrement())
+  payslipId           Int
+  rubriqueImposableId Int?
+  name                String
+  code                String   @default("") @db.VarChar(64)
+  amount              Decimal  @db.Decimal(12, 2)
+  baseAmount          Decimal? @db.Decimal(12, 2) // Full-month source amount for prorated non-taxable indemnities
+  taxable             Boolean  @default(true) // true = Imposable, false = Non-imposable / Exonéré
+  createdAt           DateTime @default(now())
 
-  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  payslip           Payslip            @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  rubriqueImposable RubriqueImposable? @relation(fields: [rubriqueImposableId], references: [id], onDelete: SetNull)
 
   @@index([payslipId])
+  @@index([rubriqueImposableId])
   @@map("payslip_bonuses")
 }
 
@@ -392,4 +402,97 @@ model PayrollConfig {
   updatedAt DateTime @updatedAt
 
   @@map("payroll_configs")
+}
+
+model RubriqueBase {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  key       String   @db.VarChar(64)
+  name      String   @db.VarChar(191)
+  code      String   @db.VarChar(64)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, key])
+  @@unique([companyId, code])
+  @@index([companyId, active])
+  @@map("rubrique_base")
+}
+
+model RubriqueRetenu {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  key       String   @db.VarChar(64)
+  name      String   @db.VarChar(191)
+  code      String   @db.VarChar(64)
+  entryType String   @default("SYSTEM") @db.VarChar(16)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payslipRetenus PayslipRetenu[]
+
+  @@unique([companyId, key])
+  @@unique([companyId, code])
+  @@index([companyId, active])
+  @@map("rubrique_retenu")
+}
+
+model PayslipRetenu {
+  id               Int      @id @default(autoincrement())
+  payslipId        Int
+  rubriqueRetenuId Int
+  code             String   @db.VarChar(64)
+  name             String   @db.VarChar(191)
+  amount           Decimal  @db.Decimal(12, 2)
+  createdAt        DateTime @default(now())
+
+  payslip        Payslip        @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  rubriqueRetenu RubriqueRetenu @relation(fields: [rubriqueRetenuId], references: [id], onDelete: Restrict)
+
+  @@index([payslipId])
+  @@index([rubriqueRetenuId])
+  @@map("payslip_retenus")
+}
+
+model RubriqueImposable {
+  id             Int      @id @default(autoincrement())
+  companyId      Int
+  code           String   @db.VarChar(64)
+  name           String   @db.VarChar(191)
+  entryType      String   @default("MANUAL_AMOUNT") @db.VarChar(32)
+  calculationKey String?  @db.VarChar(64)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payslipBonuses PayslipBonus[]
+
+  @@unique([companyId, code])
+  @@unique([companyId, name])
+  @@index([companyId, active])
+  @@map("rubrique_imposable")
+}
+
+// Legacy tables remain mapped so existing migrations/data are not silently dropped.
+model LegacyBulletinRubrique {
+  id   Int    @id @default(autoincrement())
+  name String @unique @db.VarChar(191)
+  code String @db.VarChar(64)
+
+  @@map("bulletin_rubrique")
+}
+
+model LegacyRubriqueImposable {
+  id     Int     @id @default(autoincrement())
+  code   String  @db.VarChar(64)
+  name   String  @db.VarChar(191)
+  amount Decimal @db.Decimal(12, 2)
+
+  @@map("rubrique_imposable_legacy")
 }

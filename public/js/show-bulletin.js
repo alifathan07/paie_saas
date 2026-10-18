@@ -33,6 +33,14 @@
     const primeDialogForm = document.querySelector('#prime-dialog-form');
     const primeLabelInput = document.querySelector('#prime-label-input');
     const primeAmountInput = document.querySelector('#prime-amount-input');
+    const primeCodeInput = document.querySelector('#prime-code-input');
+    const primeRubriqueSelect = document.querySelector('#prime-rubrique-select');
+    primeRubriqueSelect?.addEventListener('change', () => {
+        const option = primeRubriqueSelect.selectedOptions[0];
+        if (!option?.value) return;
+        primeCodeInput.value = option.dataset.code || '';
+        primeLabelInput.value = option.dataset.name || '';
+    });
     const confirmDeletion = message => window.AppDialog.confirm(message, {
         title: 'Confirmer la suppression', confirmLabel: 'Supprimer', danger: true,
     });
@@ -46,6 +54,7 @@
         if (event.submitter?.value !== 'add') return;
         event.preventDefault();
         const label = primeLabelInput.value.trim();
+        const code = primeCodeInput.value.trim();
         const amount = Number(primeAmountInput.value);
         const submitButton = event.submitter;
         submitButton.disabled = true;
@@ -54,7 +63,7 @@
             const response = await fetch(`/bulletins/${page.dataset.employeeId}/primes`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({ label, amount, month: page.dataset.month, year: page.dataset.year })
+                body: JSON.stringify({ code, label, amount, rubriqueImposableId: primeRubriqueSelect?.value || null, month: page.dataset.month, year: page.dataset.year })
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer la prime.');
@@ -82,10 +91,91 @@
         }
     });
 
+    const otherRubriqueDialog = document.querySelector('#other-rubrique-dialog');
+    const otherRubriqueDialogForm = document.querySelector('#other-rubrique-dialog-form');
+    const otherRubriqueSelect = document.querySelector('#other-rubrique-select');
+    const otherRubriqueAmountInput = document.querySelector('#other-rubrique-amount-input');
+    otherRubriqueSelect?.addEventListener('change', () => {
+        const option = otherRubriqueSelect.selectedOptions[0];
+        otherRubriqueAmountInput.value = '';
+    });
+    document.querySelector('#add-other-rubrique')?.addEventListener('click', () => {
+        otherRubriqueDialog?.showModal();
+        otherRubriqueSelect?.focus();
+    });
+    document.querySelector('#other-rubrique-dialog-cancel')?.addEventListener('click', () => otherRubriqueDialog?.close());
+    otherRubriqueDialogForm?.addEventListener('submit', async event => {
+        if (event.submitter?.value !== 'add') return;
+        event.preventDefault();
+        const option = otherRubriqueSelect?.selectedOptions[0];
+        const rubriqueImposableId = otherRubriqueSelect?.value;
+        const amount = Number(otherRubriqueAmountInput?.value || 0);
+        if (!rubriqueImposableId || !Number.isFinite(amount) || amount < 0) {
+            window.AppDialog.alert('Choisissez une rubrique et saisissez un montant valide.');
+            return;
+        }
+        const submitButton = event.submitter;
+        submitButton.disabled = true;
+        submitButton.textContent = 'Enregistrement...';
+        try {
+            const response = await fetch(`/bulletins/${page.dataset.employeeId}/primes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({
+                    rubriqueImposableId,
+                    code: option?.dataset.code || '',
+                    label: option?.dataset.name || '',
+                    amount,
+                    month: page.dataset.month,
+                    year: page.dataset.year,
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’ajouter la rubrique.');
+            window.location.reload();
+        } catch (errorObject) {
+            window.AppDialog.alert(errorObject.message);
+            submitButton.disabled = false;
+            submitButton.textContent = 'Ajouter';
+        }
+    });
+
+    const overtimeDialog = document.querySelector('#overtime-dialog');
+    const overtimeDialogForm = document.querySelector('#overtime-dialog-form');
+    const overtimeTypeSelect = document.querySelector('#overtime-type-select');
+    const overtimeHoursInput = document.querySelector('#overtime-hours-input');
+    document.querySelector('#add-overtime')?.addEventListener('click', () => {
+        overtimeHoursInput.value = '';
+        overtimeDialog?.showModal();
+        overtimeHoursInput?.focus();
+    });
+    document.querySelector('#overtime-dialog-cancel')?.addEventListener('click', () => overtimeDialog?.close());
+    overtimeDialogForm?.addEventListener('submit', event => {
+        if (event.submitter?.value !== 'add') return;
+        event.preventDefault();
+        const hours = Number(overtimeHoursInput?.value);
+        const selectedOvertimeField = overtimeTypeSelect?.value;
+        if (!selectedOvertimeField || !Number.isFinite(hours) || hours <= 0) {
+            window.AppDialog.alert('Saisissez un nombre d’heures positif.');
+            return;
+        }
+        let hiddenInput = form.querySelector(`input[type="hidden"][name="${selectedOvertimeField}"]`);
+        if (!hiddenInput) {
+            hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = selectedOvertimeField;
+            form.appendChild(hiddenInput);
+        }
+        hiddenInput.value = String(hours);
+        overtimeDialog?.close();
+        form.requestSubmit();
+    });
+
     const indemnityDialog = document.querySelector('#indemnity-dialog');
     const indemnityDialogForm = document.querySelector('#indemnity-dialog-form');
     const indemnityLabelInput = document.querySelector('#indemnity-label-input');
     const indemnityAmountInput = document.querySelector('#indemnity-amount-input');
+    const indemnityCodeInput = document.querySelector('#indemnity-code-input');
     document.querySelector('#add-indemnity')?.addEventListener('click', () => {
         indemnityDialog?.showModal();
         indemnityLabelInput?.focus();
@@ -111,6 +201,7 @@
         if (event.submitter?.value !== 'add') return;
         event.preventDefault();
         const label = indemnityLabelInput.value.trim();
+        const code = indemnityCodeInput.value.trim();
         const amount = Number(indemnityAmountInput.value);
         const submitButton = event.submitter;
         submitButton.disabled = true;
@@ -119,7 +210,7 @@
             const response = await fetch(`/bulletins/${page.dataset.employeeId}/indemnities`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({ label, amount, month: page.dataset.month, year: page.dataset.year })
+                body: JSON.stringify({ code, label, amount, month: page.dataset.month, year: page.dataset.year })
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || "Impossible d'enregistrer l'indemnité.");
@@ -315,6 +406,13 @@
             node.textContent = `${Number(Number(result.fraisProRate || 0) * 100).toLocaleString('fr-MA', { maximumFractionDigits: 2 })}%`;
         });
         setAnnualCumulative(result.annualCumulative);
+        const nimpLines = result.nimpLines || [];
+        document.querySelectorAll('.monthly-indemnity-line').forEach(row => {
+            const label = row.querySelector('[name="nimpLabels"]')?.value?.trim().toLowerCase();
+            const line = nimpLines.find(item => String(item.label || '').trim().toLowerCase() === label);
+            const payable = row.querySelector('[data-nimp-payable]');
+            if (payable) payable.textContent = money(line?.amount || 0);
+        });
         document.querySelectorAll('[data-result="workedDays"]').forEach(node => { node.textContent = timeValue(result.workedDays); });
         document.querySelectorAll('[data-result="workedHours"]').forEach(node => { node.textContent = timeValue(result.workedHours); });
         document.querySelectorAll('[data-result="periode"]').forEach(element => {
@@ -421,7 +519,6 @@
         if (event.target === workingTimeInput && page.dataset.saved === 'true') return;
         calculate();
     });
-
     const employeePanel = document.querySelector('#bulletin-employee-panel');
     const employeeList = document.querySelector('#bulletin-employee-list');
     const employeeSearch = document.querySelector('#bulletin-employee-search');
@@ -488,12 +585,14 @@
         try {
             const response = await fetch(form.action, {
                 method: 'POST',
-                headers: { Accept: 'text/html' },
-                body: new FormData(form),
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                },
+                body: new URLSearchParams(new FormData(form)),
             });
-            if (!response.ok || !response.url.includes(`/bulletins/${page.dataset.employeeId}`)) {
-                throw new Error('Impossible d’enregistrer les modifications.');
-            }
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer les modifications.');
             savedFormSignature = formSignature();
             page.dataset.saved = 'true';
             state.textContent = 'Enregistré';
@@ -509,6 +608,44 @@
             switchingEmployee = false;
         }
     };
+    let catalogueSaveTimer;
+    document.querySelectorAll('.catalogue-rubrique-amount').forEach(input => input.addEventListener('input', () => {
+        if (locked) return;
+        clearTimeout(catalogueSaveTimer);
+        catalogueSaveTimer = setTimeout(() => saveBeforeSwitch(), 800);
+    }));
+    form.addEventListener('keydown', async event => {
+        if (event.key !== 'Enter' || event.target.matches('textarea, button, select')) return;
+        event.preventDefault();
+        if (locked || !hasPendingChanges() || switchingEmployee) return;
+        switchingEmployee = true;
+        const state = document.querySelector('#calculation-state');
+        const error = document.querySelector('#calculation-error');
+        state.textContent = 'Enregistrement…';
+        error.hidden = true;
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                },
+                body: new URLSearchParams(new FormData(form)),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer les modifications.');
+            savedFormSignature = formSignature();
+            page.dataset.saved = 'true';
+            sessionStorage.setItem(saveConfirmationStorageKey, 'true');
+            window.location.reload();
+        } catch (failure) {
+            state.textContent = 'Modification non enregistrée';
+            error.textContent = failure.message;
+            error.hidden = false;
+        } finally {
+            switchingEmployee = false;
+        }
+    });
     employeeLinks.forEach(link => link.addEventListener('click', async event => {
         if (locked || !hasPendingChanges()) return;
         event.preventDefault();

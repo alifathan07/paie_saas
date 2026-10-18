@@ -11,45 +11,50 @@
 
 <% if (error) { %><div class="alert alert-error" role="alert"><%= error %></div><% } %>
 
-<% if (!representationConfigured) { %>
-<section class="catalog-create-card representation-settings-card">
-    <div class="catalog-create-copy">
-        <span class="catalog-create-icon">%</span>
-        <div>
-            <h2>Indemnité de représentation</h2>
-            <p>Taux proposé par défaut lors de l’attribution à un salarié. Le taux peut ensuite être personnalisé par salarié.</p>
-        </div>
-    </div>
-    <form action="/indemnites/representation-rate" method="POST" class="catalog-create-form representation-rate-form">
-        <label class="sr-only" for="representation-rate">Taux par défaut (%)</label>
-        <input id="representation-rate" name="rate" class="form-input" type="number" min="0" max="100" step="0.01" value="<%= representationRate %>" required>
-        <span class="currency-label">%</span>
-        <button class="btn-primary" type="submit">Enregistrer</button>
-    </form>
-</section>
-<% } %>
-
 <section class="catalog-create-card">
     <div class="catalog-create-copy"><span class="catalog-create-icon">+</span><div><h2>Ajouter une indemnité</h2><p>Créez un libellé réutilisable dans les fiches salariés.</p></div></div>
-    <form action="/indemnites" method="POST" class="catalog-create-form">
-        <label class="sr-only" for="indemnite-name">Nom de l’indemnité</label>
-        <input id="indemnite-name" name="name" class="form-input" required maxlength="191" placeholder="Ex. Indemnité de transport">
-        <label class="sr-only" for="indemnite-default-amount">Montant par défaut</label>
-        <input id="indemnite-default-amount" name="defaultAmount" class="form-input" type="number" min="0.01" step="0.01" required placeholder="Montant par défaut (DH)">
-        <button class="btn-primary" type="submit">Créer</button>
-    </form>
+    <button id="open-indemnite-modal" class="btn-primary" type="button">Ajouter une nouvelle indemnité</button>
 </section>
+
+<div id="indemnite-create-modal" class="app-modal" <%= createRows && createRows.length ? '' : 'hidden' %>>
+    <div class="app-modal-backdrop" data-close-indemnite-modal></div>
+    <div class="app-modal-card catalog-modal-card" role="dialog" aria-modal="true" aria-labelledby="indemnite-modal-title">
+        <div class="app-modal-header">
+            <div><h2 id="indemnite-modal-title">Ajouter des indemnités</h2><p>Ajoutez une ou plusieurs lignes, puis cliquez sur « Enregistrer ».</p></div>
+            <button type="button" class="modal-close" data-close-indemnite-modal aria-label="Fermer">×</button>
+        </div>
+        <form action="/indemnites" method="POST" id="indemnite-create-form">
+            <div id="indemnite-create-rows" class="catalog-create-rows">
+                <% (createRows || []).forEach(function(row) { %>
+                    <div class="catalog-create-row" data-representation-row="<%= row.isRepresentation ? '1' : '0' %>">
+                        <input name="code[]" class="form-input" maxlength="64" placeholder="Rubrique (ex. 1003)" value="<%= row.code %>" <%= row.isRepresentation ? '' : 'required' %>>
+                        <input name="name[]" class="form-input" required maxlength="191" placeholder="Libellé (ex. Indemnité de transport)" value="<%= row.name %>" <%= row.isRepresentation ? 'readonly' : '' %>>
+                        <div class="catalog-amount-field"><input name="defaultAmount[]" class="form-input" type="number" min="0.01" max="100" step="0.01" required placeholder="Montant / taux" value="<%= row.defaultAmount %>"><span class="currency-label"><%= row.isRepresentation ? '%' : 'DH' %></span></div>
+                        <input type="hidden" name="representation[]" value="<%= row.isRepresentation ? '1' : '0' %>">
+                        <button class="remove-indemnite-row" type="button" aria-label="Supprimer cette indemnité">×</button>
+                    </div>
+                <% }); %>
+            </div>
+            <div class="catalog-create-form-actions">
+                <button id="add-another-indemnite" class="btn-secondary" type="button">+ Ajouter une indemnité</button>
+                <button id="add-representation-indemnite" class="btn-secondary" type="button">Ajouter indemnité de représentation</button>
+                <button class="btn-primary" type="submit">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <section class="catalog-card">
     <div class="catalog-card-header"><div><h2>Indemnités disponibles</h2><p>Ces libellés apparaîtront dans le bouton « Ajouter des indemnités » des fiches salariés.</p></div><span class="catalog-count"><%= indemnites.length %> <%= indemnites.length === 1 ? 'indemnité' : 'indemnités' %></span></div>
     <% if (indemnites.length) { %>
         <div class="data-table-wrapper catalog-table-wrapper">
             <table class="data-table catalog-table">
-                <thead><tr><th>Nom</th><th>Valeur par défaut</th><th>Salariés affectés</th><th class="catalog-actions-heading">Actions</th></tr></thead>
+                <thead><tr><th>Rubrique</th><th>Nom</th><th>Valeur par défaut</th><th>Salariés affectés</th><th class="catalog-actions-heading">Actions</th></tr></thead>
                 <tbody>
                     <% indemnites.forEach(function (item) { %>
                         <tr>
-                            <td><form id="edit-indemnite-<%= item.id %>" action="/indemnites/<%= item.id %>/edit" method="POST"></form><input form="edit-indemnite-<%= item.id %>" class="form-input catalog-name-input" name="name" value="<%= item.name %>" <%= item.isRepresentation ? 'readonly' : '' %> required maxlength="191"></td>
+                            <td><form id="edit-indemnite-<%= item.id %>" action="/indemnites/<%= item.id %>/edit" method="POST"></form><input form="edit-indemnite-<%= item.id %>" class="form-input catalog-name-input" name="code" value="<%= item.code %>" required maxlength="64"></td>
+                            <td><input form="edit-indemnite-<%= item.id %>" class="form-input catalog-name-input" name="name" value="<%= item.name %>" <%= item.isRepresentation ? 'readonly' : '' %> required maxlength="191"></td>
                             <td><input form="edit-indemnite-<%= item.id %>" class="form-input catalog-amount-input" type="number" name="defaultAmount" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>" required> <span class="currency-label"><%= item.isRepresentation ? '%' : 'DH' %></span><% if (item.isRepresentation) { %><small class="catalog-value-help">Taux par défaut</small><% } %></td>
                             <td><span class="assignment-count"><%= item._count.employees %></span> <%= item._count.employees === 1 ? 'salarié' : 'salariés' %></td>
                             <td class="catalog-actions"><button class="btn-secondary btn-compact" form="edit-indemnite-<%= item.id %>" type="submit">Enregistrer</button><form id="delete-indemnite-<%= item.id %>" action="/indemnites/<%= item.id %>/delete" method="POST"></form><button class="btn-icon-delete btn-compact" type="submit" form="delete-indemnite-<%= item.id %>" data-delete-indemnite="<%= item.name %>" data-is-representation="<%= item.isRepresentation ? '1' : '0' %>"><span aria-hidden="true">⌫</span> Supprimer</button></td>
@@ -86,6 +91,50 @@ document.querySelectorAll('[data-delete-indemnite]').forEach(button => button.ad
 }));
 document.querySelectorAll('[data-close-catalog-delete]').forEach(button => button.addEventListener('click', () => { catalogDeleteConfirm.hidden = true; pendingCatalogDeleteForm = null; }));
 document.getElementById('confirm-catalog-delete').addEventListener('click', () => { if (pendingCatalogDeleteForm) pendingCatalogDeleteForm.submit(); });
+
+const createIndemniteModal = document.getElementById('indemnite-create-modal');
+const createIndemniteForm = document.getElementById('indemnite-create-form');
+const createIndemniteRows = document.getElementById('indemnite-create-rows');
+const representationRate = <%= Number(representationRate || 10) %>;
+const openIndemniteModal = () => {
+    createIndemniteModal.hidden = false;
+    if (!createIndemniteRows.children.length) addIndemniteRow();
+    createIndemniteRows.querySelector('input:not([type="hidden"])')?.focus();
+};
+const addIndemniteRow = () => {
+    const row = document.createElement('div');
+    row.className = 'catalog-create-row';
+    row.innerHTML = `
+        <input name="code[]" class="form-input" required maxlength="64" placeholder="Rubrique (ex. 2001)">
+        <input name="name[]" class="form-input" required maxlength="191" placeholder="Libellé (ex. Indemnité de transport)">
+        <div class="catalog-amount-field"><input name="defaultAmount[]" class="form-input" type="number" min="0.01" step="0.01" required placeholder="Montant par défaut"><span class="currency-label">DH</span></div>
+        <input type="hidden" name="representation[]" value="0">
+        <button class="remove-indemnite-row" type="button" aria-label="Supprimer cette indemnité">×</button>`;
+    createIndemniteRows.appendChild(row);
+    row.querySelector('input').focus();
+};
+const addRepresentationRow = () => {
+    if (createIndemniteRows.querySelector('[data-representation-row="1"]')) return;
+    const row = document.createElement('div');
+    row.className = 'catalog-create-row';
+    row.dataset.representationRow = '1';
+    row.innerHTML = `
+        <input name="code[]" class="form-input" maxlength="64" placeholder="Rubrique (ex. 1003)">
+        <input name="name[]" class="form-input" required maxlength="191" value="Indemnité de représentation" readonly>
+        <div class="catalog-amount-field"><input name="defaultAmount[]" class="form-input" type="number" min="0.01" max="100" step="0.01" required value="${representationRate}"><span class="currency-label">%</span></div>
+        <input type="hidden" name="representation[]" value="1">
+        <button class="remove-indemnite-row" type="button" aria-label="Supprimer cette indemnité">×</button>`;
+    createIndemniteRows.appendChild(row);
+    row.querySelector('input[type="number"]').focus();
+};
+document.getElementById('open-indemnite-modal').addEventListener('click', openIndemniteModal);
+document.getElementById('add-another-indemnite').addEventListener('click', addIndemniteRow);
+document.getElementById('add-representation-indemnite').addEventListener('click', addRepresentationRow);
+document.querySelectorAll('[data-close-indemnite-modal]').forEach(button => button.addEventListener('click', () => { createIndemniteModal.hidden = true; }));
+createIndemniteRows.addEventListener('click', event => {
+    if (!event.target.closest('.remove-indemnite-row')) return;
+    event.target.closest('.catalog-create-row').remove();
+});
 </script>
 
 <%- include('../partials/footer') %>

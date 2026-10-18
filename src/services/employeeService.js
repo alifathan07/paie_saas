@@ -109,6 +109,7 @@ export const findOrCreateBonusDefinition = async (name, companyId) => {
         bonus = await prisma.bonus.create({
             data: {
                 companyId: cId,
+                code: `RUB-${Date.now()}`,
                 name: cleanName,
                 taxable: false // Non-taxable fixed bonuses catalog
             }
@@ -116,6 +117,20 @@ export const findOrCreateBonusDefinition = async (name, companyId) => {
     }
 
     return bonus;
+};
+
+// Create a reusable taxable fixed-prime definition for a company.
+export const createTaxablePrime = async (name, defaultAmount, companyId, code) => {
+    const cleanName = String(name || '').trim();
+    const cleanCode = String(code || '').trim();
+    const amount = Number(defaultAmount);
+    const cId = Number(companyId);
+    if (!cleanName || !cleanCode || !Number.isFinite(amount) || amount <= 0 || !Number.isInteger(cId) || cId <= 0) {
+        throw new Error('INVALID_TAXABLE_PRIME');
+    }
+    return prisma.bonus.create({
+        data: { companyId: cId, code: cleanCode, name: cleanName, defaultAmount: Number(amount.toFixed(2)), taxable: true },
+    });
 };
 
 export const getEmployees = async (query = {}) => {
@@ -295,6 +310,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
     // Only replace bonus assignments when the edit form explicitly submitted them.
     const shouldReplaceBonuses = bonusList !== undefined;
     const salaryChanged = baseSalary !== undefined && Number(baseSalary) !== Number(existing.baseSalary);
+    const bonusesChanged = shouldReplaceBonuses;
     const representationChanged = indemniteRepresentationRate !== undefined
         && Number(indemniteRepresentationRate || 0) / 100 !== Number(existing.indemniteRepresentationRate || 0);
     const employeeBonusData = shouldReplaceBonuses && bonusList.length > 0
@@ -302,9 +318,18 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         : [];
 
     return prisma.$transaction(async tx => {
+        const preservedBonuses = shouldReplaceBonuses
+            ? await tx.employeeBonus.findMany({
+                where: { employeeId: empId, bonus: { taxable: false } },
+                select: { bonusId: true, amount: true },
+            })
+            : [];
         if (shouldReplaceBonuses) {
             await tx.employeeBonus.deleteMany({ where: { employeeId: empId } });
         }
+        const mergedBonusMap = new Map(preservedBonuses.map(row => [row.bonusId, { bonusId: row.bonusId, amount: row.amount }]));
+        employeeBonusData.forEach(row => mergedBonusMap.set(row.bonusId, row));
+        const bonusesToCreate = [...mergedBonusMap.values()];
         const updated = await tx.employee.update({
             where: { id: empId },
             data: {
@@ -355,7 +380,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
                 ? Boolean(blocageSaisiePaie)
                 : undefined,
             companyId: undefined,
-                bonuses: shouldReplaceBonuses ? { create: employeeBonusData } : undefined
+                bonuses: shouldReplaceBonuses ? { create: bonusesToCreate } : undefined
             },
             include: {
                 company: true,
@@ -364,7 +389,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
                 bonuses: { include: { bonus: true } }
             }
         });
-        if (salaryChanged || representationChanged) await refreshDraftPayslips(tx, updated);
+        if (salaryChanged || representationChanged || bonusesChanged) await refreshDraftPayslips(tx, updated);
         return updated;
     });
 };

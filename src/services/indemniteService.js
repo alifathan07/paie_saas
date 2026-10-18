@@ -3,6 +3,7 @@ import { refreshDraftPayslips } from "./employeePayrollRefresh.service.js";
 
 export const DEFAULT_REPRESENTATION_RATE = 0.10;
 export const REPRESENTATION_NAME = 'Indemnité de représentation';
+export const REPRESENTATION_CODE = '1003';
 
 function companyKey(companyId) {
     const id = Number(companyId);
@@ -40,9 +41,10 @@ export async function getRepresentationRate(companyId) {
         : Number(company.indemniteRepresentationRate);
 }
 
-export async function updateRepresentationRate(companyId, rate) {
+export async function updateRepresentationRate(companyId, rate, code = REPRESENTATION_CODE) {
     const cId = companyKey(companyId);
     const normalizedRate = cleanRate(rate);
+    const normalizedCode = String(code || '').trim().slice(0, 64) || REPRESENTATION_CODE;
     const catalogueRate = Number((normalizedRate * 100).toFixed(2));
     return prisma.$transaction(async tx => {
         const company = await tx.company.update({
@@ -58,11 +60,11 @@ export async function updateRepresentationRate(companyId, rate) {
         if (existingDefinition) {
             await tx.bonus.update({
                 where: { id: existingDefinition.id },
-                data: { name: REPRESENTATION_NAME, defaultAmount: catalogueRate, taxable: false },
+                data: { code: normalizedCode, name: REPRESENTATION_NAME, defaultAmount: catalogueRate, taxable: false },
             });
         } else {
             await tx.bonus.create({
-                data: { companyId: cId, name: REPRESENTATION_NAME, defaultAmount: catalogueRate, taxable: false },
+                data: { companyId: cId, code: normalizedCode, name: REPRESENTATION_NAME, defaultAmount: catalogueRate, taxable: false },
             });
         }
         return company;
@@ -83,21 +85,57 @@ export async function listIndemnites(companyId) {
     }));
 }
 
-export async function createIndemnite({ companyId, name, defaultAmount }) {
+export async function createIndemnite({ companyId, code, name, defaultAmount }) {
     const clean = cleanName(name);
+    const cleanCode = String(code || '').trim();
     if (!clean) throw new Error("INVALID_INDEMNITE_NAME");
-    return prisma.bonus.create({ data: { companyId: companyKey(companyId), name: clean, defaultAmount: cleanAmount(defaultAmount), taxable: false } });
+    if (!cleanCode) throw new Error("INVALID_RUBRIQUE_CODE");
+    return prisma.bonus.create({ data: { companyId: companyKey(companyId), code: cleanCode, name: clean, defaultAmount: cleanAmount(defaultAmount), taxable: false } });
 }
 
-export async function updateIndemnite(id, { companyId, name, defaultAmount }) {
+export async function createIndemnites({ companyId, rows = [] }) {
+    const cId = companyKey(companyId);
+    const representationRows = rows.filter(row => row.isRepresentation);
+    if (representationRows.length > 1) throw new Error("DUPLICATE_REPRESENTATION_INDEMNITY");
+    const data = rows.filter(row => !row.isRepresentation).map(row => {
+        const name = cleanName(row.name);
+        const code = String(row.code || '').trim();
+        if (!name) throw new Error("INVALID_INDEMNITE_NAME");
+        if (!code) throw new Error("INVALID_RUBRIQUE_CODE");
+        return { companyId: cId, code, name, defaultAmount: cleanAmount(row.defaultAmount), taxable: false };
+    });
+    if (!data.length && !representationRows.length) throw new Error("INVALID_INDEMNITE_NAME");
+    return prisma.$transaction(async tx => {
+        const created = [];
+        if (data.length) {
+            for (const item of data) created.push(await tx.bonus.create({ data: item }));
+        }
+        if (representationRows.length) {
+            const rate = cleanRate(representationRows[0].defaultAmount);
+            await tx.company.update({ where: { id: cId }, data: { indemniteRepresentationRate: rate } });
+            const existing = (await tx.bonus.findMany({ where: { companyId: cId, taxable: false }, select: { id: true, name: true } }))
+                .find(item => isRepresentationName(item.name));
+            const representationCode = String(representationRows[0].code || '').trim().slice(0, 64) || REPRESENTATION_CODE;
+            const representation = existing
+                ? await tx.bonus.update({ where: { id: existing.id }, data: { code: representationCode, name: REPRESENTATION_NAME, defaultAmount: Number((rate * 100).toFixed(2)), taxable: false } })
+                : await tx.bonus.create({ data: { companyId: cId, code: representationCode, name: REPRESENTATION_NAME, defaultAmount: Number((rate * 100).toFixed(2)), taxable: false } });
+            created.push(representation);
+        }
+        return created;
+    });
+}
+
+export async function updateIndemnite(id, { companyId, code, name, defaultAmount }) {
     const existing = await prisma.bonus.findFirst({ where: { id: Number(id), companyId: companyKey(companyId), taxable: false } });
     if (!existing) throw new Error("INDEMNITE_NOT_FOUND");
     if (isRepresentationName(existing.name)) {
-        return updateRepresentationRate(companyId, defaultAmount);
+        return updateRepresentationRate(companyId, defaultAmount, code);
     }
     const clean = cleanName(name);
     if (!clean) throw new Error("INVALID_INDEMNITE_NAME");
-    return prisma.bonus.update({ where: { id: existing.id }, data: { name: clean, defaultAmount: cleanAmount(defaultAmount) } });
+    const cleanCode = String(code || '').trim();
+    if (!cleanCode) throw new Error("INVALID_RUBRIQUE_CODE");
+    return prisma.bonus.update({ where: { id: existing.id }, data: { code: cleanCode, name: clean, defaultAmount: cleanAmount(defaultAmount) } });
 }
 
 export async function deleteIndemnite(id, companyId) {

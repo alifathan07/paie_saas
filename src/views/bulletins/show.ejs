@@ -4,7 +4,19 @@
 <% } %>
 
 <link rel="stylesheet" href="/css/bulletin-print.css">
-<style>.employee-edit{width:70px;border:0;border-bottom:1px solid #777;background:transparent;font:inherit;color:inherit}.employee-edit:focus{outline:0;border-bottom-color:#111}.salary-edit{display:block;width:110px;margin-top:5px;padding:4px 6px;border:1px solid #999;border-radius:4px;background:#fff;text-align:right;font:inherit}.salary-edit:focus{outline:2px solid #555}.pay-table input[type=number]{max-width:120px;text-align:right}.pay-table .prime-row input,.pay-table .prime-line input{min-height:32px;padding:6px 8px;border:1px solid #999;border-radius:4px;background:#fff;font:inherit}.pay-table .prime-row input[name="primesLabels"],.pay-table .prime-line input[name="primesLabels"]{width:100%;min-width:190px;text-align:left}.pay-table .prime-row input[name="primesAmounts"],.pay-table .prime-line input[name="primesAmounts"]{width:120px;text-align:right}.pay-table .prime-row input:focus,.pay-table .prime-line input:focus{outline:2px solid #555;outline-offset:1px}.pay-table .prime-row input::placeholder,.pay-table .prime-line input::placeholder{color:#777;opacity:1}.pay-table .prime-line .remove-prime{margin-left:6px}.prime-dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;width:min(420px,calc(100% - 32px));border:0;border-radius:8px;padding:0;box-shadow:0 18px 55px rgba(0,0,0,.25)}.prime-dialog::backdrop{background:rgba(0,0,0,.45)}.prime-dialog-content{padding:22px;background:#fff}.prime-dialog h2{margin:0 0 5px;font-size:18px}.prime-dialog p{margin:0 0 18px;color:#666;font-size:13px}.prime-dialog-fields{display:grid;gap:12px}.prime-dialog-fields label{display:grid;gap:5px;color:#444;font-size:12px;font-weight:700}.prime-dialog-fields input{width:100%;box-sizing:border-box;border:1px solid #999;border-radius:4px;padding:10px;font:inherit}.prime-dialog-fields input:focus{outline:2px solid #555}.prime-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.prime-dialog-actions button{border:1px solid #555;background:#fff;padding:9px 13px;cursor:pointer;font:600 12px Arial,sans-serif}.prime-dialog-actions .confirm{background:#222;color:#fff}</style>
+<style>.employee-edit{width:70px;border:0;border-bottom:1px solid #777;background:transparent;font:inherit;color:inherit}.employee-edit:focus{outline:0;border-bottom-color:#111}.salary-edit{display:block;width:110px;margin-top:5px;padding:4px 6px;border:1px solid #999;border-radius:4px;background:#fff;text-align:right;font:inherit}.salary-edit:focus{outline:2px solid #555}.pay-table input[type=number]{max-width:120px;text-align:right}.pay-table .prime-row input,.pay-table .prime-line input{min-height:32px;padding:6px 8px;border:1px solid #999;border-radius:4px;background:#fff;font:inherit}.pay-table .prime-row input[name="primesLabels"],.pay-table .prime-line input[name="primesLabels"]{width:100%;min-width:190px;text-align:left}.pay-table .prime-row input[name="primesAmounts"],.pay-table .prime-line input[name="primesAmounts"]{width:120px;text-align:right}.pay-table .prime-row input:focus,.pay-table .prime-line input:focus{outline:2px solid #555;outline-offset:1px}.pay-table .prime-row input::placeholder,.pay-table .prime-line input::placeholder{color:#777;opacity:1}.pay-table .prime-line .remove-prime{margin-left:6px}.prime-dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;width:min(420px,calc(100% - 32px));border:0;border-radius:8px;padding:0;box-shadow:0 18px 55px rgba(0,0,0,.25)}.prime-dialog::backdrop{background:rgba(0,0,0,.45)}.prime-dialog-content{padding:22px;background:#fff}.prime-dialog h2{margin:0 0 5px;font-size:18px}.prime-dialog p{margin:0 0 18px;color:#666;font-size:13px}.prime-dialog-fields{display:grid;gap:12px}.prime-dialog-fields label{display:grid;gap:5px;color:#444;font-size:12px;font-weight:700}.prime-dialog-fields input{width:100%;box-sizing:border-box;border:1px solid #999;border-radius:4px;padding:10px;font:inherit}.prime-dialog-fields input:focus{outline:2px solid #555}.prime-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.prime-dialog-actions button{border:1px solid #555;background:#fff;padding:9px 13px;cursor:pointer;font:600 12px Arial,sans-serif}.prime-dialog-actions .confirm{background:#222;color:#fff}
+#overtime-dialog{width:min(460px,calc(100% - 32px));border:1px solid #d7dee5;border-radius:14px;background:#fff;box-shadow:0 24px 80px rgba(23,32,42,.24)}
+#overtime-dialog .prime-dialog-content{padding:26px}
+#overtime-dialog h2{margin:0;color:#17202a;font-size:20px;letter-spacing:-.01em}
+#overtime-dialog p{margin:8px 0 22px;color:#66727e;line-height:1.45}
+#overtime-dialog .prime-dialog-fields{gap:16px}
+#overtime-dialog .prime-dialog-fields label{gap:7px;color:#34414b;font-size:13px;font-weight:700}
+#overtime-dialog select,#overtime-dialog input{width:100%;box-sizing:border-box;min-height:44px;border:1px solid #c4ced6;border-radius:8px;background:#fff;color:#17202a;padding:10px 12px;font:inherit}
+#overtime-dialog select:focus,#overtime-dialog input:focus{outline:3px solid rgba(23,107,91,.18);border-color:#176b5b}
+#overtime-dialog .prime-dialog-actions{margin-top:24px}
+#overtime-dialog .prime-dialog-actions button{min-width:92px;border-radius:8px;padding:10px 14px;font:600 13px inherit}
+#overtime-dialog .prime-dialog-actions .confirm{border-color:#176b5b;background:#176b5b}
+</style>
 <style>
     .payroll-print {
         --ink: #17202a;
@@ -723,11 +735,13 @@
         return base > 0 ? Number(line.amount || 0) / base : null;
     };
     const primes = values.variablePrimes || [];
+    const taxableAdditions = values.taxableAdditions || [];
     const fixedPrimeKeys = new Set((emp.bonuses || [])
         .filter(item => item.bonus ? item.bonus.taxable : item.taxable)
         .map(item => `${String(item.bonus ? item.bonus.name : item.name || '').toLowerCase()}|${Number(item.amount)}`));
     const nimpLines = bulletin ? (bulletin.fixedNimpLines || []) : (values.nimpLines || []);
     const monthlyNimpLines = bulletin ? (bulletin.monthlyNimpLines || []) : [];
+    const manualRetenus = bulletin ? (bulletin.retenus || []) : [];
     const excludedNimpLines = bulletin ? (bulletin.excludedNimpLines || []) : [];
     const annual = annualCumulative || values.annualCumulative || {};
     const arrondi = Number(values.arrondi || 0);
@@ -737,6 +751,7 @@
         + Number(values.cimr || 0)
         + Number(values.irNet || 0)
         + Number(values.avances || 0)
+        + Number(values.manualRetenusTotal || manualRetenus.reduce((sum, row) => sum + Number(row.amount || 0), 0))
         + Math.max(0, -arrondi);
 %>
 
@@ -869,6 +884,10 @@
         <div class="print-actions">
             <% if (!locked) { %>
                 <button type="button" class="add-prime" id="add-prime">+ Ajouter une prime imposable</button>
+                <% if ((taxableRubriques || []).some(row => row.active !== false && !String(row.calculationKey || '').startsWith('overtime_'))) { %>
+                    <button type="button" class="add-prime" id="add-other-rubrique">+ Ajouter une autre rubrique de base</button>
+                <% } %>
+                <button type="button" class="add-prime" id="add-overtime">+ Heures supplémentaires</button>
             <% } %>
             <% if (canManageIndemnity) { %>
                 <button type="button" class="add-prime" id="add-indemnity">+ Ajouter une indemnité non imposable</button>
@@ -879,7 +898,8 @@
         <table class="pay-table">
             <thead>
                 <tr>
-                    <th style="width:28%">LIBELLÉS</th>
+                    <th style="width:9%">RUB</th>
+                    <th style="width:24%">LIBELLÉS</th>
                     <th>NBR / BASE</th>
                     <th>TAUX</th>
                     <th>GAINS</th>
@@ -889,7 +909,7 @@
             </thead>
             <tbody id="prime-lines">
                 <tr>
-                        <td class="description">Salaire de base</td>
+                        <td class="rubrique-code"><%= rubriqueCodes['Salaire de base'] || '' %></td><td class="description">Salaire de base</td>
                         <td class="num">
                         <% if (workingTimeMode === 'HOURS') { %>
                             <input class="employee-edit live-input working-time-primary" name="workedHours" aria-label="Nombre d'heures travaillées" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyHours %>" step="0.01" required value="<%= values.workedHours ?? standardMonthlyHours %>" <%= locked ? 'disabled' : '' %>>
@@ -907,7 +927,7 @@
                     <td class="num">—</td>
                 </tr>
                 <tr class="seniority-row">
-                    <td class="description">Prime d'ancienneté</td>
+                    <td class="rubrique-code"><%= rubriqueCodes["Prime d'ancienneté"] || '' %></td><td class="description">Prime d'ancienneté</td>
                     <td class="num" data-result="baseSalary"><%= fmt(values.baseSalary ?? emp.baseSalary) %></td>
                     <td class="num"><%= percent(values.ancienneteRate) %></td>
                     <td class="num" data-result="primeAnciennete"><%= fmt(values.primeAnciennete) %></td>
@@ -915,15 +935,15 @@
                     <td class="num">—</td>
                 </tr>
                 <% primes.forEach(prime => { %>
-                    <% const fixedPrime = fixedPrimeKeys.has(`${String(prime.label).toLowerCase()}|${Number(prime.amount)}`); %>
-                    <tr class="prime-row taxable-prime-line">
-                        <td class="description">
+                    <% const fixedPrime = !prime.rubriqueImposableId && fixedPrimeKeys.has(`${String(prime.label).toLowerCase()}|${Number(prime.amount)}`); %>
+                    <tr class="prime-row taxable-prime-line <%= prime.rubriqueImposableId ? 'catalogue-rubrique-line' : '' %>" data-rubrique-imposable-id="<%= prime.rubriqueImposableId || '' %>">
+                        <td class="rubrique-code"><%= prime.code || '' %></td><td class="description">
                             <input name="primesLabels" value="<%= prime.label %>" placeholder="Nom de la prime" <%= locked ? 'disabled' : '' %>>
                         </td>
                         <td class="num">—</td>
                         <td class="num">—</td>
                         <td class="num">
-                            <input class="live-input" name="primesAmounts" type="number" min="0" step="0.01" value="<%= prime.amount %>" placeholder="Montant DH" <%= locked ? 'disabled' : '' %>>
+                            <input class="live-input catalogue-rubrique-amount" name="primesAmounts" type="number" min="0" step="0.01" value="<%= prime.amount %>" placeholder="Montant DH" <%= locked ? 'disabled' : '' %>>
                         </td>
                         <td class="num">—</td>
                         <td class="num">
@@ -935,15 +955,22 @@
                         </td>
                     </tr>
                 <% }); %>
+                <% taxableAdditions.forEach(line => { %>
+                    <tr class="prime-row taxable-prime-line calculated-taxable-line">
+                        <td class="rubrique-code"><%= line.code %></td><td class="description"><%= line.label %></td>
+                        <td class="num">—</td><td class="num">—</td>
+                        <td class="num"><%= fmt(line.amount) %></td><td class="num">—</td><td class="num">—</td>
+                    </tr>
+                <% }); %>
                 <tr class="gross">
-                    <td colspan="3" class="description">SALAIRE BRUT IMPOSABLE <br></td>
+                    <td class="rubrique-code"><%= rubriqueCodes['Salaire brut imposable'] || '' %></td><td colspan="3" class="description">SALAIRE BRUT IMPOSABLE <br></td>
                     <td class="num"><span data-result="sbi"><%= fmt(values.sbi) %></span></td>
                     <td class="num">—</td>
                     <td class="num">—</td>
                 </tr>
 
                 <tr>
-                    <td class="description">CNSS </td>
+                    <td class="rubrique-code"><%= rubriqueCodes.CNSS || '' %></td><td class="description">CNSS </td>
                     <td class="num" data-result="cnssBase"><%= fmt(Math.min(values.sbi, 6000)) %></td>
                     <td class="num"><%= percent(values.cnssRate) %></td>
                     <td class="num">—</td>
@@ -951,7 +978,7 @@
                     <td class="num" data-result="cnssPatronale"><%= fmt(values.cnssPatronale) %></td>
                 </tr>
                 <tr>
-                    <td class="description">AMO </td>
+                    <td class="rubrique-code"><%= rubriqueCodes.AMO || '' %></td><td class="description">AMO </td>
                     <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
                     <td class="num"><%= percent(values.amoRate) %></td>
                     <td class="num">—</td>
@@ -959,16 +986,31 @@
                     <td class="num" data-result="amoPatronale"><%= fmt(values.amoPatronale) %></td>
                 </tr>
                 <tr>
-                    <td class="description">Avance sur salaire</td>
+                    <td class="rubrique-code"><%= rubriqueCodes.CIMR || '' %></td><td class="description">CIMR </td>
+                    <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
+                    <td class="num"><%= percent(values.cimrRate) %></td>
+                    <td class="num">—</td>
+                    <td class="num"><span data-result="cimr"><%= fmt(values.cimr) %></span></td>
+                    <td class="num">—</td>
+                </tr>
+                <tr>
+                    <td class="rubrique-code"><%= rubriqueCodes['Avance sur salaire'] || '' %></td><td class="description">Avance sur salaire</td>
                     <td class="num">—</td>
                     <td class="num">—</td>
                     <td class="num">—</td>
                     <td class="num"><%= fmt(values.avances) %></td>
                     <td class="num">—</td>
                 </tr>
+                <% manualRetenus.forEach(row => { %>
+                    <tr class="manual-retenu-row">
+                        <td class="rubrique-code"><%= row.code %></td><td class="description"><%= row.label %></td>
+                        <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+                        <td class="num"><%= fmt(row.amount) %></td><td class="num"><form method="POST" action="/bulletins/<%= emp.id %>/retenus/delete" class="inline-delete-form"><input type="hidden" name="retenuId" value="<%= row.id %>"><input type="hidden" name="month" value="<%= month %>"><input type="hidden" name="year" value="<%= year %>"><button class="remove-prime" type="submit" aria-label="Supprimer la retenue">×</button></form></td>
+                    </tr>
+                <% }); %>
 
                 <tr>
-                    <td class="description" title="Déduction utilisée pour calculer le revenu imposable.">Frais professionnels (déduction fiscale)</td>
+                    <td class="rubrique-code"><%= rubriqueCodes['Frais professionnels'] || '' %></td><td class="description" title="Déduction utilisée pour calculer le revenu imposable.">Frais professionnels (déduction fiscale)</td>
                     <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
                     <td class="num" data-result="fraisProRate"><%= percent(values.fraisProRate) %></td>
                     <td class="num">—</td>
@@ -977,7 +1019,7 @@
                 </tr>
 
                 <tr class="gross">
-                    <td class="description">SNI / IR</td>
+                    <td class="rubrique-code"><%= rubriqueCodes['Salaire net imposable'] || '' %></td><td class="description">SNI / IR</td>
                     <td class="num"><span data-result="sni"><%= fmt(values.sni) %></span></td>
                     <td class="num" data-result="irTaux"><%= percent(values.irTaux) %></td>
                     <td class="num">—</td>
@@ -985,7 +1027,7 @@
                     <td class="num">—</td>
                 </tr>
                 <tr>
-                    <td class="description">ARRONDI</td>
+                    <td class="rubrique-code"><%= rubriqueCodes.Arrondi || '' %></td><td class="description">ARRONDI</td>
                     <td class="num">—</td>
                     <td class="num">—</td>
                     <td class="num"><span data-result="arrondiGains"><%= arrondi > 0 ? fmt(arrondi) : '—' %></span></td>
@@ -993,29 +1035,29 @@
                     <td class="num">—</td>
                 </tr>
 
-                <% nimpLines.forEach(line => { %>
+                <% nimpLines.forEach(line => { const baseAmount = Number(line.baseAmount ?? line.amount); %>
                     <tr class="disabled-row fixed-indemnity-line monthly-indemnity-line" data-sticky="true">
-                        <td class="description">
-                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" <%= canEditIndemnityFields ? '' : 'disabled' %>>
+                        <td class="rubrique-code"><%= line.code || '' %></td><td class="description">
+                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= baseAmount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" <%= canEditIndemnityFields ? '' : 'disabled' %>>
                         </td>
                         <td class="num">—</td>
                         <td class="num"><%= percent(representationRate(line)) %></td>
-                        <td class="num"><input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" type="number" min="0" step="0.01" value="<%= line.amount %>" placeholder="Montant DH" <%= canEditIndemnityFields ? '' : 'disabled' %>></td>
+                        <td class="num"><input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= baseAmount %>" type="number" min="0" step="0.01" value="<%= baseAmount %>" placeholder="Montant mensuel DH" <%= canEditIndemnityFields ? '' : 'disabled' %>><small class="nimp-payable">Payable : <span data-nimp-payable><%= money(line.amount) %></span></small></td>
                         <td class="num">—</td>
                         <td class="num">
                             <% if (canManageIndemnity) { %><button type="button" class="remove-prime" aria-label="Supprimer l'indemnité">×</button><% } else { %>—<% } %>
                         </td>
                     </tr>
                 <% }); %>
-                <% monthlyNimpLines.forEach(line => { %>
+                <% monthlyNimpLines.forEach(line => { const baseAmount = Number(line.baseAmount ?? line.amount); %>
                     <tr class="monthly-indemnity-row prime-row monthly-indemnity-line">
-                        <td class="description">
-                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" <%= canEditIndemnityFields ? '' : 'disabled' %>>
+                        <td class="rubrique-code"><%= line.code || '' %></td><td class="description">
+                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= baseAmount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" <%= canEditIndemnityFields ? '' : 'disabled' %>>
                         </td>
                         <td class="num">—</td>
                         <td class="num">—</td>
                         <td class="num">
-                            <input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= line.amount %>" type="number" min="0" step="0.01" value="<%= line.amount %>" placeholder="Montant DH" <%= canEditIndemnityFields ? '' : 'disabled' %>>
+                            <input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= baseAmount %>" type="number" min="0" step="0.01" value="<%= baseAmount %>" placeholder="Montant mensuel DH" <%= canEditIndemnityFields ? '' : 'disabled' %>><small class="nimp-payable">Payable : <span data-nimp-payable><%= money(line.amount) %></span></small>
                         </td>
                         <td class="num">—</td>
                         <td class="num">
@@ -1028,7 +1070,7 @@
                     </tr>
                 <% }); %>
                 <tr class="gross totals-row">
-                    <td colspan="3" class="description">TOTAUX</td>
+                    <td class="rubrique-code"></td><td colspan="3" class="description">TOTAUX</td>
                     <td class="num"><span data-result="totalGains"><%= money(totalGains) %></span></td>
                     <td class="num"><span data-result="deductionsTotal"><%= money(totalDeductions) %></span></td>
                     <td class="num">—</td>
@@ -1036,7 +1078,7 @@
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="6" class="net-pay-cell">
+                    <td colspan="7" class="net-pay-cell">
                         <div class="net-pay-callout-content">
                             <span class="net-pay-callout-label">SALAIRE NET À PAYER</span>
                             <span class="net-pay-callout-value" data-result="netAPayer"><%= money(values.netAPayer) %></span>
@@ -1087,6 +1129,16 @@
         <div id="calculation-state" aria-live="polite"></div>
         <div id="calculation-error" hidden></div>
 
+        <% if (bulletin && !locked && (manualRetenuRubriques || []).length) { %>
+            <div class="manual-retenu-box">
+                <div><strong>Ajouter une retenue manuelle</strong><small>Cette retenue diminue uniquement le net à payer.</small></div>
+                <form method="POST" action="/bulletins/<%= emp.id %>/retenus" class="manual-retenu-form">
+                    <input type="hidden" name="month" value="<%= month %>"><input type="hidden" name="year" value="<%= year %>">
+                    <select name="rubriqueRetenuId" required><option value="">Choisir une retenue</option><% manualRetenuRubriques.forEach(row => { %><option value="<%= row.id %>"><%= row.code %> — <%= row.name %></option><% }); %></select>
+                    <input type="number" name="amount" min="0.01" step="0.01" required placeholder="Montant DH"><button class="btn-primary" type="submit">Ajouter</button>
+                </form>
+            </div>
+        <% } %>
         <div class="print-note">Document généré automatiquement. SBG - indemnités non imposablesLes montants sont calculés selon les données de l'employé et la période sélectionnée.</div>
     </form>
 
@@ -1097,6 +1149,19 @@
                 <h2>Ajouter une prime imposable</h2>
                 <p>Cette prime sera ajoutée uniquement au bulletin du mois courant.</p>
                 <div class="prime-dialog-fields">
+                    <label class="settings-wide">
+                        Rubrique imposable existante
+                        <select id="prime-rubrique-select" class="form-input">
+                            <option value="">Saisie manuelle</option>
+                            <% (taxableRubriques || []).filter(row => row.active !== false).forEach(row => { %>
+                                <option value="<%= row.id %>" data-code="<%= row.code %>" data-name="<%= row.name %>"><%= row.code %> — <%= row.name %></option>
+                            <% }); %>
+                        </select>
+                    </label>
+                    <label>
+                        Code rubrique
+                        <input id="prime-code-input" required placeholder="Ex. 3001">
+                    </label>
                     <label>
                         Nom de la prime
                         <input id="prime-label-input" required placeholder="Ex. Prime de rendement">
@@ -1112,6 +1177,57 @@
                 </div>
             </form>
             </dialog>
+
+            <dialog class="prime-dialog" id="overtime-dialog">
+                <form method="dialog" id="overtime-dialog-form" class="prime-dialog-content">
+                    <h2 id="overtime-dialog-title">Ajouter des heures supplémentaires</h2>
+                    <p>Le montant sera calculé automatiquement selon le salaire horaire de l’employé.</p>
+                    <div class="prime-dialog-fields">
+                        <label>
+                            Type d’heures supplémentaires
+                            <select id="overtime-type-select" class="form-input" required>
+                                <option value="heuresSup25">Heures supplémentaires 25%</option>
+                                <option value="heuresSup50">Heures supplémentaires 50%</option>
+                                <option value="heuresSup100">Heures supplémentaires 100%</option>
+                            </select>
+                        </label>
+                        <label>
+                            Nombre d’heures
+                            <input id="overtime-hours-input" required type="number" min="0.01" step="0.01" placeholder="Ex. 8">
+                        </label>
+                    </div>
+                    <div class="prime-dialog-actions">
+                        <button type="button" id="overtime-dialog-cancel">Annuler</button>
+                        <button class="confirm" value="add" type="submit">Ajouter</button>
+                    </div>
+                </form>
+            </dialog>
+
+            <dialog class="prime-dialog" id="other-rubrique-dialog">
+                <form method="dialog" id="other-rubrique-dialog-form" class="prime-dialog-content">
+                    <h2>Ajouter une autre rubrique de base</h2>
+                    <p>Cette rubrique sera ajoutée au brut imposable de ce bulletin uniquement.</p>
+                    <div class="prime-dialog-fields">
+                        <label>
+                            Rubrique
+                            <select id="other-rubrique-select" class="form-input" required>
+                                <option value="">Choisir une rubrique</option>
+                                <% (taxableRubriques || []).filter(row => row.active !== false && !String(row.calculationKey || '').startsWith('overtime_')).forEach(row => { %>
+                                    <option value="<%= row.id %>" data-code="<%= row.code %>" data-name="<%= row.name %>"><%= row.code %> — <%= row.name %></option>
+                                <% }); %>
+                            </select>
+                        </label>
+                        <label>
+                            Montant en DH
+                            <input id="other-rubrique-amount-input" type="number" min="0" step="0.01" placeholder="Optionnel">
+                        </label>
+                    </div>
+                    <div class="prime-dialog-actions">
+                        <button type="button" id="other-rubrique-dialog-cancel">Annuler</button>
+                        <button class="confirm" value="add" type="submit">Ajouter</button>
+                    </div>
+                </form>
+            </dialog>
         <% } %>
 
         <dialog class="prime-dialog" id="indemnity-dialog">
@@ -1126,6 +1242,10 @@
                     </div>
                 <% } %>
                 <div class="prime-dialog-fields">
+                    <label>
+                        Code rubrique
+                        <input id="indemnity-code-input" required placeholder="Ex. 2001">
+                    </label>
                     <label>
                         Libellé de l'indemnité
                         <input id="indemnity-label-input" required placeholder="Ex. Indemnité de transport">

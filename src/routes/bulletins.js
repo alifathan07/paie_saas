@@ -23,6 +23,8 @@ import {
     updateMonthlyIndemnity,
     downloadPdfBulletin,
     maskBulletin,
+    addManualRetenu,
+    deleteManualRetenu,
 } from "../controllers/bulletins.controller.js";
 
 export const bulletins = express.Router();
@@ -51,6 +53,8 @@ bulletins.post("/:id/indemnities/stick", stickMonthlyIndemnity);
 bulletins.post("/:id/indemnities/delete", deleteMonthlyIndemnity);
 bulletins.post("/:id/indemnities/restore", restoreEmployeeIndemnity);
 bulletins.post("/:id/indemnities/update", updateMonthlyIndemnity);
+bulletins.post("/:id/retenus", addManualRetenu);
+bulletins.post("/:id/retenus/delete", deleteManualRetenu);
 
 // PDF Download route
 bulletins.get("/:id/pdf", downloadPdfBulletin);

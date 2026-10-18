@@ -169,3 +169,7 @@ export async function updateSettings(req, res) {
         throw error;
     }
 }
+
+export async function updateBulletinRubriqueSettings(req, res) {
+    return res.redirect("/rubriques");
+}

@@ -1,7 +1,7 @@
 import { resolveCompanyId } from "../lib/company.js";
 import {
     listIndemnites,
-    createIndemnite,
+    createIndemnites,
     updateIndemnite,
     deleteIndemnite,
     getRepresentationRate,
@@ -25,6 +25,7 @@ export async function index(req, res) {
             representationName: REPRESENTATION_NAME,
             representationRate: Number((representationRate * 100).toFixed(2)),
             error: null,
+            createRows: [],
         });
     } catch (error) {
         console.error("Error listing indemnités:", error);
@@ -33,6 +34,7 @@ export async function index(req, res) {
             indemnites: [], representationRate: 10, error: "Impossible de charger les indemnités.",
             representationConfigured: false,
             representationName: REPRESENTATION_NAME,
+            createRows: [],
         });
     }
 }
@@ -49,7 +51,12 @@ export async function updateRepresentation(req, res) {
 
 export async function create(req, res) {
     try {
-        await createIndemnite({ companyId: companyId(req), name: req.body.name, defaultAmount: req.body.defaultAmount });
+        const codes = Array.isArray(req.body.code) ? req.body.code : [req.body.code];
+        const names = Array.isArray(req.body.name) ? req.body.name : [req.body.name];
+        const amounts = Array.isArray(req.body.defaultAmount) ? req.body.defaultAmount : [req.body.defaultAmount];
+        const representations = Array.isArray(req.body.representation) ? req.body.representation : [req.body.representation];
+        const rows = names.map((name, index) => ({ code: codes[index], name, defaultAmount: amounts[index], isRepresentation: representations[index] === '1' }));
+        await createIndemnites({ companyId: companyId(req), rows });
         return res.redirect("/indemnites");
     } catch (error) {
         console.error("Error creating indemnité:", error);
@@ -62,13 +69,22 @@ export async function create(req, res) {
             representationName: REPRESENTATION_NAME,
             representationRate: Number((representationRate * 100).toFixed(2)),
             error: error.code === "P2002" ? "Cette indemnité existe déjà." : "Le nom et le montant par défaut sont obligatoires.",
+            createRows: namesAndRows(req.body),
         });
     }
 }
 
+function namesAndRows(body = {}) {
+    const codes = Array.isArray(body.code) ? body.code : [body.code];
+    const names = Array.isArray(body.name) ? body.name : [body.name];
+    const amounts = Array.isArray(body.defaultAmount) ? body.defaultAmount : [body.defaultAmount];
+    const representations = Array.isArray(body.representation) ? body.representation : [body.representation];
+    return names.map((name, index) => ({ code: codes[index] || '', name: name || '', defaultAmount: amounts[index] || '', isRepresentation: representations[index] === '1' }));
+}
+
 export async function update(req, res) {
     try {
-        await updateIndemnite(req.params.id, { companyId: companyId(req), name: req.body.name, defaultAmount: req.body.defaultAmount });
+        await updateIndemnite(req.params.id, { companyId: companyId(req), code: req.body.code, name: req.body.name, defaultAmount: req.body.defaultAmount });
         return res.redirect("/indemnites");
     } catch (error) {
         console.error("Error updating indemnité:", error);

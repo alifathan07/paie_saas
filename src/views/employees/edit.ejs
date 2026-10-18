@@ -21,6 +21,7 @@
         <div class="employee-tabs">
             <button type="button" class="employee-tab active" data-tab="general"><span class="employee-tab-icon">●</span><span><strong>Informations générales</strong><small>État civil, contrat et coordonnées</small></span></button>
             <button type="button" class="employee-tab" data-tab="indemnites"><span class="employee-tab-icon">＋</span><span><strong>Indemnités non imposables</strong><small>Montants récurrents du salarié</small></span><span class="employee-tab-arrow">→</span></button>
+            <button type="button" class="employee-tab" data-tab="primes"><span class="employee-tab-icon">＋</span><span><strong>Primes imposables</strong><small>Primes fixes récurrentes</small></span><span class="employee-tab-arrow">→</span></button>
         </div>
     </nav>
     <div class="employee-general-content">
@@ -203,6 +204,13 @@
 
     <div class="form-section employee-tab-panel" data-panel="indemnites">
         <% const employeeRepresentationRate = employee.indemniteRepresentationRate === null || employee.indemniteRepresentationRate === undefined ? '' : (Number(employee.indemniteRepresentationRate) * 100).toFixed(2); %>
+        <% const hasRepresentationCatalog = (indemnites || []).some(item => item.isRepresentation); %>
+        <% if (!hasRepresentationCatalog && employeeRepresentationRate === '') { %>
+        <div class="representation-employee-card representation-unavailable-card">
+            <div><strong>Indemnité de représentation indisponible</strong><small>Ajoutez d’abord « Indemnité de représentation » dans le catalogue des indemnités non imposables.</small></div>
+            <a class="btn-secondary btn-compact" href="/indemnites">Ouvrir le catalogue</a>
+        </div>
+        <% } else { %>
         <div class="representation-employee-card">
             <div>
                 <strong>Indemnité de représentation</strong>
@@ -218,6 +226,7 @@
                 <strong>%</strong>
             </label>
         </div>
+        <% } %>
         <div class="section-heading-row">
             <div>
                 <h2 class="section-title" style="margin-bottom: 4px;">Indemnités non imposables</h2>
@@ -242,6 +251,17 @@
         <div class="indemnites-bottom-action"><span>Vous souhaitez ajouter ou modifier une indemnité ?</span><button type="button" class="btn-primary open-indemnites-modal">+ Ajouter des indemnités</button></div>
     </div>
 
+    <div class="form-section employee-tab-panel" data-panel="primes">
+        <div class="section-heading-row"><div><h2 class="section-title" style="margin-bottom: 4px;">Primes imposables fixes</h2><p style="font-size: 13px; color: var(--color-text-subtle); margin: 0;">Attribuez les primes récurrentes imposables à ce salarié.</p></div></div>
+        <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Prime</th><th>Montant salarié</th><th>Montant par défaut</th></tr></thead><tbody>
+            <% const taxableBonuses = (bonusTypes || []).filter(item => item.taxable); %>
+            <% if (taxableBonuses.length) { taxableBonuses.forEach(function (item) { const assignedPrime = (employee.primesImposables || []).find(row => row.bonusId === item.id); %>
+                <tr class="employee-prime-row"><td><%= item.code %></td><td><label><input type="checkbox" name="employeePrimeIds" value="<%= item.id %>" <%= assignedPrime ? 'checked' : '' %>> <strong><%= item.name %></strong></label></td><td><input type="number" name="employeePrimeAmounts" class="form-input" min="0.01" step="0.01" value="<%= assignedPrime ? Number(assignedPrime.amount).toFixed(2) : Number(item.defaultAmount).toFixed(2) %>"></td><td><%= Number(item.defaultAmount).toFixed(2) %> DH</td></tr>
+            <% }); } else { %><tr><td colspan="4" class="empty-state">Aucune prime imposable dans le catalogue.</td></tr><% } %>
+            <tr><td><input type="text" name="newPrimeCodes" class="form-input" placeholder="Code rubrique"></td><td><input type="text" name="newPrimeNames" class="form-input" placeholder="Nouvelle prime imposable"></td><td><input type="number" name="newPrimeAmounts" class="form-input" min="0.01" step="0.01" placeholder="Montant DH"></td><td>Créer dans le catalogue</td></tr>
+        </tbody></table></div>
+    </div>
+
     <!-- Submit Bar -->
     <div class="form-actions-bar" id="employee-submit-bar">
         <button type="submit" class="btn-primary" style="min-width: 200px;">Mettre à jour le salarié</button>
@@ -257,7 +277,7 @@
                 <% if (indemnites && indemnites.length) { indemnites.forEach(function (item) { const assigned = (employee.indemnitesNonImposables || []).find(row => row.indemniteId === item.id); %>
                     <label class="indemnite-picker-row">
                         <input type="checkbox" name="employeeIndemniteIds" value="<%= item.id %>" <%= assigned ? 'checked' : '' %>>
-                        <span class="indemnite-picker-name"><strong><%= item.name %></strong><small><%= item.isRepresentation ? 'Taux proposé' : 'Défaut' %> : <%= Number(item.defaultAmount).toFixed(2) %> <%= item.isRepresentation ? '%' : 'DH' %><%= assigned && !item.isRepresentation ? ` · Actuel : ${Number(assigned.amount).toFixed(2)} DH` : '' %></small></span>
+                        <span class="indemnite-picker-code"><%= item.code %></span><span class="indemnite-picker-name"><strong><%= item.name %></strong><small><%= item.isRepresentation ? 'Taux proposé' : 'Défaut' %> : <%= Number(item.defaultAmount).toFixed(2) %> <%= item.isRepresentation ? '%' : 'DH' %><%= assigned && !item.isRepresentation ? ` · Actuel : ${Number(assigned.amount).toFixed(2)} DH` : '' %></small></span>
                         <input type="number" name="employeeIndemniteAmounts" class="form-input" min="0.01" step="0.01" value="<%= assigned && !item.isRepresentation ? Number(assigned.amount).toFixed(2) : Number(item.defaultAmount).toFixed(2) %>" required>
                         <span><%= item.isRepresentation ? '%' : 'DH' %></span>
                     </label>
@@ -287,10 +307,11 @@ employeeTabButtons.forEach(button => button.addEventListener('click', () => {
     employeeTabButtons.forEach(item => item.classList.toggle('active', item === button));
     employeePanels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === button.dataset.tab));
     employeeGeneral.hidden = button.dataset.tab !== 'general';
-    employeeSubmitBar.hidden = !['general', 'indemnites'].includes(button.dataset.tab);
+    employeeSubmitBar.hidden = !['general', 'indemnites', 'primes'].includes(button.dataset.tab);
     employeeReturnTab.value = button.dataset.tab;
 }));
-if (new URLSearchParams(window.location.search).get('tab') === 'indemnites') document.querySelector('[data-tab="indemnites"]').click();
+const initialTab = new URLSearchParams(window.location.search).get('tab');
+if (['indemnites', 'primes'].includes(initialTab)) document.querySelector('[data-tab="' + initialTab + '"]').click();
 
 const indemnitesModal = document.getElementById('indemnites-modal');
 document.querySelectorAll('.open-indemnites-modal').forEach(button => button.addEventListener('click', () => { indemnitesModal.hidden = false; }));
@@ -311,10 +332,17 @@ document.querySelectorAll('.indemnite-picker-row').forEach(row => {
     checkbox.addEventListener('change', sync);
     sync();
 });
+document.querySelectorAll('.employee-prime-row').forEach(row => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    const amount = row.querySelector('input[type="number"]');
+    const sync = () => { amount.disabled = !checkbox.checked; };
+    checkbox.addEventListener('change', sync);
+    sync();
+});
 document.getElementById('add-new-indemnite').addEventListener('click', () => {
     const row = document.createElement('div');
     row.className = 'new-indemnite-row';
-    row.innerHTML = '<input type="text" name="newIndemniteNames" class="form-input" placeholder="Nom de l’indemnité" required><input type="number" name="newIndemniteAmounts" class="form-input" min="0.01" step="0.01" placeholder="Montant DH" required><button type="button" class="remove-inline-row">×</button>';
+    row.innerHTML = '<input type="text" name="newIndemniteCodes" class="form-input" placeholder="Code rubrique" required><input type="text" name="newIndemniteNames" class="form-input" placeholder="Nom de l’indemnité" required><input type="number" name="newIndemniteAmounts" class="form-input" min="0.01" step="0.01" placeholder="Montant DH" required><button type="button" class="remove-inline-row">×</button>';
     row.querySelector('.remove-inline-row').addEventListener('click', () => row.remove());
     document.getElementById('new-indemnite-rows').appendChild(row);
 });

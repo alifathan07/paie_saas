@@ -12,7 +12,7 @@ export async function index(req, res) {
     const categories = await getEmployeeCategories(companyId(req));
     return res.render("employees/categories", {
         title: "Catégories des employés",
-        currentPage: "employees",
+        currentPage: "employeeCategories",
         user: req.session.user,
         categories,
         error: req.query.error || null,
