@@ -50,7 +50,7 @@ async function main() {
     { name: "Salaire net à payer", code: "RUB-4001" },
   ];
   for (const rubrique of bulletinRubriques) {
-    await prisma.bulletinRubrique.upsert({
+    await prisma.legacyBulletinRubrique.upsert({
       where: { name: rubrique.name },
       update: { code: rubrique.code },
       create: rubrique,
