@@ -36,6 +36,17 @@ export const getOrCreateEmployeeCategory = async (companyId, categoryId) => {
     });
 };
 
+export const getOrCreateEmployeeCategoryByName = async (companyId, name) => {
+    const cId = Number(companyId);
+    if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    const categoryName = cleanCategoryName(name) || 'Employé';
+    return prisma.employeeCategory.upsert({
+        where: { companyId_name: { companyId: cId, name: categoryName } },
+        create: { companyId: cId, name: categoryName },
+        update: {},
+    });
+};
+
 export const createEmployeeCategory = async (companyId, name) => {
     const clean = cleanCategoryName(name);
     if (!clean) throw new Error('INVALID_EMPLOYEE_CATEGORY');

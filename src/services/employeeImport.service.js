@@ -1,6 +1,6 @@
 import XLSX from "xlsx";
 import prisma from "../../db.ts";
-import { getOrCreateEmployeeCategory, getOrCreateEmployeeFunction } from "./employeeService.js";
+import { getOrCreateEmployeeCategoryByName, getOrCreateEmployeeFunction } from "./employeeService.js";
 
 function responseHeader(response, name) {
     return typeof response?.headers?.get === "function"
@@ -266,7 +266,7 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
     const functionIds = new Map();
     for (const employee of clean) {
         if (!categoryIds.has(employee.category)) {
-            const category = await getOrCreateEmployeeCategory(targetCompanyId, employee.category);
+            const category = await getOrCreateEmployeeCategoryByName(targetCompanyId, employee.category);
             categoryIds.set(employee.category, category.id);
         }
         const functionName = String(employee.fonction || '').trim();
