@@ -103,6 +103,9 @@ function drawPayrollTable(doc, data, startY) {
     if (amount(data.cimr) > 0) push(rubriqueCodes.CIMR || '', 'RETENUE CIMR', '', money(data.sbi), percent(data.cimrRate), 0, data.cimr);
     if (amount(data.irNet) > 0) push(rubriqueCodes['Impôt sur le revenu'] || '', 'RETENUE IR', '', money(data.sni), percent(data.irTaux), 0, data.irNet);
     (data.retenus || []).forEach(line => push(line.code || '', line.label, '', '', '', 0, line.amount));
+    if (amount(data.avanceDeduction) > 0) {
+        push(rubriqueCodes['Avance sur salaire'] || 'AV', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avanceDeduction);
+    }
     if (amount(data.arrondi) > 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', data.arrondi, 0);
     if (amount(data.arrondi) < 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', 0, Math.abs(data.arrondi));
 
