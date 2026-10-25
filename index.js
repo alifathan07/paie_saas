@@ -87,20 +87,6 @@ app.use('/bulletins', bulletins);
 app.use('/editions', editions);
 app.use('/reports', reports);
 
-import ngrok from '@ngrok/ngrok';
-
-const server = app.listen(PORT, '0.0.0.0', async () => {
+app.listen(PORT,  () => {
     console.log(`[Local Network] Server is running locally on http://192.168.100.4:${PORT}`);
-
-    try {
-        // This sets up an automated, high-speed native tunnel directly through Node
-        const tunnel = await ngrok.forward({ 
-            addr: PORT,
-            authtoken: process.env.NGROK_AUTHTOKEN // Highly recommended to put your free token here
-         });
-
-        console.log(`\n🚀 [LIVE PUBLIC LINK] Your app is live for updates at: ${tunnel.url()}/auth\n`);
-    } catch (err) {
-        console.error('Failed to launch high-speed native tunnel:', err);
-    }
 });
