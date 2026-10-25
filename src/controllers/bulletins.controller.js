@@ -38,13 +38,15 @@ const isLockedBulletin = (status) => status === BULLETIN_STATUS.VALIDATED || sta
 const isClosedBulletin = (status) => status === BULLETIN_STATUS.CLOSED;
 const EXCLUDED_NIMP_PREFIX = "__bulletin_excluded_employee_indemnity__:";
 const payslipBonusBaseAmount = bonus => Number(bonus.baseAmount ?? bonus.amount ?? 0);
-const PAID_LEAVE_CONFLICT_MESSAGE = "Veuillez vérifier le nombre de jours travaillés : les jours travaillés et les jours de congé payé ne peuvent pas dépasser le nombre de jours du mois.";
+const PAID_LEAVE_CONFLICT_MESSAGE = "Veuillez vérifier les jours travaillés, congés payés et jours fériés : leur total ne peut pas dépasser le nombre de jours du mois.";
 
-function hasPaidLeaveConflict(workedDays, paidLeaveDays, standardMonthlyDays = PAYROLL_WORKED_DAYS) {
+function hasPaidLeaveConflict(workedDays, paidLeaveDays, standardMonthlyDays = PAYROLL_WORKED_DAYS, publicHolidayDays = 0) {
     const worked = Number(workedDays);
     const leave = Number(paidLeaveDays);
+    const holidays = Number(publicHolidayDays);
     const maximum = Number(standardMonthlyDays) || PAYROLL_WORKED_DAYS;
-    return Number.isFinite(worked) && Number.isFinite(leave) && worked + leave > maximum;
+    return Number.isFinite(worked) && Number.isFinite(leave) && Number.isFinite(holidays)
+        && worked + leave + holidays > maximum;
 }
 
 function rejectPaidLeaveConflict(res, acceptsJson = false) {
@@ -779,9 +781,9 @@ export const validateBulkBulletins = async (req, res) => {
                 employee: { companyId, actif: true },
                 status: { in: [BULLETIN_STATUS.DRAFT, BULLETIN_STATUS.GENERATED] },
             },
-            select: { workedDays: true, paidLeaveDays: true, standardMonthlyDays: true },
+            select: { workedDays: true, paidLeaveDays: true, joursFeries: true, standardMonthlyDays: true },
         });
-        if (eligiblePayslips.some(row => hasPaidLeaveConflict(row.workedDays, row.paidLeaveDays, row.standardMonthlyDays))) {
+        if (eligiblePayslips.some(row => hasPaidLeaveConflict(row.workedDays, row.paidLeaveDays, row.standardMonthlyDays, row.joursFeries))) {
             return rejectPaidLeaveConflict(res, false);
         }
         const result = await prisma.payslip.updateMany({
@@ -1019,7 +1021,7 @@ export const generateBulletin = async (req, res) => {
             
         };
 
-        if (hasPaidLeaveConflict(overrides.workedDays, overrides.paidLeaveDays, overrides.standardMonthlyDays)) {
+        if (hasPaidLeaveConflict(overrides.workedDays, overrides.paidLeaveDays, overrides.standardMonthlyDays, overrides.joursFeries)) {
             return rejectPaidLeaveConflict(res, String(req.headers.accept || '').includes('application/json'));
         }
 
@@ -1702,7 +1704,7 @@ export const validateBulletin = async (req, res) => {
         if (existing.status === BULLETIN_STATUS.CLOSED) {
             return res.status(403).send("Ce bulletin est clôturé.");
         }
-        if (hasPaidLeaveConflict(existing.workedDays, existing.paidLeaveDays, existing.standardMonthlyDays)) {
+        if (hasPaidLeaveConflict(existing.workedDays, existing.paidLeaveDays, existing.standardMonthlyDays, existing.joursFeries)) {
             return rejectPaidLeaveConflict(res, false);
         }
 
@@ -1825,7 +1827,7 @@ export const updateBulletinWorkedDays = async (req, res) => {
             workedDays: company?.workingTimeMode === "HOURS" ? undefined : (requestedDays ?? existing.workedDays),
             workedHours: company?.workingTimeMode === "HOURS" ? (requestedHours ?? existing.workedHours) : undefined,
         });
-        if (hasPaidLeaveConflict(workingTime.workedDays, requestedLeaveDays ?? existing.paidLeaveDays, workingTime.standardMonthlyDays)) {
+        if (hasPaidLeaveConflict(workingTime.workedDays, requestedLeaveDays ?? existing.paidLeaveDays, workingTime.standardMonthlyDays, requestedHolidayDays ?? existing.joursFeries)) {
             return rejectPaidLeaveConflict(res, true);
         }
         // Use the saved bonus lines, without adding today's recurring bonuses again.
@@ -1940,7 +1942,7 @@ export const calculateLive = async (req, res) => {
             niimpOverrides,
         };
 
-        if (hasPaidLeaveConflict(overrides.workedDays, overrides.paidLeaveDays, overrides.standardMonthlyDays)) {
+        if (hasPaidLeaveConflict(overrides.workedDays, overrides.paidLeaveDays, overrides.standardMonthlyDays, overrides.joursFeries)) {
             return rejectPaidLeaveConflict(res, true);
         }
 

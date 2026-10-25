@@ -10,6 +10,7 @@ import {
     handleEmployeeIndemnites,
     handleRemoveEmployeeIndemnite,
     handleEmployeeTaxablePrime,
+    handleEmployeeIndemniteToggle,
 
 } from "../controllers/employee.controller.js";
 import { isAuth } from "../../middlewares/auth.js";
@@ -41,5 +42,6 @@ employee.post("/:id/edit", handleUpdateEmployee);
 employee.post("/:id/indemnites", handleEmployeeIndemnites);
 employee.post("/:id/indemnites/:bonusId/delete", handleRemoveEmployeeIndemnite);
 employee.post("/:id/primes/taxable", handleEmployeeTaxablePrime);
+employee.post("/:id/indemnites/toggle", handleEmployeeIndemniteToggle);
 employee.post("/:id/delete", handleDeleteEmployee);
 employee.delete("/:id", handleDeleteEmployee);

@@ -21,7 +21,7 @@ function isRepresentationName(name) {
 }
 function cleanAmount(amount) {
     const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0) throw new Error("INVALID_INDEMNITE_AMOUNT");
+    if (!Number.isFinite(value) || value < 0) throw new Error("INVALID_INDEMNITE_AMOUNT");
     return Number(value.toFixed(2));
 }
 
@@ -71,8 +71,39 @@ export async function updateRepresentationRate(companyId, rate, code = REPRESENT
     });
 }
 
+async function ensureRepresentationIndemnite(companyId) {
+    const cId = companyKey(companyId);
+    const company = await prisma.company.findUnique({
+        where: { id: cId },
+        select: { indemniteRepresentationRate: true },
+    });
+    if (!company) throw new Error("COMPANY_NOT_FOUND");
+    const defaultAmount = Number((Number(company.indemniteRepresentationRate ?? DEFAULT_REPRESENTATION_RATE) * 100).toFixed(2));
+    const definitions = await prisma.bonus.findMany({
+        where: { companyId: cId, taxable: false },
+        select: { id: true, name: true },
+    });
+    const existing = definitions.find(definition => isRepresentationName(definition.name));
+    if (existing) {
+        return prisma.bonus.update({
+            where: { id: existing.id },
+            data: { name: REPRESENTATION_NAME, code: REPRESENTATION_CODE, defaultAmount, taxable: false },
+        });
+    }
+    return prisma.bonus.create({
+        data: {
+            companyId: cId,
+            code: REPRESENTATION_CODE,
+            name: REPRESENTATION_NAME,
+            defaultAmount,
+            taxable: false,
+        },
+    });
+}
+
 // Indemnities reuse the existing non-taxable Bonus catalog and EmployeeBonus amounts.
 export async function listIndemnites(companyId) {
+    await ensureRepresentationIndemnite(companyId);
     const rows = await prisma.bonus.findMany({
         where: { companyId: companyKey(companyId), taxable: false },
         orderBy: { name: "asc" },
@@ -170,9 +201,11 @@ export async function saveEmployeeIndemnites(employeeId, companyId, rows = []) {
                 amount: cleanAmount(definition.defaultAmount || 0.01),
             });
         } else {
+            const value = Number(row.amount);
+            if (!Number.isFinite(value) || value < 0) throw new Error("INVALID_INDEMNITE_AMOUNT");
             normalized.push({
                 bonusId,
-                amount: cleanAmount(row.amount),
+                amount: Number(value.toFixed(2)),
             });
         }
         seen.add(bonusId);
@@ -201,6 +234,35 @@ export async function saveEmployeeIndemnites(employeeId, companyId, rows = []) {
         });
         await refreshDraftPayslips(tx, updatedEmployee);
         return tx.employeeBonus.findMany({ where: { employeeId: empId }, include: { bonus: true } });
+    });
+}
+
+export async function setEmployeeIndemnite(employeeId, bonusId, companyId, enabled, amount) {
+    const empId = Number(employeeId);
+    const bId = Number(bonusId);
+    const cId = companyKey(companyId);
+    const employee = await prisma.employee.findFirst({ where: { id: empId, companyId: cId }, select: { id: true } });
+    const definition = await prisma.bonus.findFirst({ where: { id: bId, companyId: cId, taxable: false }, select: { id: true, defaultAmount: true, name: true } });
+    if (!employee || !definition) throw new Error("INDEMNITE_NOT_FOUND");
+    if (isRepresentationName(definition.name)) throw new Error("REPRESENTATION_INDEMNITE_USE_RATE");
+
+    await prisma.$transaction(async tx => {
+        if (enabled) {
+            const value = Number(amount);
+            const normalizedAmount = Number.isFinite(value) && value >= 0 ? Number(value.toFixed(2)) : 0;
+            await tx.employeeBonus.upsert({
+                where: { employeeId_bonusId: { employeeId: empId, bonusId: bId } },
+                update: { amount: normalizedAmount },
+                create: { employeeId: empId, bonusId: bId, amount: normalizedAmount },
+            });
+        } else {
+            await tx.employeeBonus.deleteMany({ where: { employeeId: empId, bonusId: bId } });
+        }
+        const updatedEmployee = await tx.employee.findUnique({
+            where: { id: empId },
+            include: { company: true, bonuses: { include: { bonus: true } } },
+        });
+        await refreshDraftPayslips(tx, updatedEmployee);
     });
 }
 

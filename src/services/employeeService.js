@@ -198,8 +198,6 @@ export const getEmployee = async (id, companyId) => {
 async function resolveBonusList(bonusList, fallbackCompanyId) {
     const result = [];
     for (const item of bonusList) {
-        if (!item.amount || Number(item.amount) === 0) continue;
-
         let bonusDef;
         if (item.bonusId) {
             bonusDef = await prisma.bonus.findFirst({
@@ -209,10 +207,11 @@ async function resolveBonusList(bonusList, fallbackCompanyId) {
             bonusDef = await findOrCreateBonusDefinition(item.name, fallbackCompanyId);
         }
 
-        if (bonusDef) {
+        const amount = Number(item.amount || 0);
+        if (bonusDef && Number.isFinite(amount) && amount >= 0 && (!bonusDef.taxable || amount > 0)) {
             result.push({
                 bonusId: bonusDef.id,
-                amount: Number(item.amount),
+                amount,
                 ...(bonusDef.taxable ? {
                     implementerEnConge: item.implementerEnConge === undefined
                         ? false
@@ -309,7 +308,8 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
         cimrRate, cimrReduitBaseImposable,
-        indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie
+        indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie,
+        replaceNonTaxableBonuses
     } = data;
 
     const empId = Number(id);
@@ -336,7 +336,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         : [];
 
     return prisma.$transaction(async tx => {
-        const preservedBonuses = shouldReplaceBonuses
+        const preservedBonuses = shouldReplaceBonuses && !replaceNonTaxableBonuses
             ? await tx.employeeBonus.findMany({
                 where: { employeeId: empId, bonus: { taxable: false } },
                 select: { bonusId: true, amount: true, implementerEnConge: true },

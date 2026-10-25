@@ -20,7 +20,7 @@ function cleanCode(code) {
 
 function cleanAmount(amount) {
     const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0) throw new Error("INVALID_TAXABLE_PRIME");
+    if (!Number.isFinite(value) || value < 0) throw new Error("INVALID_TAXABLE_PRIME");
     return Number(value.toFixed(2));
 }
 

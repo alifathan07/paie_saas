@@ -29,7 +29,7 @@
                     <div class="catalog-create-row">
                         <input name="code[]" class="form-input" required maxlength="64" placeholder="Rubrique (ex. 2001)" value="<%= row.code %>">
                         <input name="name[]" class="form-input" required maxlength="191" placeholder="Libellé (ex. Prime de rendement)" value="<%= row.name %>">
-                        <div class="catalog-amount-field"><input name="defaultAmount[]" class="form-input" type="number" min="0.01" step="0.01" required placeholder="Montant par défaut" value="<%= row.defaultAmount %>"><span class="currency-label">DH</span></div>
+                        <div class="catalog-amount-field"><input name="defaultAmount[]" class="form-input" type="number" min="0" step="1" placeholder="Montant par défaut" value="<%= row.defaultAmount %>"><span class="currency-label">DH</span></div>
                         <button class="remove-indemnite-row" type="button" aria-label="Supprimer cette prime">×</button>
                     </div>
                 <% }); %>
@@ -53,7 +53,7 @@
                         <tr>
                             <td><form id="edit-prime-<%= item.id %>" action="/primes/<%= item.id %>/edit" method="POST"></form><input form="edit-prime-<%= item.id %>" class="form-input catalog-name-input" name="code" value="<%= item.code %>" required maxlength="64"></td>
                             <td><input form="edit-prime-<%= item.id %>" class="form-input catalog-name-input" name="name" value="<%= item.name %>" required maxlength="191"></td>
-                            <td><input form="edit-prime-<%= item.id %>" class="form-input catalog-amount-input" type="number" name="defaultAmount" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>" required> <span class="currency-label">DH</span></td>
+                            <td><input form="edit-prime-<%= item.id %>" class="form-input catalog-amount-input" type="number" name="defaultAmount" min="0" step="1" value="<%= Number(item.defaultAmount).toFixed(2) %>"> <span class="currency-label">DH</span></td>
                             <td><span class="assignment-count"><%= item._count.employeeBonuses %></span> <%= item._count.employeeBonuses === 1 ? 'salarié' : 'salariés' %></td>
                             <td class="catalog-actions"><button class="btn-secondary btn-compact" form="edit-prime-<%= item.id %>" type="submit">Enregistrer</button><form id="delete-prime-<%= item.id %>" action="/primes/<%= item.id %>/delete" method="POST"></form><button class="btn-icon-delete btn-compact" type="submit" form="delete-prime-<%= item.id %>" data-delete-prime="<%= item.name %>"><span aria-hidden="true">⌫</span> Supprimer</button></td>
                         </tr>
@@ -82,7 +82,7 @@ const addPrimeRow = () => {
     row.className = 'catalog-create-row';
     row.innerHTML = `<input name="code[]" class="form-input" required maxlength="64" placeholder="Rubrique (ex. 2001)">
         <input name="name[]" class="form-input" required maxlength="191" placeholder="Libellé (ex. Prime de rendement)">
-        <div class="catalog-amount-field"><input name="defaultAmount[]" class="form-input" type="number" min="0.01" step="0.01" required placeholder="Montant par défaut"><span class="currency-label">DH</span></div>
+        <div class="catalog-amount-field"><input name="defaultAmount[]" class="form-input" type="number" min="0" step="1" placeholder="Montant par défaut"><span class="currency-label">DH</span></div>
         <button class="remove-indemnite-row" type="button" aria-label="Supprimer cette prime">×</button>`;
     primeCreateRows.appendChild(row);
     row.querySelector('input').focus();

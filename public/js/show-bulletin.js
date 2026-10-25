@@ -7,7 +7,7 @@
     const locked = page.dataset.locked === 'true';
     const money = value => `${Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD`;
     const days = value => Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const paidLeaveConflictMessage = 'Veuillez vérifier le nombre de jours travaillés : les jours travaillés et les jours de congé payé ne peuvent pas dépasser le nombre de jours du mois.';
+    const paidLeaveConflictMessage = 'Veuillez vérifier les jours travaillés, congés payés et jours fériés : leur total ne peut pas dépasser le nombre de jours du mois.';
     let paidLeaveConflictAlertOpen = false;
     const showPaidLeaveConflictAlert = () => {
         if (paidLeaveConflictAlertOpen) return;
@@ -89,6 +89,10 @@
     };
     async function savePublicHolidayDays() {
         if (!publicHolidayStoredInput || locked) return;
+        if (typeof hasPaidLeaveConflict === 'function' && hasPaidLeaveConflict()) {
+            showPaidLeaveConflictAlert();
+            return;
+        }
         const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, joursFeries: publicHolidayStoredInput.value || '0' });
         const response = await fetch(`/bulletins/${page.dataset.employeeId}/public-holiday`, { method: 'POST', headers: { Accept: 'application/json' }, body });
         const result = await response.json();
@@ -611,8 +615,10 @@
         if (!workingTimeInput || workingTimeInput.name !== 'workedDays') return false;
         const workedDays = Number(workingTimeInput.value);
         const paidLeaveDays = Number(paidLeaveStoredInput?.value || 0);
+        const publicHolidayDays = Number(publicHolidayStoredInput?.value || 0);
         const monthlyDays = Number(workingTimeInput.max || 26);
-        return Number.isFinite(workedDays) && Number.isFinite(paidLeaveDays) && workedDays + paidLeaveDays > monthlyDays;
+        return Number.isFinite(workedDays) && Number.isFinite(paidLeaveDays) && Number.isFinite(publicHolidayDays)
+            && workedDays + paidLeaveDays + publicHolidayDays > monthlyDays;
     };
     form.addEventListener('submit', event => {
         if (!hasPaidLeaveConflict()) return;

@@ -18,6 +18,7 @@ import {
     saveEmployeeIndemnites,
     createIndemnite,
     removeEmployeeIndemnite,
+    setEmployeeIndemnite,
 } from "../services/indemniteService.js";
 
 const getSessionCompanyId = async (req) => resolveCompanyId(req);
@@ -125,8 +126,8 @@ export const handleCreateEmployee = async (req, res) => {
             const amounts = Array.isArray(employeeIndemniteAmounts)
                 ? employeeIndemniteAmounts
                 : [employeeIndemniteAmounts || []];
-            ids.forEach((bonusId, index) => {
-                if (bonusId && amounts[index] && Number(amounts[index]) > 0) {
+        ids.forEach((bonusId, index) => {
+                if (bonusId && Number(amounts[index] || 0) >= 0) {
                     bonusList.push({ bonusId, amount: amounts[index] });
                 }
             });
@@ -138,7 +139,7 @@ export const handleCreateEmployee = async (req, res) => {
             const amounts = Array.isArray(newIndemniteAmounts) ? newIndemniteAmounts : [newIndemniteAmounts || []];
             const codes = Array.isArray(newIndemniteCodes) ? newIndemniteCodes : [newIndemniteCodes || []];
             for (let i = 0; i < names.length; i += 1) {
-                if (!String(names[i] || '').trim() || !amounts[i] || Number(amounts[i]) <= 0) continue;
+                if (!String(names[i] || '').trim() || !String(codes[i] || '').trim() || Number(amounts[i] || 0) < 0) continue;
                 const definition = await createIndemnite({ companyId, code: codes[i], name: names[i], defaultAmount: amounts[i] });
                 bonusList.push({ bonusId: definition.id, amount: amounts[i] });
             }
@@ -238,6 +239,7 @@ export const renderEditForm = async (req, res) => {
         const { id } = req.params;
         const employee = await getEmployee(parseInt(id), await getSessionCompanyId(req));
         const companyId = employee.companyId;
+        const employees = await getEmployees({ companyId });
         const bonusTypes = await getAllBonusTypes(companyId);
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
@@ -252,6 +254,7 @@ export const renderEditForm = async (req, res) => {
             currentPage: "employees",
             user: req.session.user,
             employee,
+            employees,
             bonusTypes,
             categories,
             functions,
@@ -270,12 +273,16 @@ export const renderEditForm = async (req, res) => {
 export const handleEmployeeIndemnites = async (req, res) => {
     try {
         const activeCompanyId = await getSessionCompanyId(req);
+        const employee = await getEmployee(req.params.id, activeCompanyId);
         const ids = req.body.employeeIndemniteIds ? (Array.isArray(req.body.employeeIndemniteIds) ? req.body.employeeIndemniteIds : [req.body.employeeIndemniteIds]) : [];
         const amounts = req.body.employeeIndemniteAmounts ? (Array.isArray(req.body.employeeIndemniteAmounts) ? req.body.employeeIndemniteAmounts : [req.body.employeeIndemniteAmounts]) : [];
-        const rows = ids.map((bonusId, index) => ({
+        const existingRows = employee.bonuses
+            .filter(row => row.bonus && !row.bonus.taxable)
+            .map(row => ({ bonusId: row.bonusId, amount: row.amount }));
+        const rows = [...existingRows, ...ids.map((bonusId, index) => ({
             bonusId,
             amount: amounts[index],
-        }));
+        }))];
         const names = req.body.newIndemniteNames ? (Array.isArray(req.body.newIndemniteNames) ? req.body.newIndemniteNames : [req.body.newIndemniteNames]) : [];
         const newAmounts = req.body.newIndemniteAmounts ? (Array.isArray(req.body.newIndemniteAmounts) ? req.body.newIndemniteAmounts : [req.body.newIndemniteAmounts]) : [];
         const newCodes = req.body.newIndemniteCodes ? (Array.isArray(req.body.newIndemniteCodes) ? req.body.newIndemniteCodes : [req.body.newIndemniteCodes]) : [];
@@ -317,6 +324,23 @@ export const handleEmployeeTaxablePrime = async (req, res) => {
     } catch (error) {
         console.error("Error saving employee taxable prime:", error);
         return res.status(400).json({ ok: false, error: "Impossible d'enregistrer la prime imposable." });
+    }
+};
+
+export const handleEmployeeIndemniteToggle = async (req, res) => {
+    try {
+        const enabled = req.body.enabled === 'true' || req.body.enabled === '1';
+        await setEmployeeIndemnite(
+            req.params.id,
+            req.body.bonusId,
+            await getSessionCompanyId(req),
+            enabled,
+            req.body.amount,
+        );
+        return res.json({ ok: true });
+    } catch (error) {
+        console.error("Error saving employee indemnité:", error);
+        return res.status(400).json({ ok: false, error: "Impossible d'enregistrer l'indemnité." });
     }
 };
 
@@ -384,6 +408,7 @@ export const handleUpdateEmployee = async (req, res) => {
         await updateEmp(id, {
             ...employeeData,
             ...(bonusFieldsProvided ? { bonusList } : {}),
+            replaceNonTaxableBonuses: bonusFieldsProvided && (bonusIds !== undefined || bonusAmounts !== undefined),
             actif: req.body.actif === '1' || req.body.actif === 'true',
             cimrReduitBaseImposable: Boolean(req.body.cimrReduitBaseImposable),
             indemniteRepresentationName: req.body.representationEnabled === '1' || req.body.representationEnabled === 'true'

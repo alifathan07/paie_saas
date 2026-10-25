@@ -1175,10 +1175,10 @@
                         <td class="rubrique-code"><%= rubriqueCodes['Salaire de base'] || '' %></td><td class="description">Salaire de base</td>
                         <td class="num">
                         <% if (workingTimeMode === 'HOURS') { %>
-                            <input class="employee-edit live-input working-time-primary" name="workedHours" aria-label="Nombre d'heures travaillées" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyHours %>" step="0.01" required value="<%= values.workedHours ?? standardMonthlyHours %>" <%= locked ? 'disabled' : '' %>>
+                            <input class="employee-edit live-input working-time-primary" name="workedHours" aria-label="Nombre d'heures travaillées" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyHours %>" step="1" required value="<%= values.workedHours ?? standardMonthlyHours %>" <%= locked ? 'disabled' : '' %>>
                             <small class="working-time-unit">h</small>
                         <% } else { %>
-                            <input class="employee-edit live-input working-time-primary" name="workedDays" aria-label="Nombre de jours travaillés" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyDays %>" step="0.01" required value="<%= values.workedDays ?? standardMonthlyDays %>" <%= locked ? 'disabled' : '' %>>
+                            <input class="employee-edit live-input working-time-primary" name="workedDays" aria-label="Nombre de jours travaillés" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyDays %>" step="1" required value="<%= values.workedDays ?? standardMonthlyDays %>" <%= locked ? 'disabled' : '' %>>
                             <small class="working-time-unit">j</small>
                         <% } %>
                     </td>

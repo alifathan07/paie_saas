@@ -242,11 +242,26 @@
                     <div class="app-modal-header"><div><h2>Ajouter des indemnités</h2><p>Sélectionnez une indemnité, puis personnalisez son montant.</p></div><button type="button" class="modal-close" data-close-indemnites>×</button></div>
                     <div class="indemnite-picker">
                         <% if (indemnites && indemnites.length) { indemnites.forEach(function (item) { %>
-                            <label class="indemnite-picker-row"><input type="checkbox" form="employee-create-form" name="employeeIndemniteIds" value="<%= item.id %>"><span class="indemnite-picker-code"><%= item.code %></span><span class="indemnite-picker-name"><strong><%= item.name %></strong><small><%= item.isRepresentation ? 'Taux proposé' : 'Défaut' %> : <%= Number(item.defaultAmount).toFixed(2) %> <%= item.isRepresentation ? '%' : 'DH' %></small></span><input type="number" form="employee-create-form" name="employeeIndemniteAmounts" class="form-input" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>" required><span><%= item.isRepresentation ? '%' : 'DH' %></span></label>
+                            <label class="indemnite-picker-row"><input type="checkbox" form="employee-create-form" name="employeeIndemniteIds" value="<%= item.id %>"><span class="indemnite-picker-code"><%= item.code %></span><span class="indemnite-picker-name"><strong><%= item.name %></strong><small><%= item.isRepresentation ? 'Taux proposé' : 'Défaut' %> : <%= Number(item.defaultAmount).toFixed(2) %> <%= item.isRepresentation ? '%' : 'DH' %></small></span><input type="number" form="employee-create-form" name="employeeIndemniteAmounts" class="form-input" min="0" step="1" value="<%= Number(item.defaultAmount).toFixed(2) %>"><span><%= item.isRepresentation ? '%' : 'DH' %></span></label>
                         <% }); } else { %><p class="empty-state">Aucune indemnité dans le catalogue. Créez-en une ci-dessous.</p><% } %>
                     </div>
                     <div class="inline-create-panel"><strong>Créer depuis cette fenêtre</strong><div id="new-indemnite-rows"></div><button type="button" class="btn-secondary" id="add-new-indemnite">+ Nouvelle indemnité</button></div>
                     <div class="app-modal-actions"><button type="button" class="btn-secondary" data-close-indemnites>Annuler</button><button type="button" class="btn-primary" id="apply-indemnites">Ajouter au salarié</button></div>
+                </div>
+            </div>
+
+            <div id="empty-indemnite-confirm" class="confirm-modal" hidden>
+                <div class="confirm-modal-backdrop" data-close-empty-indemnite></div>
+                <div class="confirm-modal-card" role="dialog" aria-modal="true" aria-labelledby="empty-indemnite-title">
+                    <div class="confirm-modal-icon">!</div>
+                    <div class="confirm-modal-content">
+                        <h2 id="empty-indemnite-title">Montant vide</h2>
+                        <p>Continuer sans montant ?</p>
+                    </div>
+                    <div class="confirm-modal-actions">
+                        <button type="button" class="btn-secondary" data-close-empty-indemnite>Arrêter</button>
+                        <button type="button" class="btn-primary" id="continue-empty-indemnite">Continuer</button>
+                    </div>
                 </div>
             </div>
 
@@ -276,7 +291,7 @@
                 document.querySelectorAll('.indemnite-picker-row').forEach(row => {
                     const checkbox = row.querySelector('input[type="checkbox"]');
                     const amount = row.querySelector('input[type="number"]');
-                    const sync = () => { amount.disabled = !checkbox.checked; amount.required = checkbox.checked; };
+                    const sync = () => { amount.disabled = !checkbox.checked; };
                     checkbox.addEventListener('change', sync);
                     sync();
                 });
@@ -303,7 +318,7 @@
                         }));
                     document.querySelectorAll('#new-indemnite-rows .new-indemnite-row').forEach(row => {
                         const inputs = row.querySelectorAll('input');
-                        if (inputs[0]?.value.trim() && inputs[1]?.value.trim() && Number(inputs[2]?.value) > 0) {
+                        if (inputs[0]?.value.trim() && inputs[1]?.value.trim() && Number(inputs[2]?.value || 0) >= 0) {
                         indemnityRows.push({ code: inputs[0].value, name: inputs[1].value, amount: inputs[2].value, newIndemnite: true });
                         }
                     });
@@ -326,12 +341,31 @@
                 document.getElementById('add-new-indemnite').addEventListener('click', () => {
                     const row = document.createElement('div');
                     row.className = 'new-indemnite-row';
-                    row.innerHTML = '<input type="text" name="newIndemniteCodes" form="employee-create-form" class="form-input" placeholder="Code rubrique" required><input type="text" name="newIndemniteNames" form="employee-create-form" class="form-input" placeholder="Nom de l’indemnité" required><input type="number" name="newIndemniteAmounts" form="employee-create-form" class="form-input" min="0.01" step="0.01" placeholder="Montant DH" required><button type="button" class="remove-inline-row">×</button>';
+                    row.innerHTML = '<input type="text" name="newIndemniteCodes" form="employee-create-form" class="form-input" placeholder="Code rubrique"><input type="text" name="newIndemniteNames" form="employee-create-form" class="form-input" placeholder="Nom de l’indemnité"><input type="number" name="newIndemniteAmounts" form="employee-create-form" class="form-input" min="0" step="1" placeholder="Montant DH"><button type="button" class="remove-inline-row">×</button>';
                     row.querySelector('.remove-inline-row').addEventListener('click', () => { row.remove(); renderEmployeeDraftBenefits(); });
                     document.getElementById('new-indemnite-rows').appendChild(row);
                     row.querySelectorAll('input').forEach(input => input.addEventListener('input', renderEmployeeDraftBenefits));
                 });
-                document.getElementById('apply-indemnites').addEventListener('click', () => { renderEmployeeDraftBenefits(); indemnitesModal.hidden = true; document.querySelector('[data-tab="indemnites"]').click(); });
+                const emptyIndemniteConfirm = document.getElementById('empty-indemnite-confirm');
+                const hasEmptyIndemniteAmount = () => {
+                    const selectedExisting = [...document.querySelectorAll('.indemnite-picker-row')]
+                        .filter(row => row.querySelector('input[type="checkbox"]')?.checked)
+                        .some(row => row.querySelector('input[type="number"]')?.value.trim() === '');
+                    const newRows = [...document.querySelectorAll('#new-indemnite-rows .new-indemnite-row')]
+                        .filter(row => row.querySelector('input[name="newIndemniteCodes"]')?.value.trim() && row.querySelector('input[name="newIndemniteNames"]')?.value.trim())
+                        .some(row => row.querySelector('input[name="newIndemniteAmounts"]')?.value.trim() === '');
+                    return selectedExisting || newRows;
+                };
+                const finishIndemniteSelection = () => { renderEmployeeDraftBenefits(); emptyIndemniteConfirm.hidden = true; indemnitesModal.hidden = true; document.querySelector('[data-tab="indemnites"]').click(); };
+                document.getElementById('apply-indemnites').addEventListener('click', () => {
+                    if (hasEmptyIndemniteAmount()) {
+                        emptyIndemniteConfirm.hidden = false;
+                        return;
+                    }
+                    finishIndemniteSelection();
+                });
+                document.querySelectorAll('[data-close-empty-indemnite]').forEach(button => button.addEventListener('click', () => { emptyIndemniteConfirm.hidden = true; }));
+                document.getElementById('continue-empty-indemnite').addEventListener('click', finishIndemniteSelection);
                 document.querySelectorAll('.indemnite-picker-row input').forEach(input => {
                     input.addEventListener('input', renderEmployeeDraftBenefits);
                     input.addEventListener('change', renderEmployeeDraftBenefits);
