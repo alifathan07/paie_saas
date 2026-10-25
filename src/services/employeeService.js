@@ -199,7 +199,18 @@ async function resolveBonusList(bonusList, fallbackCompanyId) {
         }
 
         if (bonusDef) {
-            result.push({ bonusId: bonusDef.id, amount: Number(item.amount) });
+            result.push({
+                bonusId: bonusDef.id,
+                amount: Number(item.amount),
+                ...(bonusDef.taxable ? {
+                    implementerEnConge: item.implementerEnConge === undefined
+                        ? false
+                        : Boolean(item.implementerEnConge),
+                    implementerEnJourFerie: item.implementerEnJourFerie === undefined
+                        ? false
+                        : Boolean(item.implementerEnJourFerie),
+                } : {}),
+            });
         }
     }
     return result;
@@ -303,16 +314,12 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         : undefined;
     const existing = await prisma.employee.findFirst({
         where: { id: empId, companyId: targetCompanyId },
-        select: { companyId: true, baseSalary: true, indemniteRepresentationRate: true }
+        select: { companyId: true }
     });
     if (!existing) throw new Error('EMPLOYEE_NOT_FOUND');
 
     // Only replace bonus assignments when the edit form explicitly submitted them.
     const shouldReplaceBonuses = bonusList !== undefined;
-    const salaryChanged = baseSalary !== undefined && Number(baseSalary) !== Number(existing.baseSalary);
-    const bonusesChanged = shouldReplaceBonuses;
-    const representationChanged = indemniteRepresentationRate !== undefined
-        && Number(indemniteRepresentationRate || 0) / 100 !== Number(existing.indemniteRepresentationRate || 0);
     const employeeBonusData = shouldReplaceBonuses && bonusList.length > 0
         ? await resolveBonusList(bonusList, targetCompanyId)
         : [];
@@ -321,13 +328,13 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         const preservedBonuses = shouldReplaceBonuses
             ? await tx.employeeBonus.findMany({
                 where: { employeeId: empId, bonus: { taxable: false } },
-                select: { bonusId: true, amount: true },
+                select: { bonusId: true, amount: true, implementerEnConge: true },
             })
             : [];
         if (shouldReplaceBonuses) {
             await tx.employeeBonus.deleteMany({ where: { employeeId: empId } });
         }
-        const mergedBonusMap = new Map(preservedBonuses.map(row => [row.bonusId, { bonusId: row.bonusId, amount: row.amount }]));
+        const mergedBonusMap = new Map(preservedBonuses.map(row => [row.bonusId, { bonusId: row.bonusId, amount: row.amount, implementerEnConge: row.implementerEnConge }]));
         employeeBonusData.forEach(row => mergedBonusMap.set(row.bonusId, row));
         const bonusesToCreate = [...mergedBonusMap.values()];
         const updated = await tx.employee.update({
@@ -389,9 +396,46 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
                 bonuses: { include: { bonus: true } }
             }
         });
-        if (salaryChanged || representationChanged || bonusesChanged) await refreshDraftPayslips(tx, updated);
+        // Employee edits affect only open bulletins. The refresh service limits
+        // itself to DRAFT/GENERATED records, so validated and closed bulletins
+        // remain immutable snapshots while the next bulletin uses new data.
+        await refreshDraftPayslips(tx, updated);
         return updated;
     });
+};
+
+export const setEmployeeTaxablePrime = async (employeeId, bonusId, amount, companyId, enabled, implementerEnConge, implementerEnJourFerie) => {
+    const employee = await prisma.employee.findFirst({
+        where: { id: Number(employeeId), companyId: Number(companyId) },
+        select: { id: true },
+    });
+    const bonus = await prisma.bonus.findFirst({
+        where: { id: Number(bonusId), companyId: Number(companyId), taxable: true },
+        select: { id: true, defaultAmount: true },
+    });
+    if (!employee || !bonus) throw new Error('TAXABLE_PRIME_NOT_FOUND');
+
+    if (!enabled) {
+        await prisma.employeeBonus.deleteMany({ where: { employeeId: employee.id, bonusId: bonus.id } });
+    } else {
+        const value = Number(amount || bonus.defaultAmount);
+        if (!Number.isFinite(value) || value <= 0) throw new Error('INVALID_TAXABLE_PRIME_AMOUNT');
+        await prisma.employeeBonus.upsert({
+            where: { employeeId_bonusId: { employeeId: employee.id, bonusId: bonus.id } },
+            create: { employeeId: employee.id, bonusId: bonus.id, amount: Number(value.toFixed(2)), implementerEnConge: Boolean(implementerEnConge), implementerEnJourFerie: Boolean(implementerEnJourFerie) },
+            update: {
+                amount: Number(value.toFixed(2)),
+                ...(implementerEnConge === undefined ? {} : { implementerEnConge: Boolean(implementerEnConge) }),
+                ...(implementerEnJourFerie === undefined ? {} : { implementerEnJourFerie: Boolean(implementerEnJourFerie) }),
+            },
+        });
+    }
+    const updatedEmployee = await prisma.employee.findUnique({
+        where: { id: employee.id },
+        include: { company: true, bonuses: { include: { bonus: true } } },
+    });
+    await refreshDraftPayslips(prisma, updatedEmployee);
+    return { enabled: Boolean(enabled) };
 };
 
 export const deleteEmployee = async (id, companyId) => {

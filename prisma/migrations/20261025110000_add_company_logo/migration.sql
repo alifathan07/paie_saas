@@ -1,0 +1,2 @@
+ALTER TABLE `company`
+    ADD COLUMN `logoData` LONGTEXT NULL;

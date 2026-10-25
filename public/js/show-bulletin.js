@@ -7,6 +7,17 @@
     const locked = page.dataset.locked === 'true';
     const money = value => `${Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD`;
     const days = value => Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const paidLeaveConflictMessage = 'Veuillez vérifier le nombre de jours travaillés : les jours travaillés et les jours de congé payé ne peuvent pas dépasser le nombre de jours du mois.';
+    let paidLeaveConflictAlertOpen = false;
+    const showPaidLeaveConflictAlert = () => {
+        if (paidLeaveConflictAlertOpen) return;
+        paidLeaveConflictAlertOpen = true;
+        window.AppDialog.alert(paidLeaveConflictMessage, {
+            title: 'Alerte',
+            danger: true,
+            confirmLabel: 'Compris',
+        }).finally(() => { paidLeaveConflictAlertOpen = false; });
+    };
     const timeValue = value => Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const setResult = (name, value) => document.querySelectorAll(`[data-result="${name}"]`).forEach(node => {
         node.textContent = money(value);
@@ -15,7 +26,7 @@
         if (!cumulative) return;
         document.querySelectorAll('[data-result="annualWorkedDays"]').forEach(node => { node.textContent = days(cumulative.workedDays); });
         document.querySelectorAll('[data-result="annualWorkedHours"]').forEach(node => { node.textContent = timeValue(cumulative.workedHours); });
-        ['sbi', 'sni', 'irNet', 'cnss', 'amo'].forEach(key => {
+        ['sbi', 'brutGlobal', 'sni', 'irNet', 'cnss', 'amo'].forEach(key => {
             document.querySelectorAll(`[data-result="annual${key[0].toUpperCase()}${key.slice(1)}"]`).forEach(node => {
                 node.textContent = money(cumulative[key]);
             });
@@ -34,6 +45,70 @@
     const primeLabelInput = document.querySelector('#prime-label-input');
     const primeAmountInput = document.querySelector('#prime-amount-input');
     const primeCodeInput = document.querySelector('#prime-code-input');
+    const paidLeaveStoredInput = document.querySelector('#paid-leave-days-value');
+    const publicHolidayStoredInput = document.querySelector('#jours-feries-value');
+    const initialPaidLeaveRow = document.querySelector('.paid-leave-row');
+    const syncPaidLeaveRow = () => {
+        const rowInput = document.querySelector('.paid-leave-row-input');
+        if (rowInput && paidLeaveStoredInput) paidLeaveStoredInput.value = rowInput.value || '0';
+    };
+    initialPaidLeaveRow?.querySelector('.paid-leave-row-input')?.addEventListener('input', syncPaidLeaveRow);
+    async function savePaidLeaveDays() {
+        if (!paidLeaveStoredInput || locked) return;
+        if (typeof hasPaidLeaveConflict === 'function' && hasPaidLeaveConflict()) {
+            showPaidLeaveConflictAlert();
+            return;
+        }
+        const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, paidLeaveDays: paidLeaveStoredInput.value || '0' });
+        const response = await fetch(`/bulletins/${page.dataset.employeeId}/paid-leave`, { method: 'POST', headers: { Accept: 'application/json' }, body });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer le congé payé.');
+        renderPayroll(result.payroll);
+    }
+    initialPaidLeaveRow?.querySelector('.paid-leave-row-input')?.addEventListener('change', () => {
+        savePaidLeaveDays().catch(errorObject => {
+            if (errorObject.message === paidLeaveConflictMessage) showPaidLeaveConflictAlert();
+            else window.AppDialog.alert(errorObject.message);
+            calculate();
+        });
+    });
+    initialPaidLeaveRow?.querySelector('.paid-leave-row-input')?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        syncPaidLeaveRow();
+        savePaidLeaveDays().catch(errorObject => {
+            if (errorObject.message === paidLeaveConflictMessage) showPaidLeaveConflictAlert();
+            else window.AppDialog.alert(errorObject.message);
+            calculate();
+        });
+    });
+    const publicHolidayRow = document.querySelector('.public-holiday-row');
+    const syncPublicHolidayRow = () => {
+        const rowInput = publicHolidayRow?.querySelector('.public-holiday-row-input');
+        if (rowInput && publicHolidayStoredInput) publicHolidayStoredInput.value = rowInput.value || '0';
+    };
+    async function savePublicHolidayDays() {
+        if (!publicHolidayStoredInput || locked) return;
+        const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, joursFeries: publicHolidayStoredInput.value || '0' });
+        const response = await fetch(`/bulletins/${page.dataset.employeeId}/public-holiday`, { method: 'POST', headers: { Accept: 'application/json' }, body });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer les jours fériés.');
+        if (Number(result.payroll?.joursFeries || 0) <= 0) {
+            window.location.reload();
+            return;
+        }
+        renderPayroll(result.payroll);
+    }
+    publicHolidayRow?.querySelector('.public-holiday-row-input')?.addEventListener('input', syncPublicHolidayRow);
+    publicHolidayRow?.querySelector('.public-holiday-row-input')?.addEventListener('change', () => {
+        savePublicHolidayDays().catch(errorObject => { window.AppDialog.alert(errorObject.message); calculate(); });
+    });
+    publicHolidayRow?.querySelector('.public-holiday-row-input')?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        syncPublicHolidayRow();
+        savePublicHolidayDays().catch(errorObject => { window.AppDialog.alert(errorObject.message); calculate(); });
+    });
     const primeRubriqueSelect = document.querySelector('#prime-rubrique-select');
     primeRubriqueSelect?.addEventListener('change', () => {
         const option = primeRubriqueSelect.selectedOptions[0];
@@ -73,8 +148,8 @@
             const escapedLabel = label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const escapedValue = label.replace(/"/g, '&quot;');
             const savedAmount = Number(result.bonus.amount).toFixed(2);
-            row.innerHTML = `<td class="description"><input name="primesLabels" value="${escapedValue}" placeholder="Nom de la prime"></td><td class="num">—</td><td class="num">—</td><td class="num"><input class="live-input" name="primesAmounts" type="number" min="0" step="0.01" value="${savedAmount}" placeholder="Montant DH"></td><td class="num">—</td><td class="num"><button type="button" class="remove-prime" aria-label="Supprimer">×</button></td>`;
-            const primeRows = lines.querySelectorAll('.prime-row');
+            row.innerHTML = `<td class="rubrique-code">${result.bonus.code || ''}</td><td class="description"><input name="primesLabels" value="${escapedValue}" placeholder="Nom de la prime"></td><td class="num">—</td><td class="num">—</td><td class="num"><input class="live-input" name="primesAmounts" type="number" min="0" step="0.01" value="${savedAmount}" placeholder="Montant DH"></td><td class="num">—</td><td class="num"><button type="button" class="remove-prime" aria-label="Supprimer">×</button></td>`;
+            const primeRows = [...lines.querySelectorAll('.taxable-prime-line:not(.calculated-taxable-line)')];
             const lastPrime = primeRows[primeRows.length - 1];
             const seniorityRow = lines.querySelector('.seniority-row');
             const insertionPoint = lastPrime || seniorityRow;
@@ -91,13 +166,24 @@
         }
     });
 
+
     const otherRubriqueDialog = document.querySelector('#other-rubrique-dialog');
     const otherRubriqueDialogForm = document.querySelector('#other-rubrique-dialog-form');
     const otherRubriqueSelect = document.querySelector('#other-rubrique-select');
     const otherRubriqueAmountInput = document.querySelector('#other-rubrique-amount-input');
+    const otherRubriqueValueLabel = document.querySelector('#other-rubrique-value-label');
     otherRubriqueSelect?.addEventListener('change', () => {
         const option = otherRubriqueSelect.selectedOptions[0];
-        otherRubriqueAmountInput.value = '';
+        const isPaidLeave = option?.dataset.type === 'paid_leave';
+        const isPublicHoliday = option?.dataset.type === 'public_holiday';
+        const isDayCount = isPaidLeave || isPublicHoliday;
+        if (otherRubriqueValueLabel) otherRubriqueValueLabel.textContent = isDayCount ? 'Nombre de jours' : 'Montant en DH';
+        if (otherRubriqueAmountInput) {
+            otherRubriqueAmountInput.value = '';
+            otherRubriqueAmountInput.max = isDayCount ? '26' : '';
+            otherRubriqueAmountInput.step = isDayCount ? '1' : '0.01';
+            otherRubriqueAmountInput.placeholder = isDayCount ? 'Ex. 2' : 'Optionnel';
+        }
     });
     document.querySelector('#add-other-rubrique')?.addEventListener('click', () => {
         otherRubriqueDialog?.showModal();
@@ -109,32 +195,57 @@
         event.preventDefault();
         const option = otherRubriqueSelect?.selectedOptions[0];
         const rubriqueImposableId = otherRubriqueSelect?.value;
+        const isPaidLeave = option?.dataset.type === 'paid_leave';
+        const isPublicHoliday = option?.dataset.type === 'public_holiday';
         const amount = Number(otherRubriqueAmountInput?.value || 0);
-        if (!rubriqueImposableId || !Number.isFinite(amount) || amount < 0) {
-            window.AppDialog.alert('Choisissez une rubrique et saisissez un montant valide.');
+        if (!rubriqueImposableId || !Number.isFinite(amount) || amount < 0 || ((isPaidLeave || isPublicHoliday) && (!Number.isInteger(amount) || amount <= 0 || amount > 26))) {
+            window.AppDialog.alert(isPaidLeave || isPublicHoliday
+                ? `Choisissez la rubrique ${isPaidLeave ? 'congé' : 'jours fériés'} et saisissez un nombre de jours entre 1 et 26.`
+                : 'Choisissez une rubrique et saisissez un montant valide.');
             return;
         }
         const submitButton = event.submitter;
         submitButton.disabled = true;
         submitButton.textContent = 'Enregistrement...';
         try {
-            const response = await fetch(`/bulletins/${page.dataset.employeeId}/primes`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({
-                    rubriqueImposableId,
-                    code: option?.dataset.code || '',
-                    label: option?.dataset.name || '',
-                    amount,
-                    month: page.dataset.month,
-                    year: page.dataset.year,
-                }),
-            });
+            const response = isPaidLeave
+                ? await fetch(`/bulletins/${page.dataset.employeeId}/paid-leave`, {
+                    method: 'POST',
+                    headers: { Accept: 'application/json' },
+                    body: new URLSearchParams({
+                        month: page.dataset.month,
+                        year: page.dataset.year,
+                        paidLeaveDays: String(amount),
+                    }),
+                })
+                : isPublicHoliday
+                ? await fetch(`/bulletins/${page.dataset.employeeId}/public-holiday`, {
+                    method: 'POST',
+                    headers: { Accept: 'application/json' },
+                    body: new URLSearchParams({
+                        month: page.dataset.month,
+                        year: page.dataset.year,
+                        joursFeries: String(amount),
+                    }),
+                })
+                : await fetch(`/bulletins/${page.dataset.employeeId}/primes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({
+                        rubriqueImposableId,
+                        code: option?.dataset.code || '',
+                        label: option?.dataset.name || '',
+                        amount,
+                        month: page.dataset.month,
+                        year: page.dataset.year,
+                    }),
+                });
             const result = await response.json();
-            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’ajouter la rubrique.');
+            if (!response.ok || !result.ok) throw new Error(result.error || (isPaidLeave ? 'Impossible d’enregistrer le congé.' : isPublicHoliday ? 'Impossible d’enregistrer les jours fériés.' : 'Impossible d’ajouter la rubrique.'));
             window.location.reload();
         } catch (errorObject) {
-            window.AppDialog.alert(errorObject.message);
+            if (errorObject.message === paidLeaveConflictMessage) showPaidLeaveConflictAlert();
+            else window.AppDialog.alert(errorObject.message);
             submitButton.disabled = false;
             submitButton.textContent = 'Ajouter';
         }
@@ -394,7 +505,10 @@
     });
 
     function renderPayroll(result) {
-        ['baseSalary', 'sbg', 'sbi', 'sni', 'cnss', 'amo', 'irNet', 'fraisPro', 'netAPayer', 'primeAnciennete', 'cnssPatronale', 'amoPatronale'].forEach(key => setResult(key, result[key]));
+        ['baseSalary', 'baseConge', 'paidLeaveAmount', 'baseFerie', 'joursFeriesAmount', 'sbg', 'sbi', 'sni', 'cnss', 'amo', 'irNet', 'fraisPro', 'netAPayer', 'primeAnciennete', 'cnssPatronale', 'amoPatronale'].forEach(key => setResult(key, result[key]));
+        document.querySelectorAll('[data-result="paidLeaveDays"]').forEach(node => { node.textContent = days(result.paidLeaveDays); });
+        document.querySelectorAll('.public-holiday-row-input').forEach(node => { node.value = result.joursFeries ?? 0; });
+        if (publicHolidayStoredInput) publicHolidayStoredInput.value = result.joursFeries ?? 0;
         document.querySelectorAll('[data-result="irTaux"]').forEach(node => {
             node.textContent = result.irTaux === undefined || result.irTaux === null
                 ? '—'
@@ -418,7 +532,7 @@
         document.querySelectorAll('[data-result="periode"]').forEach(element => {
             element.textContent = result.periode;
         });
-        const deductions = Number(result.cnss || 0) + Number(result.amo || 0) + Number(result.cimr || 0) + Number(result.irNet || 0) + Number(result.avances || 0) + Math.max(0, -Number(result.arrondi || 0));
+        const deductions = Number(result.cnss || 0) + Number(result.amo || 0) + Number(result.cimr || 0) + Number(result.irNet || 0) + Number(result.avanceDeduction || 0) + Number(result.manualRetenusTotal || 0) + Math.max(0, -Number(result.arrondi || 0));
         document.querySelectorAll('[data-result="deductionsTotal"]').forEach(node => { node.textContent = money(deductions); });
         document.querySelectorAll('[data-result="totalGains"]').forEach(node => { node.textContent = money(Number(result.sbg || 0) + Math.max(0, Number(result.arrondi || 0))); });
         setResult('cnssBase', Math.min(Number(result.sbi || 0), 6000));
@@ -448,12 +562,72 @@
         }
     }
 
+    const avanceInput = document.querySelector('.avance-deduction-input');
+    let savedAvanceDeduction = avanceInput?.dataset.savedValue || '0.00';
+    let savingAvanceDeduction = false;
+    let avanceSaveTimer;
+    async function saveAvanceDeduction() {
+        if (!avanceInput || locked || page.dataset.saved !== 'true' || savingAvanceDeduction) return;
+        const currentValue = Number(avanceInput.value || 0).toFixed(2);
+        if (currentValue === Number(savedAvanceDeduction || 0).toFixed(2)) return;
+        if (!avanceInput.checkValidity()) return;
+        clearTimeout(avanceSaveTimer);
+        savingAvanceDeduction = true;
+        avanceInput.readOnly = true;
+        try {
+            const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, amount: currentValue });
+            const response = await fetch(`/bulletins/${page.dataset.employeeId}/avances`, {
+                method: 'POST', headers: { Accept: 'application/json' }, body,
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || "Impossible d'enregistrer l'avance.");
+            savedAvanceDeduction = currentValue;
+            await calculate();
+        } catch (errorObject) {
+            window.AppDialog.alert(errorObject.message);
+            avanceInput.value = Number(savedAvanceDeduction || 0).toFixed(2);
+            calculate();
+        } finally {
+            savingAvanceDeduction = false;
+            avanceInput.readOnly = false;
+        }
+    }
+    avanceInput?.addEventListener('input', () => {
+        clearTimeout(avanceSaveTimer);
+        avanceSaveTimer = setTimeout(saveAvanceDeduction, 450);
+    });
+    avanceInput?.addEventListener('blur', () => {
+        clearTimeout(avanceSaveTimer);
+        saveAvanceDeduction();
+    });
+    avanceInput?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        saveAvanceDeduction();
+    });
+
     const workingTimeInput = form.elements.workedDays || form.elements.workedHours;
+    const hasPaidLeaveConflict = () => {
+        if (!workingTimeInput || workingTimeInput.name !== 'workedDays') return false;
+        const workedDays = Number(workingTimeInput.value);
+        const paidLeaveDays = Number(paidLeaveStoredInput?.value || 0);
+        const monthlyDays = Number(workingTimeInput.max || 26);
+        return Number.isFinite(workedDays) && Number.isFinite(paidLeaveDays) && workedDays + paidLeaveDays > monthlyDays;
+    };
+    form.addEventListener('submit', event => {
+        if (!hasPaidLeaveConflict()) return;
+        event.preventDefault();
+        showPaidLeaveConflictAlert();
+    });
     let savedWorkingTime = workingTimeInput?.value;
     let savingWorkingTime = false;
     let workingTimeTimer;
     async function calculateWorkingTime(save = false) {
         if (!workingTimeInput || workingTimeInput.disabled || savingWorkingTime || !workingTimeInput.checkValidity()) return;
+        if (save && hasPaidLeaveConflict()) {
+            showPaidLeaveConflictAlert();
+            return;
+        }
         const version = ++calculationVersion;
         const state = document.querySelector('#calculation-state');
         const error = document.querySelector('#calculation-error');

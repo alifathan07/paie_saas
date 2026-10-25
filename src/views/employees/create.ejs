@@ -212,18 +212,18 @@
                         <label class="representation-rate-control"><span>Taux</span><input type="number" name="indemniteRepresentationRate" value="" data-default-rate="<%= defaultRepresentationRate ?? 10 %>" placeholder="<%= defaultRepresentationRate ?? 10 %>" min="0" max="100" step="0.01" disabled><strong>%</strong></label>
                     </div>
                     <div class="section-heading-row"><div><h2 class="section-title" style="margin-bottom: 4px;">Indemnités non imposables</h2><p style="font-size: 13px; color: var(--color-text-subtle); margin: 0;">Attribuez les indemnités récurrentes à ce salarié et ajustez son montant mensuel.</p></div><button type="button" class="btn-primary open-indemnites-modal">+ Ajouter des indemnités</button></div>
-                    <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Indemnité</th><th>Montant salarié</th><th>Statut</th></tr></thead><tbody id="employee-indemnity-preview"><tr><td colspan="4" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr></tbody></table></div>
+                    <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Indemnité</th><th>Montant salarié</th></tr></thead><tbody id="employee-indemnity-preview"><tr><td colspan="3" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr></tbody></table></div>
                     <div class="indemnites-bottom-action"><span>Vous souhaitez ajouter ou modifier une indemnité ?</span><button type="button" class="btn-primary open-indemnites-modal">+ Ajouter des indemnités</button></div>
                 </div>
 
                 <div class="form-section employee-tab-panel" data-panel="primes">
                     <div class="section-heading-row"><div><h2 class="section-title" style="margin-bottom: 4px;">Primes imposables fixes</h2><p style="font-size: 13px; color: var(--color-text-subtle); margin: 0;">Attribuez les primes récurrentes imposables à ce salarié.</p></div></div>
-                    <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Prime</th><th>Montant salarié</th><th>Montant par défaut</th></tr></thead><tbody>
+                    <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Prime</th><th>Montant salarié</th><th>Montant par défaut</th><th>Congé payé</th><th>Jours fériés</th></tr></thead><tbody>
                         <% const taxableBonuses = (bonusTypes || []).filter(item => item.taxable); %>
                         <% if (taxableBonuses.length) { taxableBonuses.forEach(function (item) { %>
-                            <tr class="employee-prime-row"><td><%= item.code %></td><td><label><input type="checkbox" name="employeePrimeIds" value="<%= item.id %>"> <strong><%= item.name %></strong></label></td><td><input type="number" name="employeePrimeAmounts" class="form-input" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>"></td><td><%= Number(item.defaultAmount).toFixed(2) %> DH</td></tr>
-                        <% }); } else { %><tr><td colspan="4" class="empty-state">Aucune prime imposable dans le catalogue.</td></tr><% } %>
-                        <tr><td><input type="text" name="newPrimeCodes" class="form-input" placeholder="Code rubrique"></td><td><input type="text" name="newPrimeNames" class="form-input" placeholder="Nouvelle prime imposable"></td><td><input type="number" name="newPrimeAmounts" class="form-input" min="0.01" step="0.01" placeholder="Montant DH"></td><td>Créer dans le catalogue</td></tr>
+                            <tr class="employee-prime-row"><td><%= item.code %></td><td><label><input type="checkbox" name="employeePrimeIds" value="<%= item.id %>"> <strong><%= item.name %></strong></label></td><td><input type="number" name="employeePrimeAmounts" class="form-input" min="0.01" step="0.01" value="<%= Number(item.defaultAmount).toFixed(2) %>"></td><td><%= Number(item.defaultAmount).toFixed(2) %> DH</td><td><label><input type="checkbox" class="prime-leave-checkbox" name="employeePrimeLeaveIds" value="<%= item.id %>" data-prime-id="<%= item.id %>" disabled aria-label="Implémenter <%= item.name %> en congé"> Implémenter en congé</label></td><td><label><input type="checkbox" class="prime-holiday-checkbox" name="employeePrimeHolidayIds" value="<%= item.id %>" data-prime-id="<%= item.id %>" disabled aria-label="Implémenter <%= item.name %> en jours fériés"> Implémenter en jours fériés</label></td></tr>
+                        <% }); } else { %><tr><td colspan="6" class="empty-state">Aucune prime imposable dans le catalogue.</td></tr><% } %>
+                        <tr><td><input type="text" name="newPrimeCodes" class="form-input" placeholder="Code rubrique"></td><td><input type="text" name="newPrimeNames" class="form-input" placeholder="Nouvelle prime imposable"></td><td><input type="number" name="newPrimeAmounts" class="form-input" min="0.01" step="0.01" placeholder="Montant DH"></td><td>Créer dans le catalogue</td><td>—</td><td>—</td></tr>
                     </tbody></table></div>
                     <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Prime imposable</th><th>Montant salarié</th><th>Statut</th></tr></thead><tbody id="employee-prime-preview"><tr><td colspan="4" class="empty-state">Aucune prime fixe attribuée à ce salarié.</td></tr></tbody></table></div>
                 </div>
@@ -283,8 +283,12 @@
                 document.querySelectorAll('.employee-prime-row').forEach(row => {
                     const checkbox = row.querySelector('input[type="checkbox"]');
                     const amount = row.querySelector('input[type="number"]');
+                    const leaveCheckbox = row.querySelector('.prime-leave-checkbox');
+                    const holidayCheckbox = row.querySelector('.prime-holiday-checkbox');
                     const sync = () => { amount.disabled = !checkbox.checked; };
                     checkbox.addEventListener('change', sync);
+                    checkbox.addEventListener('change', () => { if (leaveCheckbox) leaveCheckbox.disabled = !checkbox.checked; });
+                    checkbox.addEventListener('change', () => { if (holidayCheckbox) holidayCheckbox.disabled = !checkbox.checked; });
                     sync();
                 });
                 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
@@ -295,16 +299,17 @@
                             code: row.querySelector('.indemnite-picker-code')?.textContent.trim(),
                             name: row.querySelector('.indemnite-picker-name strong')?.textContent.trim(),
                             amount: row.querySelector('input[type="number"]')?.value,
+                            id: row.querySelector('input[name="employeeIndemniteIds"]')?.value,
                         }));
                     document.querySelectorAll('#new-indemnite-rows .new-indemnite-row').forEach(row => {
                         const inputs = row.querySelectorAll('input');
                         if (inputs[0]?.value.trim() && inputs[1]?.value.trim() && Number(inputs[2]?.value) > 0) {
-                            indemnityRows.push({ code: inputs[0].value, name: inputs[1].value, amount: inputs[2].value });
+                        indemnityRows.push({ code: inputs[0].value, name: inputs[1].value, amount: inputs[2].value, newIndemnite: true });
                         }
                     });
                     document.getElementById('employee-indemnity-preview').innerHTML = indemnityRows.length
-                        ? indemnityRows.map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td>${Number(item.amount).toFixed(2)} DH</td><td><span class="badge badge-actif">En mémoire</span></td></tr>`).join('')
-                        : '<tr><td colspan="4" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr>';
+                        ? indemnityRows.map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td>${Number(item.amount).toFixed(2)} DH</td></tr>`).join('')
+                        : '<tr><td colspan="3" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr>';
 
                     const primeRows = [...document.querySelectorAll('.employee-prime-row')]
                         .filter(row => row.querySelector('input[type="checkbox"]')?.checked)

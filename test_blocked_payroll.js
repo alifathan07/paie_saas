@@ -14,7 +14,7 @@ const employee = {
 };
 const inputs = {
     month: 9, year: 2026, workedDays: 26, baseSalary: 22000,
-    heuresSup25: 8, heuresSup50: 8, heuresSup100: 8, avances: 1000,
+    heuresSup25: 8, heuresSup50: 8, heuresSup100: 8,
     variablePrimes: [{ label: 'Extra', amount: 500 }],
     monthlyNimpLines: [{ label: 'Extra NIMP', amount: 800 }],
     niimpOverrides: { Transport: 1500 }, bonusesNIMP: 900,
@@ -22,7 +22,7 @@ const inputs = {
 const zeroFields = ['workedDays', 'baseSalary', 'primeAnciennete', 'bonusesIMP', 'bonusesNIMP',
     'sbg', 'sbi', 'cnss', 'amo', 'cimr', 'fraisPro', 'sni', 'irBrut', 'irTheorique',
     'sommeADeduire', 'chargesDeFamille', 'irNet', 'netAPayer',
-    'heuresSup25', 'heuresSup50', 'heuresSup100', 'avances'];
+    'heuresSup25', 'heuresSup50', 'heuresSup100'];
 function assertZero(result) {
     for (const field of zeroFields) assert.equal(result[field], 0, field);
 }

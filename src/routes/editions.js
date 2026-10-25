@@ -4,6 +4,7 @@ import { prisma } from "../lib/db.js";
 import { resolveCompanyId } from "../lib/company.js";
 import { generateBulletinPdf } from "../pdf/bulletinPdf.js";
 import { mapPayslipToViewModel, getBulletinPdfCumulative } from "../controllers/bulletins.controller.js";
+import { getRubriqueMaps } from "../services/rubrique.service.js";
 
 export const editions = express.Router();
 
@@ -84,7 +85,7 @@ function matriculeNumber(value) {
     return match ? Number(match.join("")) : NaN;
 }
 
-async function pdfDataFromPayslip(payslip) {
+async function pdfDataFromPayslip(payslip, rubriqueCodes = {}) {
     const emp = payslip.employee;
     const company = emp.company || {};
     const hireDate = new Date(emp.dateEmbauche);
@@ -106,6 +107,7 @@ async function pdfDataFromPayslip(payslip) {
         cin: emp.cin || "—",
         seniorityYears,
         companyName: company.name || "CONFONDA",
+        companyLogo: company.logoData || null,
         companyAddress: company.adresse || "hay sikaktyne",
         companyCNSS: company.numeroCNSS || "5646554654",
         companyIF: company.ifNumber || "565653486",
@@ -115,6 +117,7 @@ async function pdfDataFromPayslip(payslip) {
         monthName: MONTH_NAMES_FR[payslip.month] || "Mois",
         paymentDate: `${payslip.year}-${String(payslip.month).padStart(2, "0")}-25`,
         paymentMethod: emp.modePaiement || "Virement",
+        rubriqueCodes,
         cumulative: await getBulletinPdfCumulative(payslip.employeeId, payslip.year, payslip.month, payslip),
     };
 }
@@ -151,6 +154,7 @@ editions.post("/bulletins/pdf", async (req, res) => {
         if (selected.length === 0) {
             return renderBulletinExportPage(req, res, { error: "Aucun bulletin trouvé dans cette plage de matricules pour la période sélectionnée." });
         }
+        const rubriqueCodes = (await getRubriqueMaps(companyId)).codes;
 
         const doc = new PDFDocument({
             size: "A4",
@@ -166,7 +170,7 @@ editions.post("/bulletins/pdf", async (req, res) => {
 
         for (const [index, payslip] of selected.entries()) {
             if (index > 0) doc.addPage();
-            generateBulletinPdf(await pdfDataFromPayslip(payslip), null, { doc });
+            generateBulletinPdf(await pdfDataFromPayslip(payslip, rubriqueCodes), null, { doc });
         }
         doc.end();
     } catch (error) {

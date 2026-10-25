@@ -76,9 +76,9 @@ async function main() {
   log(resumeId ? 'Resuming test employee' : 'Fresh test employee — zero existing bulletins', employee);
   log('IR brackets used by the application', IR_RULES);
   const scenarios = [
-    { month: 7, workedDays: 26, heuresSup25: 8, heuresSup50: 0, heuresSup100: 0, avances: 500, prime: 2000 },
-    { month: 8, workedDays: 24, heuresSup25: 0, heuresSup50: 4, heuresSup100: 0, avances: 0, prime: 500 },
-    { month: 9, workedDays: 26, heuresSup25: 0, heuresSup50: 0, heuresSup100: 2, avances: 250, prime: 1000 },
+    { month: 7, workedDays: 26, heuresSup25: 8, heuresSup50: 0, heuresSup100: 0, prime: 2000 },
+    { month: 8, workedDays: 24, heuresSup25: 0, heuresSup50: 4, heuresSup100: 0, prime: 500 },
+    { month: 9, workedDays: 26, heuresSup25: 0, heuresSup50: 0, heuresSup100: 2, prime: 1000 },
   ];
   const summary = [];
   const history = [];
@@ -111,7 +111,7 @@ async function main() {
       fraisProfessionnels: { base: calc.sbi, rate: frais.rate, cap: frais.cap,
         beforeCap: round(calc.sbi * frais.rate), deducted: frais.amount },
       sni: `${calc.sbi} - ${calc.cnss} - ${calc.amo} - ${calc.cimr} - ${calc.fraisPro} = ${calc.sni}`,
-      netAPayer: `${calc.sbg} - ${calc.cnss} - ${calc.amo} - ${calc.cimr} - ${calc.irNet} - ${calc.avances} = ${calc.netAPayer}`,
+      netAPayer: `${calc.sbg} - ${calc.cnss} - ${calc.amo} - ${calc.cimr} - ${calc.irNet} = ${calc.netAPayer}`,
     });
     const key = { employeeId_month_year: { employeeId: employee.id, year: 2026, month: scenario.month } };
     const existing = await prisma.payslip.findUnique({ where: key });
@@ -163,7 +163,7 @@ async function main() {
     assert.equal(round(priorIR + calc.irNet), cumulativeIR);
     assert.equal(calc.fraisPro, frais.amount);
     assert.equal(calc.sni, round(calc.sbi - calc.cnss - calc.amo - calc.cimr - calc.fraisPro));
-    assert.equal(calc.netAPayer, Number((round(calc.sbg - calc.cnss - calc.amo - calc.cimr - calc.irNet - calc.avances) + calc.arrondi).toFixed(2)));
+    assert.equal(calc.netAPayer, Number((round(calc.sbg - calc.cnss - calc.amo - calc.cimr - calc.irNet) + calc.arrondi).toFixed(2)));
     assert.equal(saved.bonuses.length, 2);
     if (saved.status !== 'VALIDATED') await validateBulletin(req, response());
     const validated = await prisma.payslip.findUnique({ where: key, include: { bonuses: true } });

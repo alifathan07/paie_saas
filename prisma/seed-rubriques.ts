@@ -9,6 +9,8 @@ const baseRubriques = [
   { key: 'taxable_gross_salary', name: 'Salaire brut imposable', code: '1003' },
   { key: 'taxable_net_salary', name: 'Salaire net imposable', code: '1004' },
   { key: 'net_salary', name: 'Salaire net à payer', code: '1005' },
+  { key: 'paid_leave_days', name: 'Nombre jours congé payé', code: '1009' },
+  { key: 'public_holiday_days', name: 'Nombre jours fériés', code: '1010' },
 ]
 
 const retenuRubriques = [
@@ -16,7 +18,6 @@ const retenuRubriques = [
   { key: 'amo', name: 'AMO', code: '2002', entryType: 'SYSTEM' },
   { key: 'cimr', name: 'CIMR', code: '2003', entryType: 'SYSTEM' },
   { key: 'income_tax', name: 'Impôt sur le revenu', code: '2004', entryType: 'SYSTEM' },
-  { key: 'salary_advance', name: 'Avance sur salaire', code: '2005', entryType: 'SYSTEM' },
   { key: 'professional_expenses', name: 'Frais professionnels', code: '2006', entryType: 'SYSTEM' },
   { key: 'rounding', name: 'Arrondi', code: '2007', entryType: 'SYSTEM' },
   { key: 'loan', name: 'Retenue prêt', code: '2008', entryType: 'MANUAL' },

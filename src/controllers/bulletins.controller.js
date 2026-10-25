@@ -15,6 +15,7 @@ import { calculateCumulativeIR } from "../payroll-engine/calculators/cumulativeI
 import { generateBulletinPdf } from "../pdf/bulletinPdf.js";
 import { getBulletinRubriqueCodes } from "../services/bulletinRubrique.service.js";
 import { getRubriqueMaps } from "../services/rubrique.service.js";
+import { listEmployeeAvances, removeAvanceDeduction, setAvanceDeduction } from "../services/avance.service.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,6 +38,19 @@ const isLockedBulletin = (status) => status === BULLETIN_STATUS.VALIDATED || sta
 const isClosedBulletin = (status) => status === BULLETIN_STATUS.CLOSED;
 const EXCLUDED_NIMP_PREFIX = "__bulletin_excluded_employee_indemnity__:";
 const payslipBonusBaseAmount = bonus => Number(bonus.baseAmount ?? bonus.amount ?? 0);
+const PAID_LEAVE_CONFLICT_MESSAGE = "Veuillez vérifier le nombre de jours travaillés : les jours travaillés et les jours de congé payé ne peuvent pas dépasser le nombre de jours du mois.";
+
+function hasPaidLeaveConflict(workedDays, paidLeaveDays, standardMonthlyDays = PAYROLL_WORKED_DAYS) {
+    const worked = Number(workedDays);
+    const leave = Number(paidLeaveDays);
+    const maximum = Number(standardMonthlyDays) || PAYROLL_WORKED_DAYS;
+    return Number.isFinite(worked) && Number.isFinite(leave) && worked + leave > maximum;
+}
+
+function rejectPaidLeaveConflict(res, acceptsJson = false) {
+    if (acceptsJson) return res.status(400).json({ ok: false, error: PAID_LEAVE_CONFLICT_MESSAGE });
+    return res.status(400).send(PAID_LEAVE_CONFLICT_MESSAGE);
+}
 
 function taxableAdditionLines(values, catalogue = []) {
     const byKey = new Map(catalogue.map(row => [row.calculationKey, row]));
@@ -117,7 +131,7 @@ export async function getAnnualPayrollCumulative(employeeId, year, currentMonth,
                 ...(hasSelectedMonth ? [{ month: selectedMonth }] : []),
             ],
         },
-        select: { id: true, month: true, workedDays: true, workedHours: true, workingTimeMode: true, standardMonthlyDays: true, standardMonthlyHours: true, sni: true, irNet: true, cnss: true, sbi: true, amo : true },
+        select: { id: true, month: true, workedDays: true, workedHours: true, workingTimeMode: true, standardMonthlyDays: true, standardMonthlyHours: true, sni: true, irNet: true, cnss: true, sbi: true, brutGlobal: true, bonusesNIMP: true, amo : true },
         orderBy: { month: "asc" },
     });
 
@@ -139,8 +153,9 @@ export async function getAnnualPayrollCumulative(employeeId, year, currentMonth,
         irNet: Number((totals.irNet + Number(payslip.irNet || 0)).toFixed(2)),
         cnss: Number((totals.cnss + Number(payslip.cnss || 0)).toFixed(2)),
         sbi: Number((totals.sbi + Number(payslip.sbi || 0)).toFixed(2)),
+        brutGlobal: Number((totals.brutGlobal + Number(payslip.brutGlobal ?? Number(payslip.sbi || 0) + Number(payslip.bonusesNIMP || 0))).toFixed(2)),
         amo: Number((totals.amo + Number(payslip.amo || 0)).toFixed(2)),
-    }), { workedDays: 0, workedHours: 0, sni: 0, irNet: 0, cnss: 0, sbi: 0, amo: 0 });
+    }), { workedDays: 0, workedHours: 0, sni: 0, irNet: 0, cnss: 0, sbi: 0, brutGlobal: 0, amo: 0 });
 }
 
 // PDF-only cumulative view: keeps the existing annual cumulative API stable
@@ -153,6 +168,8 @@ export async function getBulletinPdfCumulative(employeeId, year, month, currentP
         irNet: currentPayslip.irNet,
         cnss: currentPayslip.cnss,
         sbi: currentPayslip.sbi,
+        bonusesNIMP: currentPayslip.bonusesNIMP,
+        brutGlobal: currentPayslip.brutGlobal,
         amo: currentPayslip.amo,
     });
     const rows = await prisma.payslip.findMany({
@@ -221,13 +238,15 @@ async function applyCumulativeIR(employeeId, month, year, calc, dependents) {
     // this month; do not replace it with the annual/cumulative IR amount.
     const chargesDeFamille = Number(calc.chargesDeFamille || 0);
     const irNet = Math.max(0, Number((irBrut - chargesDeFamille).toFixed(2)));
-    const netAPayer = Number((calc.sbg - calc.cnss - calc.amo - calc.cimr - irNet - calc.avances).toFixed(2));
+    const netAPayer = Number((calc.sbg - calc.cnss - calc.amo - calc.cimr - irNet).toFixed(2));
     const annualCumulative = await getAnnualPayrollCumulative(employeeId, year, month, {
         workedDays: calc.workedDays,
         sni: calc.sni,
         irNet,
         cnss: calc.cnss,
         sbi: calc.sbi,
+        bonusesNIMP: calc.bonusesNIMP,
+        brutGlobal: calc.brutGlobal ?? calc.sbg,
         amo: calc.amo,
     });
 
@@ -319,6 +338,20 @@ async function buildPayslipData(emp, calc, month, year, rates, status = BULLETIN
     if (!calc.irCumulative) {
         throw new Error("CUMULATIVE_IR_REQUIRED: payroll must be processed through applyCumulativeIR()");
     }
+    // Preserve an advance retention whenever another bulletin input is recalculated.
+    // The advance balance is managed separately, but its amount is part of the
+    // bulletin's retention/net-pay result.
+    if (!Number(calc.avanceDeduction || 0)) {
+        const savedPayslip = await prisma.payslip.findUnique({
+            where: { employeeId_month_year: { employeeId: emp.id, month, year } },
+            select: { avanceDeduction: true },
+        });
+        const savedAdvance = Number(savedPayslip?.avanceDeduction || 0);
+        if (savedAdvance > 0) {
+            calc.avanceDeduction = savedAdvance;
+            calc.netAPayer = Math.max(0, Number((Number(calc.netAPayer || 0) - savedAdvance).toFixed(2)));
+        }
+    }
     const irFields = calc.irCumulative;
     return {
         employeeId: emp.id,
@@ -326,6 +359,8 @@ async function buildPayslipData(emp, calc, month, year, rates, status = BULLETIN
         year,
         workedDays: calc.workedDays,
         workedHours: calc.workedHours,
+        paidLeaveDays: calc.paidLeaveDays,
+        joursFeries: calc.joursFeries,
         workingTimeMode: calc.workingTimeMode,
         standardMonthlyDays: calc.standardMonthlyDays,
         standardMonthlyHours: calc.standardMonthlyHours,
@@ -335,6 +370,11 @@ async function buildPayslipData(emp, calc, month, year, rates, status = BULLETIN
         primeAnciennete: calc.primeAnciennete,
         bonusesIMP: calc.bonusesIMP,
         bonusesNIMP: calc.bonusesNIMP,
+        brutGlobal: calc.brutGlobal ?? calc.sbg,
+        baseConge: calc.baseConge,
+        paidLeaveAmount: calc.paidLeaveAmount,
+        baseFerie: calc.baseFerie,
+        joursFeriesAmount: calc.joursFeriesAmount,
         sbg: calc.sbg,
         sbi: calc.sbi,
         cnss: calc.cnss,
@@ -353,12 +393,12 @@ async function buildPayslipData(emp, calc, month, year, rates, status = BULLETIN
         chargesDeFamille: calc.chargesDeFamille,
         irNet: calc.irNet,
         netAPayer: calc.netAPayer,
+        avanceDeduction: calc.avanceDeduction || 0,
         absenceDays: 0,
         absenceDeduction: 0,
         heuresSup25: calc.heuresSup25,
         heuresSup50: calc.heuresSup50,
         heuresSup100: calc.heuresSup100,
-        avances: calc.avances,
         ...irFields,
     };
 }
@@ -414,11 +454,14 @@ async function refreshOpenBulletinFromEmployee(emp, payslip) {
         heuresSup25: Number(payslip.heuresSup25 || 0),
         heuresSup50: Number(payslip.heuresSup50 || 0),
         heuresSup100: Number(payslip.heuresSup100 || 0),
-        avances: Number(payslip.avances || 0),
-        variablePrimes,
+            paidLeaveDays: Number(payslip.paidLeaveDays || 0),
+            joursFeries: Number(payslip.joursFeries || 0),
+            variablePrimes,
         monthlyNimpLines,
     });
     const calc = await applyCumulativeIR(calculationEmployee.id, payslip.month, payslip.year, monthlyCalc, calculationEmployee.nbPersonacharge);
+    calc.avanceDeduction = Number(payslip.avanceDeduction || 0);
+    calc.netAPayer = Math.max(0, Number((Number(calc.netAPayer || 0) - calc.avanceDeduction).toFixed(2)));
     const rates = await getPayrollRates();
     const data = await buildPayslipData(calculationEmployee, calc, payslip.month, payslip.year, rates, payslip.status);
     return savePayslipWithBonuses(data, payslip.id, calc);
@@ -455,6 +498,12 @@ export function mapPayslipToViewModel(p) {
         code: row.code,
         label: row.name,
         amount: Number(row.amount),
+    }));
+    const avanceDeductions = (p.avanceDeductions || []).map(row => ({
+        id: row.id,
+        avanceId: row.avanceId,
+        amount: Number(row.amount || 0),
+        avanceSolde: row.avance ? Number(row.avance.solde || 0) : null,
     }));
     const excludedNimpLines = (p.bonuses || [])
         .filter(b => String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
@@ -500,7 +549,7 @@ export function mapPayslipToViewModel(p) {
     const amoPatronale = Number((sbiNum * 0.0411).toFixed(2));
     const partPatronal = Number((cnssPatronale + amoPatronale).toFixed(2));
     const exactNetAPayer = Number((Number(p.sbg || 0) - Number(p.cnss || 0) - Number(p.amo || 0)
-        - Number(p.cimr || 0) - Number(p.irNet || 0) - Number(p.avances || 0)).toFixed(2));
+        - Number(p.cimr || 0) - Number(p.irNet || 0)).toFixed(2));
     const arrondi = Number((Math.round(exactNetAPayer) - exactNetAPayer).toFixed(2));
 
     return {
@@ -511,6 +560,8 @@ export function mapPayslipToViewModel(p) {
         periode: p.moisEcoules,
         workedDays,
         workedHours,
+        paidLeaveDays: Number(p.paidLeaveDays || 0),
+        joursFeries: Number(p.joursFeries || 0),
         workingTimeMode,
         standardMonthlyDays,
         standardMonthlyHours,
@@ -522,6 +573,11 @@ export function mapPayslipToViewModel(p) {
         ancienneteRate: effectiveBase > 0 ? Number((Number(p.primeAnciennete) / effectiveBase).toFixed(2)) : 0,
         bonusesIMP: Number(p.bonusesIMP),
         bonusesNIMP: Number(p.bonusesNIMP),
+        brutGlobal: Number(p.brutGlobal ?? p.sbg),
+        baseConge: Number(p.baseConge || 0),
+        paidLeaveAmount: Number(p.paidLeaveAmount || 0),
+        baseFerie: Number(p.baseFerie || 0),
+        joursFeriesAmount: Number(p.joursFeriesAmount || 0),
         sbg: Number(p.sbg),
         sbi: Number(p.sbi),
         cnss: Number(p.cnss),
@@ -544,7 +600,9 @@ export function mapPayslipToViewModel(p) {
         irNet: Number(p.irNet),
         exactNetAPayer,
         arrondi,
-        netAPayer: Number((exactNetAPayer + arrondi).toFixed(2)),
+        avanceDeduction: Number(p.avanceDeduction || 0),
+        avanceDeductionConfigured: Boolean(p.avanceDeductionConfigured || Number(p.avanceDeduction || 0) > 0),
+        netAPayer: Number((exactNetAPayer + arrondi - Number(p.avanceDeduction || 0)).toFixed(2)),
         absenceDays: 0,
         absenceDeduction: 0,
         heuresSup25: hs25,
@@ -554,10 +612,10 @@ export function mapPayslipToViewModel(p) {
         hs50Amount,
         hs100Amount,
         heuresSupAmount,
-        avances: Number(p.avances || 0),
         variablePrimes,
         nimpLines,
         retenus,
+        avanceDeductions,
         manualRetenusTotal: manualRetenueTotal(retenus),
         excludedNimpLines,
         createdAt: p.createdAt ? p.createdAt.toISOString() : null,
@@ -611,7 +669,6 @@ export const listBulletins = async (req, res) => {
                 Number(payslip.heuresSup25 || 0) > 0 ||
                 Number(payslip.heuresSup50 || 0) > 0 ||
                 Number(payslip.heuresSup100 || 0) > 0 ||
-                Number(payslip.avances || 0) > 0 ||
                 (payslip.bonuses && payslip.bonuses.length > 0)
             ) : false;
 
@@ -714,6 +771,18 @@ export const validateBulkBulletins = async (req, res) => {
         const companyId = await resolveCompanyId(req);
         if (!companyId) {
             return res.status(400).send("Aucune entreprise associée à cette session.");
+        }
+        const eligiblePayslips = await prisma.payslip.findMany({
+            where: {
+                month,
+                year,
+                employee: { companyId, actif: true },
+                status: { in: [BULLETIN_STATUS.DRAFT, BULLETIN_STATUS.GENERATED] },
+            },
+            select: { workedDays: true, paidLeaveDays: true, standardMonthlyDays: true },
+        });
+        if (eligiblePayslips.some(row => hasPaidLeaveConflict(row.workedDays, row.paidLeaveDays, row.standardMonthlyDays))) {
+            return rejectPaidLeaveConflict(res, false);
         }
         const result = await prisma.payslip.updateMany({
             where: {
@@ -887,6 +956,13 @@ export const generateBulletin = async (req, res) => {
             where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } }
         });
         if (rejectLockedBulletin(res, existing)) return;
+        const availableAvances = existing ? null : await listEmployeeAvances(emp.id);
+        const initialAvanceDeduction = availableAvances
+            ? availableAvances.reduce((total, avance) => total + Number(avance.solde || 0), 0)
+            : 0;
+        const submittedAvanceDeduction = req.body.avanceDeduction !== undefined
+            ? Math.max(0, Number(req.body.avanceDeduction) || 0)
+            : Number(existing?.avanceDeduction || initialAvanceDeduction);
 
         // Parse variable primes submitted from workspace
         const rawLabels = req.body.primesLabels || req.query.primesLabels;
@@ -934,15 +1010,23 @@ export const generateBulletin = async (req, res) => {
             heuresSup25: req.body.heuresSup25 || req.query.heuresSup25 || 0,
             heuresSup50: req.body.heuresSup50 || req.query.heuresSup50 || 0,
             heuresSup100: req.body.heuresSup100 || req.query.heuresSup100 || 0,
-            avances: req.body.avances || req.query.avances || 0,
+            paidLeaveDays: req.body.paidLeaveDays ?? req.query.paidLeaveDays ?? existing?.paidLeaveDays ?? 0,
+            joursFeries: req.body.joursFeries ?? req.query.joursFeries ?? existing?.joursFeries ?? 0,
             variablePrimes,
             monthlyNimpLines,
             niimpOverrides,
+            avanceDeduction: submittedAvanceDeduction,
             
         };
 
+        if (hasPaidLeaveConflict(overrides.workedDays, overrides.paidLeaveDays, overrides.standardMonthlyDays)) {
+            return rejectPaidLeaveConflict(res, String(req.headers.accept || '').includes('application/json'));
+        }
+
         const monthlyCalc = runEmployeeCalculation(emp, overrides);
         const calc = await applyCumulativeIR(emp.id, month, year, monthlyCalc, overrides.dependents ?? emp.nbPersonacharge);
+        calc.avanceDeduction = submittedAvanceDeduction;
+        calc.netAPayer = Math.max(0, Number((Number(calc.netAPayer || 0) - calc.avanceDeduction).toFixed(2)));
         const submittedBaseSalary = overrides.baseSalary !== undefined && overrides.baseSalary !== null && overrides.baseSalary !== ''
             ? Number(overrides.baseSalary)
             : Number(emp.baseSalary);
@@ -973,6 +1057,14 @@ export const generateBulletin = async (req, res) => {
             });
         }
 
+        await setAvanceDeduction({
+            companyId: resolveCompanyId(req),
+            employeeId: empId,
+            month,
+            year,
+            amount: submittedAvanceDeduction,
+        });
+
         await persistPayslipBonuses(payslip.id, calc);
         await applyManualRetenuesToNet(payslip.id, calc.netAPayer);
 
@@ -986,6 +1078,39 @@ export const generateBulletin = async (req, res) => {
             return res.status(500).json({ ok: false, error: err.message || "Impossible d'enregistrer le bulletin." });
         }
         res.redirect("/bulletins");
+    }
+};
+
+export const addAvanceDeduction = async (req, res) => {
+    const empId = Number(req.params.id);
+    const month = Number(req.body.month || req.query.month);
+    const year = Number(req.body.year || req.query.year);
+    try {
+        await setAvanceDeduction({ companyId: resolveCompanyId(req), employeeId: empId, month, year, amount: req.body.amount });
+        if (String(req.headers.accept || '').includes('application/json')) return res.json({ ok: true });
+        return res.redirect(`/bulletins/${empId}?month=${month}&year=${year}`);
+    } catch (error) {
+        const messages = {
+            PAYSLIP_REQUIRED: "Générez le bulletin avant d'ajouter une avance.",
+            BULLETIN_LOCKED: "Ce bulletin est verrouillé.",
+            ADVANCE_BALANCE_TOO_LOW: "Le montant dépasse le solde disponible de l'avance.",
+            INVALID_ADVANCE_AMOUNT: "Saisissez un montant d'avance valide.",
+        };
+        const message = messages[error.message] || "Impossible d'ajouter la déduction.";
+        if (String(req.headers.accept || '').includes('application/json')) return res.status(400).json({ ok: false, error: message });
+        return res.status(400).send(message);
+    }
+};
+
+export const deleteAvanceDeduction = async (req, res) => {
+    const empId = Number(req.params.id);
+    const month = Number(req.body.month || req.query.month);
+    const year = Number(req.body.year || req.query.year);
+    try {
+        await removeAvanceDeduction({ companyId: resolveCompanyId(req), employeeId: empId, month, year, deductionId: req.body.deductionId });
+        return res.redirect(`/bulletins/${empId}?month=${month}&year=${year}`);
+    } catch (error) {
+        return res.status(400).send(error.message === "BULLETIN_LOCKED" ? "Ce bulletin est verrouillé." : "Impossible de supprimer la déduction.");
     }
 };
 
@@ -1050,7 +1175,8 @@ export const addMonthlyPrime = async (req, res) => {
             heuresSup25: existing?.heuresSup25 || 0,
             heuresSup50: existing?.heuresSup50 || 0,
             heuresSup100: existing?.heuresSup100 || 0,
-            avances: existing?.avances || 0,
+            paidLeaveDays: Number(existing?.paidLeaveDays || 0),
+            joursFeries: Number(existing?.joursFeries || 0),
             variablePrimes,
             monthlyNimpLines,
         });
@@ -1123,7 +1249,8 @@ export const deleteMonthlyPrime = async (req, res) => {
             heuresSup25: existing.heuresSup25 || 0,
             heuresSup50: existing.heuresSup50 || 0,
             heuresSup100: existing.heuresSup100 || 0,
-            avances: existing.avances || 0,
+            paidLeaveDays: Number(existing.paidLeaveDays || 0),
+            joursFeries: Number(existing.joursFeries || 0),
             variablePrimes,
             monthlyNimpLines,
         });
@@ -1181,7 +1308,8 @@ export const addMonthlyIndemnity = async (req, res) => {
             heuresSup25: existing?.heuresSup25 || 0,
             heuresSup50: existing?.heuresSup50 || 0,
             heuresSup100: existing?.heuresSup100 || 0,
-            avances: existing?.avances || 0,
+            paidLeaveDays: Number(existing?.paidLeaveDays || 0),
+            joursFeries: Number(existing?.joursFeries || 0),
             variablePrimes,
             monthlyNimpLines,
         });
@@ -1340,7 +1468,8 @@ export const updateMonthlyIndemnity = async (req, res) => {
             heuresSup25: existing.heuresSup25 || 0,
             heuresSup50: existing.heuresSup50 || 0,
             heuresSup100: existing.heuresSup100 || 0,
-            avances: existing.avances || 0,
+            paidLeaveDays: Number(existing.paidLeaveDays || 0),
+            joursFeries: Number(existing.joursFeries || 0),
             variablePrimes,
             monthlyNimpLines,
         });
@@ -1452,7 +1581,8 @@ export const deleteMonthlyIndemnity = async (req, res) => {
             heuresSup25: existing.heuresSup25 || 0,
             heuresSup50: existing.heuresSup50 || 0,
             heuresSup100: existing.heuresSup100 || 0,
-            avances: existing.avances || 0,
+            paidLeaveDays: Number(existing.paidLeaveDays || 0),
+            joursFeries: Number(existing.joursFeries || 0),
             variablePrimes,
             monthlyNimpLines,
         });
@@ -1533,7 +1663,8 @@ export const restoreEmployeeIndemnity = async (req, res) => {
             heuresSup25: existing.heuresSup25 || 0,
             heuresSup50: existing.heuresSup50 || 0,
             heuresSup100: existing.heuresSup100 || 0,
-            avances: existing.avances || 0,
+            paidLeaveDays: Number(existing.paidLeaveDays || 0),
+            joursFeries: Number(existing.joursFeries || 0),
             variablePrimes,
             monthlyNimpLines,
         });
@@ -1570,6 +1701,9 @@ export const validateBulletin = async (req, res) => {
         }
         if (existing.status === BULLETIN_STATUS.CLOSED) {
             return res.status(403).send("Ce bulletin est clôturé.");
+        }
+        if (hasPaidLeaveConflict(existing.workedDays, existing.paidLeaveDays, existing.standardMonthlyDays)) {
+            return rejectPaidLeaveConflict(res, false);
         }
 
         const userId = req.session?.user?.id || null;
@@ -1652,10 +1786,24 @@ export const updateBulletinWorkedDays = async (req, res) => {
     const year = Number(input.year);
     const requestedDays = input.workedDays;
     const requestedHours = input.workedHours;
+    const requestedLeaveDays = input.paidLeaveDays;
+    const requestedHolidayDays = input.joursFeries;
+    if (requestedLeaveDays !== undefined) {
+        const leaveDays = Number(requestedLeaveDays);
+        if (!Number.isInteger(leaveDays) || leaveDays < 0 || leaveDays > PAYROLL_WORKED_DAYS) {
+            return res.status(400).json({ ok: false, error: 'Le congé payé doit être saisi en jours entiers, entre 0 et 26.' });
+        }
+    }
+    if (requestedHolidayDays !== undefined) {
+        const holidayDays = Number(requestedHolidayDays);
+        if (!Number.isInteger(holidayDays) || holidayDays < 0 || holidayDays > PAYROLL_WORKED_DAYS) {
+            return res.status(400).json({ ok: false, error: 'Le nombre de jours fériés doit être un entier entre 0 et 26.' });
+        }
+    }
     if (!Number.isInteger(employeeId) || employeeId <= 0
         || !Number.isInteger(month) || month < 1 || month > 12
         || !Number.isInteger(year) || year < 2020 || year > 2040
-        || (requestedDays === undefined && requestedHours === undefined)) {
+        || (requestedDays === undefined && requestedHours === undefined && requestedLeaveDays === undefined && requestedHolidayDays === undefined)) {
         return res.status(400).json({ ok: false, error: 'Saisissez une période valide et une valeur de temps de travail valide.' });
     }
     try {
@@ -1663,7 +1811,7 @@ export const updateBulletinWorkedDays = async (req, res) => {
         if (!companyId) return res.status(400).json({ ok: false, error: 'Aucune entreprise associée à cette session.' });
         const existing = await prisma.payslip.findFirst({
             where: { employeeId, month, year, employee: { companyId } },
-            include: { employee: { include: { company: true, employeeFunction: true } }, bonuses: true },
+            include: { employee: { include: { company: true, employeeFunction: true, bonuses: { include: { bonus: true } } } }, bonuses: true },
         });
         if (!existing) return res.status(404).json({ ok: false, error: 'Générez le bulletin avant de modifier les jours.' });
         if (existing.employee.blocageSaisiePaie || ![BULLETIN_STATUS.DRAFT, BULLETIN_STATUS.GENERATED].includes(existing.status)) {
@@ -1674,11 +1822,14 @@ export const updateBulletinWorkedDays = async (req, res) => {
             workingTimeMode: company?.workingTimeMode || existing.workingTimeMode || "DAYS",
             standardMonthlyDays: company?.standardMonthlyDays || existing.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS,
             standardMonthlyHours: company?.standardMonthlyHours || existing.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS,
-            workedDays: company?.workingTimeMode === "HOURS" ? undefined : requestedDays,
-            workedHours: company?.workingTimeMode === "HOURS" ? requestedHours : undefined,
+            workedDays: company?.workingTimeMode === "HOURS" ? undefined : (requestedDays ?? existing.workedDays),
+            workedHours: company?.workingTimeMode === "HOURS" ? (requestedHours ?? existing.workedHours) : undefined,
         });
+        if (hasPaidLeaveConflict(workingTime.workedDays, requestedLeaveDays ?? existing.paidLeaveDays, workingTime.standardMonthlyDays)) {
+            return rejectPaidLeaveConflict(res, true);
+        }
         // Use the saved bonus lines, without adding today's recurring bonuses again.
-        const employee = { ...existing.employee, bonuses: [], cimrRate: existing.cimrRate };
+        const employee = { ...existing.employee, bonuses: existing.employee.bonuses || [], cimrRate: existing.cimrRate };
         const monthlyCalc = runEmployeeCalculation(employee, {
             month, year, ...workingTime,
             baseSalary: Number(existing.baseSalary),
@@ -1686,7 +1837,8 @@ export const updateBulletinWorkedDays = async (req, res) => {
             heuresSup25: Number(existing.heuresSup25 || 0),
             heuresSup50: Number(existing.heuresSup50 || 0),
             heuresSup100: Number(existing.heuresSup100 || 0),
-            avances: Number(existing.avances || 0),
+            paidLeaveDays: requestedLeaveDays ?? Number(existing.paidLeaveDays || 0),
+            joursFeries: input.joursFeries ?? Number(existing.joursFeries || 0),
             variablePrimes: existing.bonuses.filter(b => b.taxable).map(b => ({ label: b.name, amount: Number(b.amount) })),
         monthlyNimpLines: existing.bonuses.filter(b => !b.taxable).map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) })),
         });
@@ -1711,6 +1863,9 @@ export const updateBulletinWorkedDays = async (req, res) => {
         return res.status(500).json({ ok: false, error: 'Impossible de recalculer ou enregistrer les jours. Veuillez réessayer.' });
     }
 };
+
+export const updateBulletinPaidLeave = updateBulletinWorkedDays;
+export const updateBulletinPublicHoliday = updateBulletinWorkedDays;
 
 export const calculateLive = async (req, res) => {
     try {
@@ -1778,19 +1933,27 @@ export const calculateLive = async (req, res) => {
             heuresSup25: Math.max(0, Number(req.query.heuresSup25) || 0),
             heuresSup50: Math.max(0, Number(req.query.heuresSup50) || 0),
             heuresSup100: Math.max(0, Number(req.query.heuresSup100) || 0),
-            avances: Math.max(0, Number(req.query.avances) || 0),
+            paidLeaveDays: Math.max(0, Number(req.query.paidLeaveDays) || 0),
+            joursFeries: Math.max(0, Number(req.query.joursFeries) || 0),
             variablePrimes,
             monthlyNimpLines,
             niimpOverrides,
         };
 
+        if (hasPaidLeaveConflict(overrides.workedDays, overrides.paidLeaveDays, overrides.standardMonthlyDays)) {
+            return rejectPaidLeaveConflict(res, true);
+        }
+
         const monthlyResult = runEmployeeCalculation(emp, overrides);
         const result = await applyCumulativeIR(emp.id, month, year, monthlyResult, overrides.dependents ?? emp.nbPersonacharge);
-        const savedManualRetenus = await prisma.payslip.findUnique({
+        const savedPayslip = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: emp.id, month, year } },
-            select: { retenus: { select: { amount: true } } },
+            select: { avanceDeduction: true, retenus: { select: { amount: true } } },
         });
-        const manualRetenusTotal = manualRetenueTotal(savedManualRetenus?.retenus);
+        const manualRetenusTotal = manualRetenueTotal(savedPayslip?.retenus);
+        const avanceDeduction = req.query.avanceDeduction !== undefined
+            ? Math.max(0, Number(req.query.avanceDeduction) || 0)
+            : Number(savedPayslip?.avanceDeduction || 0);
 
         res.json({
             ok: true,
@@ -1802,6 +1965,12 @@ export const calculateLive = async (req, res) => {
             heuresSup50: result.heuresSup50,
             heuresSup100: result.heuresSup100,
             heuresSupAmount: result.heuresSupAmount,
+            paidLeaveDays: result.paidLeaveDays,
+            joursFeries: result.joursFeries,
+            baseConge: result.baseConge,
+            paidLeaveAmount: result.paidLeaveAmount,
+            baseFerie: result.baseFerie,
+            joursFeriesAmount: result.joursFeriesAmount,
             sbg: result.sbg,
             workedDays: result.workedDays,
             workedHours: result.workedHours,
@@ -1825,8 +1994,8 @@ export const calculateLive = async (req, res) => {
             irBrut: result.irBrut,
             chargesDeFamille: result.chargesDeFamille,
             irNet: result.irNet,
-            avances: result.avances,
-            netAPayer: Math.max(0, Number((Number(result.netAPayer || 0) - manualRetenusTotal).toFixed(2))),
+            avanceDeduction,
+            netAPayer: Math.max(0, Number((Number(result.netAPayer || 0) - manualRetenusTotal - avanceDeduction).toFixed(2))),
             manualRetenusTotal,
             annualCumulative: result.annualCumulative,
             periode: result.periode,
@@ -1870,6 +2039,10 @@ export const showBulletin = async (req, res) => {
         }
         const rubriqueMaps = await getRubriqueMaps(emp.companyId);
         const rubriqueCodes = rubriqueMaps.codes;
+        const availablePrimes = await prisma.bonus.findMany({
+            where: { companyId: emp.companyId, taxable: true },
+            orderBy: { name: 'asc' },
+        });
 
         const month = req.query.month ? parseInt(req.query.month) : null;
         const year = req.query.year ? parseInt(req.query.year) : null;
@@ -1945,7 +2118,7 @@ export const showBulletin = async (req, res) => {
             const dbHistory = await prisma.payslip.findMany({
                 where: { employeeId: empId },
                 orderBy: [{ year: 'desc' }, { month: 'desc' }],
-                include: { bonuses: true, retenus: true }
+                include: { bonuses: true, retenus: true, avanceDeductions: { include: { avance: true } } }
             });
 
             const history = dbHistory.map(mapPayslipToViewModel);
@@ -1971,15 +2144,19 @@ export const showBulletin = async (req, res) => {
 
                 fmt,
                 rubriqueCodes,
+                paidLeaveRubrique: rubriqueMaps.baseRows.find(row => row.key === 'paid_leave_days' && row.active) || null,
+                publicHolidayRubrique: rubriqueMaps.baseRows.find(row => row.key === 'public_holiday_days' && row.active) || null,
+                availablePrimes,
                 taxableRubriques: rubriqueMaps.imposableRows,
                 manualRetenuRubriques: rubriqueMaps.retenuRows.filter(row => row.entryType === 'MANUAL' && row.active),
+                employeeAvances: [],
             });
         }
 
         // Single bulletin mode
         const dbPayslip = await prisma.payslip.findFirst({
             where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } },
-            include: { bonuses: true, retenus: true }
+            include: { bonuses: true, retenus: true, avanceDeductions: { include: { avance: true } } }
         });
         console.info("[bulletin-show] payslip.loaded", { requestId, employeeId: empId, month, year, found: Boolean(dbPayslip) });
 
@@ -2001,12 +2178,17 @@ export const showBulletin = async (req, res) => {
             });
         }
 
+        const employeeAvances = await listEmployeeAvances(emp.id);
+
         // Pre-compute preview result if no payslip exists yet in DB
         let previewResult = null;
         if (!bulletin) {
             try {
                 const monthlyPreview = runEmployeeCalculation(emp, { month, year });
                 previewResult = await applyCumulativeIR(emp.id, month, year, monthlyPreview, emp.nbPersonacharge);
+                const initialAvanceDeduction = employeeAvances.reduce((total, avance) => total + Number(avance.solde || 0), 0);
+                previewResult.avanceDeduction = Number(initialAvanceDeduction.toFixed(2));
+                previewResult.netAPayer = Math.max(0, Number((Number(previewResult.netAPayer || 0) - previewResult.avanceDeduction).toFixed(2)));
             } catch (e) {
                 previewResult = null;
             }
@@ -2048,8 +2230,12 @@ export const showBulletin = async (req, res) => {
             periode: bulletin?.periode ?? previewResult?.periode ?? 1,
             fmt,
             rubriqueCodes,
+            paidLeaveRubrique: rubriqueMaps.baseRows.find(row => row.key === 'paid_leave_days' && row.active) || null,
+            publicHolidayRubrique: rubriqueMaps.baseRows.find(row => row.key === 'public_holiday_days' && row.active) || null,
+            availablePrimes,
             taxableRubriques: rubriqueMaps.imposableRows,
             manualRetenuRubriques: rubriqueMaps.retenuRows.filter(row => row.entryType === 'MANUAL' && row.active),
+            employeeAvances,
         });
     } catch (err) {
         console.error("[bulletin-show] request.failed", {
@@ -2167,6 +2353,7 @@ export const downloadPdfBulletin = async (req, res) => {
             cin: emp.cin || '—',
             seniorityYears,
             companyName: comp.name || 'CONFONDA',
+            companyLogo: comp.logoData || null,
             companyAddress: comp.adresse || 'hay sikaktyne',
             companyCNSS: comp.numeroAffiliationCnss || '—',
             companyIF: comp.ifNumber || '565653486',

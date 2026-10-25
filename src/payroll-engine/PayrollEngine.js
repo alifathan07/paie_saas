@@ -53,7 +53,6 @@ export const calculatePayroll = (employee, overrides = {}) => {
       heuresSup25: 0,
       heuresSup50: 0,
       heuresSup100: 0,
-      avances: 0,
       variablePrimes: [],
       monthlyNimpLines: [],
       bonusesNIMP: 0,
@@ -160,6 +159,31 @@ export const calculatePayroll = (employee, overrides = {}) => {
     });
   }
 
+  // Paid leave is taxable. Its hidden calculation base is the full monthly
+  // salary, seniority bonus, and employee primes marked for paid leave.
+  const paidLeaveDays = Math.max(0, Math.min(PAYROLL_WORKED_DAYS, Number(overrides.paidLeaveDays) || 0));
+  const leavePrimeAmount = (employee.bonuses || []).reduce((total, item) => {
+    const isTaxable = item.bonus ? Boolean(item.bonus.taxable) : Boolean(item.taxable);
+    return total + (isTaxable && item.implementerEnConge ? Number(item.amount) || 0 : 0);
+  }, 0);
+  // Paid leave and public-holiday bases are full-month contractual bases.
+  // They must not use the bulletin's prorated/edited salary or effective days.
+  const contractualBaseSalary = Math.max(0, Number(employee.baseSalary) || 0);
+  const fullMonthSeniority = calculateAnciennete(contractualBaseSalary, months).amount;
+  const baseConge = paidLeaveDays > 0
+    ? Number((contractualBaseSalary + fullMonthSeniority + leavePrimeAmount).toFixed(2))
+    : 0;
+  const paidLeaveAmount = Number((baseConge * paidLeaveDays / PAYROLL_WORKED_DAYS).toFixed(2));
+  const joursFeries = Math.max(0, Math.min(PAYROLL_WORKED_DAYS, Number(overrides.joursFeries) || 0));
+  const holidayPrimeAmount = (employee.bonuses || []).reduce((total, item) => {
+    const isTaxable = item.bonus ? Boolean(item.bonus.taxable) : Boolean(item.taxable);
+    return total + (isTaxable && item.implementerEnJourFerie ? Number(item.amount) || 0 : 0);
+  }, 0);
+  const baseFerie = joursFeries > 0
+    ? Number((contractualBaseSalary + fullMonthSeniority + holidayPrimeAmount).toFixed(2))
+    : 0;
+  const joursFeriesAmount = Number((baseFerie * joursFeries / PAYROLL_WORKED_DAYS).toFixed(2));
+
   // Monthly non-taxable indemnities belong to the selected payslip only.
   if (Array.isArray(overrides.monthlyNimpLines)) {
     overrides.monthlyNimpLines.forEach(line => {
@@ -177,7 +201,7 @@ export const calculatePayroll = (employee, overrides = {}) => {
     bonusesNIMP = prorateAmount(overrides.bonusesNIMP, indemnityRatio);
   }
   bonusesNIMP = Number(bonusesNIMP.toFixed(2));
-  const bonusesIMP = Number(variablePrimes.reduce((sum, p) => sum + p.amount, 0).toFixed(2));
+  const bonusesIMP = Number((variablePrimes.reduce((sum, p) => sum + p.amount, 0) + paidLeaveAmount + joursFeriesAmount).toFixed(2));
 
   // 8. Salaire Brut Global (SBG)
   // SBG = Base effective + Ancienneté + Primes imposables + Heures sup + Indemnités non imposables
@@ -232,17 +256,15 @@ export const calculatePayroll = (employee, overrides = {}) => {
   // IR Net = max(0, IR Brut - Charges de famille)
   const irNet = Math.max(0, Number((irBrut - chargesDeFamille).toFixed(2)));
 
-  // 16. Avances (Salary advance cash deduction)
-  const avances = Math.max(0, Number(overrides.avances) || 0);
-
-  // 17. Net à Payer
-  // Net = SBG - CNSS - AMO - CIMR - IR Net - Avances
+  // 16. Net à Payer
+  // Net = SBG - CNSS - AMO - CIMR - IR Net
   // NOTE: Frais Professionnels are NOT subtracted from Net à Payer!
-  const exactNetAPayer = Math.max(0, Number((sbg - cnss - amo - cimr - irNet - avances).toFixed(2)));
+  const exactNetAPayer = Math.max(0, Number((sbg - cnss - amo - cimr - irNet).toFixed(2)));
   // Payroll pays the net rounded to the nearest dirham. Keep the adjustment
   // explicit so the bulletin can show it instead of hiding the centimes.
   const arrondi = Number((Math.round(exactNetAPayer) - exactNetAPayer).toFixed(2));
-  const netAPayer = Number((exactNetAPayer + arrondi).toFixed(2));
+  const avanceDeduction = Math.max(0, Number(overrides.avanceDeduction || 0));
+  const netAPayer = Math.max(0, Number((exactNetAPayer + arrondi - avanceDeduction).toFixed(2)));
 
   return {
     ok: true,
@@ -266,6 +288,12 @@ export const calculatePayroll = (employee, overrides = {}) => {
     variablePrimes,
     nimpLines,
     bonusesIMP,
+    paidLeaveDays,
+    baseConge,
+    paidLeaveAmount,
+    joursFeries,
+    baseFerie,
+    joursFeriesAmount,
     indemniteNonImposableRate: representationRate,
     indemniteNonImposable: representationAmount,
 
@@ -275,6 +303,7 @@ export const calculatePayroll = (employee, overrides = {}) => {
     heuresSupAmount,
 
     sbg,
+    brutGlobal: sbg,
     bonusesNIMP,
     sbi,
 
@@ -304,10 +333,9 @@ export const calculatePayroll = (employee, overrides = {}) => {
     chargesDeFamille,
     irNet,
 
-    avances,
-
     exactNetAPayer,
     arrondi,
-    netAPayer
+    netAPayer,
+    avanceDeduction
   };
 };

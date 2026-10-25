@@ -243,7 +243,7 @@
                             <tr><td><strong><%= row.indemnite.name %></strong></td><td><%= Number(row.amount).toFixed(2) %> DH</td><td><%= Number(row.indemnite.defaultAmount).toFixed(2) %> DH</td><td><span class="badge badge-actif">Active</span></td><td class="employee-indemnite-actions"><button type="button" class="btn-icon-delete btn-compact" data-remove-employee-indemnite="<%= row.indemnite.name %>" data-remove-url="/employees/<%= employee.id %>/indemnites/<%= row.bonusId %>/delete"><span aria-hidden="true">⌫</span> Supprimer</button></td></tr>
                         <% }); %>
                     <% } else { %>
-                        <tr><td colspan="5" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr>
+                        <tr><td colspan="7" class="empty-state">Aucune indemnité attribuée à ce salarié.</td></tr>
                     <% } %>
                 </tbody>
             </table>
@@ -253,12 +253,12 @@
 
     <div class="form-section employee-tab-panel" data-panel="primes">
         <div class="section-heading-row"><div><h2 class="section-title" style="margin-bottom: 4px;">Primes imposables fixes</h2><p style="font-size: 13px; color: var(--color-text-subtle); margin: 0;">Attribuez les primes récurrentes imposables à ce salarié.</p></div></div>
-        <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Prime</th><th>Montant salarié</th><th>Montant par défaut</th></tr></thead><tbody>
+        <div class="table-wrapper" style="margin-top: 20px;"><table class="data-table"><thead><tr><th>Code</th><th>Prime</th><th>Montant salarié</th><th>Montant par défaut</th><th>Congé payé</th><th>Jours fériés</th></tr></thead><tbody>
             <% const taxableBonuses = (bonusTypes || []).filter(item => item.taxable); %>
             <% if (taxableBonuses.length) { taxableBonuses.forEach(function (item) { const assignedPrime = (employee.primesImposables || []).find(row => row.bonusId === item.id); %>
-                <tr class="employee-prime-row"><td><%= item.code %></td><td><label><input type="checkbox" name="employeePrimeIds" value="<%= item.id %>" <%= assignedPrime ? 'checked' : '' %>> <strong><%= item.name %></strong></label></td><td><input type="number" name="employeePrimeAmounts" class="form-input" min="0.01" step="0.01" value="<%= assignedPrime ? Number(assignedPrime.amount).toFixed(2) : Number(item.defaultAmount).toFixed(2) %>"></td><td><%= Number(item.defaultAmount).toFixed(2) %> DH</td></tr>
-            <% }); } else { %><tr><td colspan="4" class="empty-state">Aucune prime imposable dans le catalogue.</td></tr><% } %>
-            <tr><td><input type="text" name="newPrimeCodes" class="form-input" placeholder="Code rubrique"></td><td><input type="text" name="newPrimeNames" class="form-input" placeholder="Nouvelle prime imposable"></td><td><input type="number" name="newPrimeAmounts" class="form-input" min="0.01" step="0.01" placeholder="Montant DH"></td><td>Créer dans le catalogue</td></tr>
+                <tr class="employee-prime-row"><td><%= item.code %></td><td><label><input type="checkbox" class="employee-prime-toggle" name="employeePrimeIds" value="<%= item.id %>" data-prime-id="<%= item.id %>" data-default-amount="<%= Number(item.defaultAmount).toFixed(2) %>" data-save-url="/employees/<%= employee.id %>/primes/taxable" <%= assignedPrime ? 'checked' : '' %>> <strong><%= item.name %></strong></label></td><td><input type="number" name="employeePrimeAmounts" class="form-input" min="0.01" step="0.01" value="<%= assignedPrime ? Number(assignedPrime.amount).toFixed(2) : Number(item.defaultAmount).toFixed(2) %>"></td><td><%= Number(item.defaultAmount).toFixed(2) %> DH</td><td><label><input type="checkbox" class="prime-leave-checkbox" name="employeePrimeLeaveIds" value="<%= item.id %>" data-prime-id="<%= item.id %>" data-save-url="/employees/<%= employee.id %>/primes/taxable" <%= assignedPrime?.implementerEnConge ? 'checked' : '' %> <%= assignedPrime ? '' : 'disabled' %> aria-label="Implémenter <%= item.name %> en congé"> Implémenter en congé</label></td><td><label><input type="checkbox" class="prime-holiday-checkbox" name="employeePrimeHolidayIds" value="<%= item.id %>" data-prime-id="<%= item.id %>" data-save-url="/employees/<%= employee.id %>/primes/taxable" <%= assignedPrime?.implementerEnJourFerie ? 'checked' : '' %> <%= assignedPrime ? '' : 'disabled' %> aria-label="Implémenter <%= item.name %> en jours fériés"> Implémenter en jours fériés</label></td></tr>
+            <% }); } else { %><tr><td colspan="6" class="empty-state">Aucune prime imposable dans le catalogue.</td></tr><% } %>
+            <tr><td><input type="text" name="newPrimeCodes" class="form-input" placeholder="Code rubrique"></td><td><input type="text" name="newPrimeNames" class="form-input" placeholder="Nouvelle prime imposable"></td><td><input type="number" name="newPrimeAmounts" class="form-input" min="0.01" step="0.01" placeholder="Montant DH"></td><td>Créer dans le catalogue</td><td>—</td><td>—</td></tr>
         </tbody></table></div>
     </div>
 
@@ -332,13 +332,67 @@ document.querySelectorAll('.indemnite-picker-row').forEach(row => {
     checkbox.addEventListener('change', sync);
     sync();
 });
-document.querySelectorAll('.employee-prime-row').forEach(row => {
-    const checkbox = row.querySelector('input[type="checkbox"]');
-    const amount = row.querySelector('input[type="number"]');
-    const sync = () => { amount.disabled = !checkbox.checked; };
-    checkbox.addEventListener('change', sync);
-    sync();
-});
+    document.querySelectorAll('.employee-prime-row').forEach(row => {
+        const checkbox = row.querySelector('.employee-prime-toggle');
+        const amount = row.querySelector('input[type="number"]');
+        const leaveCheckbox = row.querySelector('.prime-leave-checkbox');
+        const holidayCheckbox = row.querySelector('.prime-holiday-checkbox');
+        const sync = () => { amount.disabled = !checkbox.checked; };
+        checkbox.addEventListener('change', async () => {
+            sync();
+            if (leaveCheckbox) leaveCheckbox.disabled = !checkbox.checked;
+            if (holidayCheckbox) holidayCheckbox.disabled = !checkbox.checked;
+            checkbox.disabled = true;
+        try {
+            const response = await fetch(checkbox.dataset.saveUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+                body: new URLSearchParams({ bonusId: checkbox.dataset.primeId, amount: checkbox.checked ? (amount.value || checkbox.dataset.defaultAmount) : '', enabled: String(checkbox.checked) }),
+            });
+            if (!response.ok) throw new Error('save failed');
+            if (checkbox.checked && !amount.value) amount.value = checkbox.dataset.defaultAmount;
+        } catch (error) {
+            checkbox.checked = !checkbox.checked;
+            sync();
+            alert('Impossible d\'enregistrer la prime imposable.');
+        } finally {
+            checkbox.disabled = false;
+        }
+        });
+        leaveCheckbox?.addEventListener('change', async () => {
+            leaveCheckbox.disabled = true;
+            try {
+                const response = await fetch(leaveCheckbox.dataset.saveUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+                    body: new URLSearchParams({ bonusId: leaveCheckbox.dataset.primeId, amount: amount.value || '', enabled: String(checkbox.checked), implementerEnConge: String(leaveCheckbox.checked) }),
+                });
+                if (!response.ok) throw new Error('save failed');
+            } catch (error) {
+                leaveCheckbox.checked = !leaveCheckbox.checked;
+                alert('Impossible d\'enregistrer le paramètre de congé de la prime imposable.');
+            } finally {
+                leaveCheckbox.disabled = !checkbox.checked;
+            }
+        });
+        holidayCheckbox?.addEventListener('change', async () => {
+            holidayCheckbox.disabled = true;
+            try {
+                const response = await fetch(holidayCheckbox.dataset.saveUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+                    body: new URLSearchParams({ bonusId: holidayCheckbox.dataset.primeId, amount: amount.value || '', enabled: String(checkbox.checked), implementerEnJourFerie: String(holidayCheckbox.checked) }),
+                });
+                if (!response.ok) throw new Error('save failed');
+            } catch (error) {
+                holidayCheckbox.checked = !holidayCheckbox.checked;
+                alert('Impossible d\'enregistrer le paramètre de jours fériés de la prime imposable.');
+            } finally {
+                holidayCheckbox.disabled = !checkbox.checked;
+            }
+        });
+        sync();
+    });
 document.getElementById('add-new-indemnite').addEventListener('click', () => {
     const row = document.createElement('div');
     row.className = 'new-indemnite-row';

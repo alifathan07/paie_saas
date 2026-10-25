@@ -14,6 +14,7 @@ import { parametrage } from './src/routes/parametrage.js';
 import { indemnites } from './src/routes/indemnites.js';
 import { primes } from './src/routes/primes.js';
 import { rubriques } from './src/routes/rubriques.js';
+import { avances } from './src/routes/avances.js';
 import { reports } from './src/routes/reports.js';
 import { profile } from './src/routes/profile.js';
 import { isAuth, requireActiveCompany } from './middlewares/auth.js';
@@ -43,8 +44,8 @@ app.set('view engine', 'ejs');
 app.set('views', './src/views');
 app.set('trust proxy', 1);
 
-app.use(securityHeaders);
-app.use(sameOriginProtection);
+// app.use(securityHeaders);
+// app.use(sameOriginProtection);
 
 app.use(session({
     secret: sessionSecret,
@@ -78,6 +79,7 @@ app.use('/parametrage', parametrage);
 app.use('/indemnites', indemnites);
 app.use('/primes', primes);
 app.use('/rubriques', rubriques);
+app.use('/avances', avances);
 app.get('/', (req, res) => res.redirect('/dashboard'));
 app.use('/dashboard', dashboard);
 app.use('/employees', employee);
@@ -85,6 +87,20 @@ app.use('/bulletins', bulletins);
 app.use('/editions', editions);
 app.use('/reports', reports);
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+import ngrok from '@ngrok/ngrok';
+
+const server = app.listen(PORT, '0.0.0.0', async () => {
+    console.log(`[Local Network] Server is running locally on http://192.168.100.4:${PORT}`);
+
+    try {
+        // This sets up an automated, high-speed native tunnel directly through Node
+        const tunnel = await ngrok.forward({ 
+            addr: PORT,
+            authtoken: process.env.NGROK_AUTHTOKEN // Highly recommended to put your free token here
+         });
+
+        console.log(`\n🚀 [LIVE PUBLIC LINK] Your app is live for updates at: ${tunnel.url()}/auth\n`);
+    } catch (err) {
+        console.error('Failed to launch high-speed native tunnel:', err);
+    }
 });

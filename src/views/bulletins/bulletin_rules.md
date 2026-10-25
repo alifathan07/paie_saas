@@ -66,7 +66,6 @@ The payslip must identify:
 * Overtime hours
 * Overtime applicable increase rate
 * Night hours when applicable
-* Public holidays worked when applicable
 
 Working-time information must correspond to the payroll calculation.
 
@@ -121,6 +120,48 @@ The system must preserve the fiscal/social treatment of each allowance.
 
 Benefits in kind must be represented and valued when applicable.
 
+## 5.1 Paid Leave and Public Holidays
+
+Paid leave and public holidays use separate day counts and separate calculation bases. Both are calculated strictly on a 26-day reference month.
+
+### Paid leave (`congé payé`)
+
+The employee enters an integer number of paid-leave days from 0 to 26.
+
+The paid-leave base is a full-month contractual base. It must not use the bulletin's prorated salary, worked days, or edited bulletin salary.
+
+```text
+Base congé = employee contractual base salary
+           + full-month seniority bonus
+           + taxable employee primes marked “Implémenter en congé”
+```
+
+The prime amounts come from the employee fiche. Non-taxable indemnities are excluded from this base, even when they are paid on the bulletin.
+
+```text
+Montant congé = Base congé × nombre de jours congé / 26
+```
+
+### Public holidays (`jours fériés`)
+
+The employee enters an integer number of public-holiday days from 0 to 26 through the rubrique popup. The row is displayed only when the value is greater than zero.
+
+The public-holiday base is independent from the paid-leave base, even though it uses the same 26-day full-month method.
+
+```text
+Base férié = employee contractual base salary
+           + full-month seniority bonus
+           + taxable employee primes marked “Implémenter en jours fériés”
+```
+
+The prime amounts also come from the employee fiche. Non-taxable indemnities are excluded.
+
+```text
+Montant férié = Base férié × nombre de jours fériés / 26
+```
+
+The bulletin's ordinary salary remains calculated from actual worked days. Only the paid-leave and public-holiday amounts use these independent full-month bases.
+
 ---
 
 ## 6. Payroll Line Structure
@@ -154,7 +195,6 @@ Possible deductions include:
 * AMO employee contribution
 * Income tax (IR)
 * Complementary retirement contribution such as CIMR
-* Advances
 * Loans
 * Wage garnishments
 * Other authorized deductions
@@ -280,7 +320,6 @@ Employee deductions may include:
 * AMO
 * IR
 * CIMR
-* Advances
 * Loans
 * Other authorized deductions
 

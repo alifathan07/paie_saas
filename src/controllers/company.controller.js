@@ -103,6 +103,7 @@ function companyForm(company) {
         workingTimeMode: company?.workingTimeMode || "DAYS",
         standardMonthlyDays: company?.standardMonthlyDays ? String(company.standardMonthlyDays) : String(DEFAULT_STANDARD_DAYS),
         standardMonthlyHours: company?.standardMonthlyHours ? String(company.standardMonthlyHours) : String(DEFAULT_STANDARD_HOURS),
+        hasLogo: Boolean(company?.logoData),
     };
 }
 
@@ -110,7 +111,52 @@ export async function settingsPage(req, res) {
     if (req.session.adminClientMode) return res.status(403).send("Paramétrage indisponible en mode support.");
     const company = await getActiveCompanyForUser(Number(req.session.user.id), Number(req.session.user.activeCompanyId));
     if (!company) return res.status(403).send("Société active introuvable.");
-    return res.render("parametrage/index", page(req, { title: "Paramétrage", currentPage: "parametrage", company, form: companyForm(company) }));
+    return res.render("parametrage/index", page(req, {
+        title: "Paramétrage",
+        currentPage: "parametrage",
+        company,
+        form: companyForm(company),
+        success: req.query.logo === 'saved'
+            ? 'Le logo a été enregistré.'
+            : req.query.logo === 'deleted' ? 'Le logo a été supprimé.' : null,
+        error: req.query.logo === 'missing' ? 'Sélectionnez un fichier PNG ou JPEG.' : null,
+    }));
+}
+
+export async function uploadCompanyLogo(req, res) {
+    if (req.session.adminClientMode) return res.status(403).send("Paramétrage indisponible en mode support.");
+    const userId = Number(req.session.user.id);
+    const companyId = Number(req.session.user.activeCompanyId);
+    const current = await getActiveCompanyForUser(userId, companyId);
+    if (!current) return res.status(403).send("Société active introuvable.");
+    const uploadedLogo = req.file
+        ? `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
+        : String(req.body?.logoData || '');
+    const logoMatch = uploadedLogo.match(/^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/i);
+    if (req.logoUploadError || !logoMatch) return res.redirect('/parametrage?logo=missing');
+    if (Buffer.from(logoMatch[2], 'base64').length > 2 * 1024 * 1024) {
+        return res.redirect('/parametrage?logo=missing');
+    }
+
+    await prisma.company.update({
+        where: { id: companyId },
+        data: { logoData: uploadedLogo },
+    });
+    return res.redirect('/parametrage?logo=saved');
+}
+
+export async function deleteCompanyLogo(req, res) {
+    if (req.session.adminClientMode) return res.status(403).send("Paramétrage indisponible en mode support.");
+    const userId = Number(req.session.user.id);
+    const companyId = Number(req.session.user.activeCompanyId);
+    const current = await getActiveCompanyForUser(userId, companyId);
+    if (!current) return res.status(403).send("Société active introuvable.");
+
+    await prisma.company.update({
+        where: { id: companyId },
+        data: { logoData: null },
+    });
+    return res.redirect('/parametrage?logo=deleted');
 }
 
 export async function updateSettings(req, res) {
@@ -119,6 +165,15 @@ export async function updateSettings(req, res) {
     const companyId = Number(req.session.user.activeCompanyId);
     const current = await getActiveCompanyForUser(userId, companyId);
     if (!current) return res.status(403).send("Société active introuvable.");
+    if (req.logoUploadError) {
+        const message = req.logoUploadError.code === 'LIMIT_FILE_SIZE'
+            ? 'Le logo ne doit pas dépasser 2 Mo.'
+            : 'Le logo doit être une image PNG ou JPEG.';
+        return res.status(400).render("parametrage/index", page(req, {
+            title: "Paramétrage", currentPage: "parametrage", company: current,
+            form: companyForm(current), error: message,
+        }));
+    }
 
     const form = {
         name: String(req.body.name || "").trim().slice(0, 191),
@@ -161,6 +216,9 @@ export async function updateSettings(req, res) {
                 workingTimeMode: form.workingTimeMode,
                 standardMonthlyDays,
                 standardMonthlyHours,
+                ...(req.file ? {
+                    logoData: `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`,
+                } : {}),
             },
         });
         return res.render("parametrage/index", page(req, { title: "Paramétrage", currentPage: "parametrage", company, form: companyForm(company), success: "Les informations de la société ont été enregistrées." }));

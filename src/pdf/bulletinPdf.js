@@ -32,6 +32,8 @@ function cell(doc, x, y, width, height, value = '', options = {}) {
             .fontSize(options.size || 7.5).fillColor(options.color || BLACK);
         text(doc, value, x + (options.padding ?? 4), y + (options.top ?? 4), width - ((options.padding ?? 4) * 2), {
             align: options.align || 'left',
+            lineBreak: options.lineBreak ?? false,
+            ellipsis: options.ellipsis ?? true,
         });
     }
 }
@@ -49,6 +51,8 @@ function row(doc, y, height, columns, values, options = {}) {
             border: options.border,
             lineWidth: options.lineWidth,
             color: options.color || (options.fill === NAVY ? '#ffffff' : undefined),
+            lineBreak: options.lineBreak,
+            ellipsis: options.ellipsis,
         });
         x += width;
     });
@@ -56,6 +60,11 @@ function row(doc, y, height, columns, values, options = {}) {
 
 function numericText(value) {
     return value ? Number(value.replace?.(/[^0-9,-]/g, '').replace(',', '.') || 0) : 0;
+}
+
+function logoBuffer(dataUrl) {
+    const match = String(dataUrl || '').match(/^data:image\/(?:png|jpe?g);base64,(.+)$/i);
+    return match ? Buffer.from(match[1], 'base64') : null;
 }
 
 function drawPayrollTable(doc, data, startY) {
@@ -77,17 +86,22 @@ function drawPayrollTable(doc, data, startY) {
     const seniority = amount(data.primeAnciennete);
     const rubriqueCodes = data.rubriqueCodes || {};
 
-    push(rubriqueCodes['Salaire de base'] || '', 'TEMPS DE TRAVAIL', '', `${workedDays.toFixed(2)} J / ${workedHours.toFixed(2)} H`, '', data.effectiveBaseSalary ?? data.baseSalary, 0);
+    push(rubriqueCodes['Salaire de base'] || '', 'SALAIRE DE BASE EN NBR J / H TRAV.', '', `${workedDays.toFixed(2)} J / ${workedHours.toFixed(2)} H`, '', data.effectiveBaseSalary ?? data.baseSalary, 0);
     if (seniority > 0) push(rubriqueCodes["Prime d'ancienneté"] || '', 'ANCIENNETÉ LÉGALE', '', money(baseSalary), percent(data.ancienneteRate), seniority, 0);
-    push(rubriqueCodes['Salaire brut imposable'] || '', 'SALAIRE BRUT IMPOSABLE', '', money(data.sbi), '', 0, 0);
     (data.variablePrimes || []).forEach(prime => push(prime.code || '', prime.label, '', '', '', prime.amount, 0));
     (data.taxableAdditions || []).forEach(line => push(line.code || '', line.label, '', '', '', line.amount, 0));
+    push(rubriqueCodes['Salaire brut imposable'] || '', 'SALAIRE BRUT IMPOSABLE', '', money(data.sbi), '', 0, 0);
+    if (amount(data.paidLeaveDays) > 0 || amount(data.paidLeaveAmount) > 0) {
+        push('', 'CONGÉ PAYÉ', '', `${amount(data.paidLeaveDays).toFixed(2)} J / ${money(data.baseConge)}`, '', data.paidLeaveAmount, 0);
+    }
+    if (amount(data.joursFeries) > 0 || amount(data.joursFeriesAmount) > 0) {
+        push(rubriqueCodes['Nombre jours fériés'] || '', 'JOURS FÉRIÉS', '', `${amount(data.joursFeries).toFixed(2)} J / ${money(data.baseFerie)}`, '', data.joursFeriesAmount, 0);
+    }
     (data.nimpLines || []).forEach(line => push(line.code || '', line.label, '', '', '', line.amount, 0));
     if (amount(data.amo) > 0) push(rubriqueCodes.AMO || '', 'RETENUE AMO', amount(data.amoPatronale), money(data.sbi), percent(data.amoRate), 0, data.amo);
     if (amount(data.cnss) > 0) push(rubriqueCodes.CNSS || '', 'RETENUE CNSS', amount(data.cnssPatronale), money(Math.min(amount(data.sbi), 6000)), percent(data.cnssRate), 0, data.cnss);
     if (amount(data.cimr) > 0) push(rubriqueCodes.CIMR || '', 'RETENUE CIMR', '', money(data.sbi), percent(data.cimrRate), 0, data.cimr);
     if (amount(data.irNet) > 0) push(rubriqueCodes['Impôt sur le revenu'] || '', 'RETENUE IR', '', money(data.sni), percent(data.irTaux), 0, data.irNet);
-    if (amount(data.avances) > 0) push(rubriqueCodes['Avance sur salaire'] || '', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avances);
     (data.retenus || []).forEach(line => push(line.code || '', line.label, '', '', '', 0, line.amount));
     if (amount(data.arrondi) > 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', data.arrondi, 0);
     if (amount(data.arrondi) < 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', 0, Math.abs(data.arrondi));
@@ -97,16 +111,18 @@ function drawPayrollTable(doc, data, startY) {
     const maxRows = 12;
     for (let index = 0; index < Math.max(lines.length, maxRows); index += 1) {
         const line = lines[index] || ['', '', '', '', '', '', ''];
+        const lineHeight = index === 0 ? 30 : 19;
         if (index < lines.length) {
             totalGains += numericText(line[5]);
             totalDeductions += numericText(line[6]);
         }
-        if (index % 2 === 1) doc.rect(LEFT, y, WIDTH, 19).fill(LIGHT);
-        row(doc, y, 19, columns, line, {
+        if (index % 2 === 1) doc.rect(LEFT, y, WIDTH, lineHeight).fill(LIGHT);
+        row(doc, y, lineHeight, columns, line, {
             align: ['left', 'left', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 5,
             border: BORDER, fill: index % 2 === 1 ? LIGHT : '#ffffff',
+            lineBreak: index === 0,
         });
-        y += 19;
+        y += lineHeight;
     }
 
     row(doc, y, 23, columns, ['', 'Total :', money(amount(data.cnssPatronale) + amount(data.amoPatronale)), '', '', money(totalGains), money(totalDeductions)], {
@@ -118,15 +134,15 @@ function drawPayrollTable(doc, data, startY) {
 
 function drawCumulative(doc, data, startY) {
     doc.font('Helvetica-Bold').fontSize(8).fillColor(BLACK).text('Cumul / An:', LEFT, startY - 13);
-    const columns = [40, 55, 65, 65, 65, 65, 80, 100];
-    row(doc, startY, 20, columns, ['JOURS', 'HEURES', 'BRUT', 'CNSS', 'RETRAITE', 'IMPOS.', 'IR', 'RETENUES'], {
+    const columns = [38, 50, 62, 62, 58, 58, 58, 70, 79];
+    row(doc, startY, 20, columns, ['JOURS', 'HEURES', 'BRUT GLOBAL', 'BRUT IMPOS.', 'CNSS', 'Mutuel / AMO', 'RETRAITE', 'IR', 'RETENUES'], {
         bold: [0, 1, 2, 3, 4, 5, 6, 7], align: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 6, fill: NAVY, border: NAVY,
     });
     const cumulative = data.cumulative || {};
     row(doc, startY + 20, 20, columns, [
-        amount(cumulative.workedDays || data.workedDays).toFixed(2), amount(cumulative.workedHours || data.workedHours).toFixed(2), money(cumulative.sbg || data.sbg),
-        money(cumulative.cnss || data.cnss), money(cumulative.cimr || data.cimr),
-        money(cumulative.sni || data.sni), money(cumulative.irNet || data.irNet),
+        amount(cumulative.workedDays || data.workedDays).toFixed(2), amount(cumulative.workedHours || data.workedHours).toFixed(2), money(cumulative.brutGlobal || cumulative.sbg || data.sbg),
+        money(cumulative.sbi || data.sbi), money(cumulative.cnss || data.cnss), money(cumulative.amo || data.amo),
+        money(cumulative.cimr || data.cimr), money(cumulative.irNet || data.irNet),
         money(cumulative.deductions || amount(data.cnss) + amount(data.amo) + amount(data.cimr) + amount(data.irNet)),
     ], { align: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right'], size: 7.2, top: 6, fill: '#ffffff', border: BORDER });
     return startY + 40;
@@ -135,6 +151,7 @@ function drawCumulative(doc, data, startY) {
 /** Render one bulletin page into a PDFKit document. */
 export function generateBulletinPdf(data, outputStream, options = {}) {
     const ownDocument = !options.doc;
+    const rubriqueCodes = data.rubriqueCodes || {};
     const doc = options.doc || new PDFDocument({
         size: 'A4', margin: 30,
         info: { Title: `Bulletin de Paie - ${data.employeeName}`, Author: 'Paie Software' },
@@ -142,11 +159,45 @@ export function generateBulletinPdf(data, outputStream, options = {}) {
     if (ownDocument) doc.pipe(outputStream);
 
     doc.fillColor(BLACK);
-    doc.roundedRect(LEFT, 25, WIDTH, 55, 8).fill(MINT);
-    doc.font('Helvetica-Bold').fontSize(15).fillColor(NAVY).text(data.companyName || 'GENIE STRUCTURE', LEFT + 15, 35);
-    doc.font('Helvetica').fontSize(8.5).fillColor(GRAY).text(data.companyAddress || '', LEFT + 15, 56);
-    doc.fillColor(GRAY);
-    doc.text(`CNSS : ${data.companyCNSS || '—'}`, LEFT, 63);
+    doc.roundedRect(LEFT, 25, WIDTH, 62, 8).fill(MINT).strokeColor(BORDER).lineWidth(0.8).stroke();
+    const logo = logoBuffer(data.companyLogo);
+    if (logo) {
+        try {
+            doc.image(logo, LEFT + 15, 34, { fit: [145, 42], align: 'left', valign: 'center' });
+            doc.font('Helvetica').fontSize(8).fillColor(GRAY).text(data.companyAddress || '—', LEFT + 180, 52, {
+                width: 165,
+                height: 24,
+                ellipsis: true,
+            });
+        } catch (error) {
+            doc.font('Helvetica-Bold').fontSize(14).fillColor(NAVY).text(data.companyName || 'GENIE STRUCTURE', LEFT + 15, 46, { width: 315, ellipsis: true });
+            doc.font('Helvetica').fontSize(8).fillColor(GRAY).text(data.companyAddress || '—', LEFT + 15, 67, { width: 315, ellipsis: true });
+        }
+    } else {
+        doc.font('Helvetica-Bold').fontSize(14).fillColor(NAVY).text(data.companyName || 'GENIE STRUCTURE', LEFT + 15, 46, {
+            width: 315,
+            ellipsis: true,
+        });
+        doc.font('Helvetica').fontSize(8).fillColor(GRAY).text(data.companyAddress || '—', LEFT + 15, 67, {
+            width: 315,
+            ellipsis: true,
+        });
+    }
+    doc.font('Helvetica-Bold').fontSize(7).fillColor(GRAY).text(`CNSS : ${data.companyCNSS || '—'}`, LEFT + 355, 40, {
+        width: 165,
+        align: 'right',
+        ellipsis: true,
+    });
+    doc.font('Helvetica').fontSize(7).fillColor(GRAY).text(`IF : ${data.companyIF || '—'}`, LEFT + 355, 53, {
+        width: 165,
+        align: 'right',
+        ellipsis: true,
+    });
+    doc.font('Helvetica').fontSize(7).fillColor(GRAY).text(`ICE : ${data.companyICE || '—'}`, LEFT + 355, 66, {
+        width: 165,
+        align: 'right',
+        ellipsis: true,
+    });
     doc.font('Helvetica-Bold').fontSize(19).fillColor(NAVY).text('BULLETIN DE PAIE', LEFT, 103, { width: WIDTH, align: 'center' });
     doc.font('Helvetica').fontSize(8.5).fillColor(GRAY).text(
         `Période du : 01/${String(data.month).padStart(2, '0')}/${data.year} au : ${new Date(data.year, data.month, 0).getDate()}/${String(data.month).padStart(2, '0')}/${data.year}    Mois : ${String(data.month).padStart(2, '0')}/${String(data.year).slice(-2)}`,

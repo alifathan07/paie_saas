@@ -9,7 +9,7 @@ const employee = { id: 7, companyId: 3, baseSalary: 25000, dateEmbauche: new Dat
 let existing = {
     id: 99, employeeId: 7, employee, month: 9, year: 2026, status: 'DRAFT',
     baseSalary: 12000, workedDays: 26, chargesDeFamille: 100,
-    heuresSup25: 4, heuresSup50: 2, heuresSup100: 1, avances: 150,
+    heuresSup25: 4, heuresSup50: 2, heuresSup100: 1,
     cnssRate: 0.0448, amoRate: 0.0226, cimrRate: 0.03,
     bonuses: [{ name: 'Prime enregistrée', amount: 500, taxable: true }, { name: 'Transport', amount: 700, taxable: false }],
 };
@@ -47,7 +47,7 @@ async function request(method = 'GET', days = '13') {
 try {
     const expected = calculatePayroll({ ...employee, bonuses: [], cimrRate: 0.03 }, {
         month: 9, year: 2026, baseSalary: 12000, workedDays: 13, dependents: 2,
-        heuresSup25: 4, heuresSup50: 2, heuresSup100: 1, avances: 150,
+        heuresSup25: 4, heuresSup50: 2, heuresSup100: 1,
         variablePrimes: [{ label: 'Prime enregistrée', amount: 500 }],
         monthlyNimpLines: [{ label: 'Transport', amount: 700 }],
     });
@@ -56,7 +56,7 @@ try {
     assert.equal(preview.saved, false);
     assert.equal(updates, 0);
     assert.equal(existing.workedDays, 26);
-    for (const key of ['sbi', 'sbg', 'bonusesIMP', 'bonusesNIMP', 'heuresSupAmount', 'avances', 'cimr']) {
+    for (const key of ['sbi', 'sbg', 'bonusesIMP', 'bonusesNIMP', 'heuresSupAmount', 'cimr']) {
         assert.equal(preview.payroll[key], expected[key], key);
     }
     const bonuses = existing.bonuses;

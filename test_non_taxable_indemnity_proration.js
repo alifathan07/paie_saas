@@ -6,7 +6,7 @@ const employee = {
   baseSalary: 10000,
   dateEmbauche: new Date("2020-01-01"),
   nbPersonacharge: 0,
-  bonuses: [{ name: "Indemnité transport", amount: 1500, taxable: false }],
+  bonuses: [{ name: "Indemnité transport", amount: 1500, taxable: false, implementerEnConge: true }],
   company: {
     workingTimeMode: "HOURS",
     standardMonthlyDays: 26,
@@ -17,6 +17,16 @@ const employee = {
 const fullMonth = calculatePayroll(employee, { workedHours: 191 });
 assert.equal(fullMonth.nimpLines[0].baseAmount, 1500);
 assert.equal(fullMonth.nimpLines[0].amount, 1500);
+
+const leaveIncluded = calculatePayroll(employee, { workedHours: 191, paidLeaveDays: 1 });
+assert.equal(leaveIncluded.baseConge, 11000);
+assert.equal(leaveIncluded.paidLeaveAmount.toFixed(2), "423.08");
+
+const leaveExcluded = calculatePayroll({
+  ...employee,
+  bonuses: [{ ...employee.bonuses[0], implementerEnConge: false }],
+}, { workedHours: 191, paidLeaveDays: 1 });
+assert.equal(leaveExcluded.baseConge, 11000);
 
 const partialMonth = calculatePayroll(employee, { workedHours: 130 });
 assert.equal(partialMonth.nimpLines[0].baseAmount, 1500);

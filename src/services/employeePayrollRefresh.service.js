@@ -7,7 +7,7 @@ import { calculateCumulativeIR } from "../payroll-engine/calculators/cumulativeI
 // including the representation indemnity, change.
 const OPEN_STATUSES = ["DRAFT", "GENERATED"];
 
-async function applyDraftCumulativeIR(tx, employeeId, month, year, calc, dependents) {
+async function applyDraftCumulativeIR(tx, employeeId, month, year, calc, dependents, payslip) {
     const previous = await tx.payslip.findMany({
         where: { employeeId, year, month: { lt: month }, status: { in: ["VALIDATED", "CLOSED"] } },
         select: { employeeId: true, year: true, month: true, sni: true, irNet: true, chargesDeFamille: true },
@@ -36,7 +36,7 @@ async function applyDraftCumulativeIR(tx, employeeId, month, year, calc, depende
         sommeADeduire: cumulative.deduction,
         irBrut: cumulative.currentMonthIR,
         irNet,
-        netAPayer: Number((calc.sbg - calc.cnss - calc.amo - calc.cimr - irNet - calc.avances).toFixed(2)),
+        netAPayer: Number((calc.sbg - calc.cnss - calc.amo - calc.cimr - irNet - Number(payslip.avanceDeduction || 0)).toFixed(2)),
         irCumulative: {
             sniCumule: cumulative.cumulativeSNI,
             moisEcoules: cumulative.elapsedPeriods,
@@ -57,6 +57,8 @@ function payslipData(employee, calc, payslip, rates) {
         year: payslip.year,
         workedDays: calc.workedDays,
         workedHours: calc.workedHours,
+        paidLeaveDays: calc.paidLeaveDays,
+        joursFeries: calc.joursFeries,
         workingTimeMode: calc.workingTimeMode,
         standardMonthlyDays: calc.standardMonthlyDays,
         standardMonthlyHours: calc.standardMonthlyHours,
@@ -65,6 +67,11 @@ function payslipData(employee, calc, payslip, rates) {
         primeAnciennete: calc.primeAnciennete,
         bonusesIMP: calc.bonusesIMP,
         bonusesNIMP: calc.bonusesNIMP,
+        brutGlobal: calc.brutGlobal ?? calc.sbg,
+        baseConge: calc.baseConge,
+        paidLeaveAmount: calc.paidLeaveAmount,
+        baseFerie: calc.baseFerie,
+        joursFeriesAmount: calc.joursFeriesAmount,
         sbg: calc.sbg,
         sbi: calc.sbi,
         cnss: calc.cnss,
@@ -85,10 +92,10 @@ function payslipData(employee, calc, payslip, rates) {
         netAPayer: calc.netAPayer,
         absenceDays: payslip.absenceDays || 0,
         absenceDeduction: payslip.absenceDeduction || 0,
+        avanceDeduction: payslip.avanceDeduction || 0,
         heuresSup25: calc.heuresSup25,
         heuresSup50: calc.heuresSup50,
         heuresSup100: calc.heuresSup100,
-        avances: calc.avances,
         sniCumule: ir.sniCumule,
         moisEcoules: ir.moisEcoules,
         sniAnnuelEstime: ir.sniAnnuelEstime,
@@ -136,11 +143,12 @@ export async function refreshDraftPayslips(tx, employee) {
             heuresSup25: Number(payslip.heuresSup25 || 0),
             heuresSup50: Number(payslip.heuresSup50 || 0),
             heuresSup100: Number(payslip.heuresSup100 || 0),
-            avances: Number(payslip.avances || 0),
+            paidLeaveDays: Number(payslip.paidLeaveDays || 0),
+            joursFeries: Number(payslip.joursFeries || 0),
             variablePrimes,
             monthlyNimpLines,
         });
-        const calc = await applyDraftCumulativeIR(tx, employee.id, payslip.month, payslip.year, monthly, employee.nbPersonacharge);
+        const calc = await applyDraftCumulativeIR(tx, employee.id, payslip.month, payslip.year, monthly, employee.nbPersonacharge, payslip);
         const data = payslipData(employee, calc, payslip, rates);
         const updated = await tx.payslip.update({ where: { id: payslip.id }, data });
         await replacePayslipLines(tx, updated.id, calc);

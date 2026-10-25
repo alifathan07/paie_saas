@@ -4,3 +4,53 @@
 @media(max-width:1180px){.bulletin-workspace{grid-template-columns:220px minmax(0,1fr);gap:12px}.bulletin-employee-panel{width:220px}}
 @media(max-width:900px){.bulletin-workspace{display:block}.bulletin-employee-panel{position:relative;top:auto;width:auto;max-height:none;margin:12px 10px 0}.bulletin-employee-panel.is-collapsed{width:auto}.bulletin-employee-panel.is-collapsed .bulletin-employee-panel-header{justify-content:space-between;padding:16px 14px;border-bottom:1px solid #e2e8ed}.bulletin-employee-panel.is-collapsed .bulletin-panel-eyebrow,.bulletin-employee-panel.is-collapsed h2{display:block}.bulletin-employee-panel.is-collapsed .bulletin-panel-body{display:none}.bulletin-employee-list{max-height:280px}}
 @media print{.bulletin-employee-panel{display:none}.bulletin-workspace{display:block}.bulletin-workspace>.payroll-print{max-width:none;margin:0}}
+
+/* Bulletin workspace responsive layer */
+.bulletin-workspace{width:100%;padding:0 16px;}
+.bulletin-workspace>.payroll-print{width:100%;}
+.main-wrapper,.page-content{min-width:0;}
+.payroll-print .pay-table{max-width:100%;}
+.payroll-print .prime-dialog{max-width:calc(100vw - 32px);}
+
+@media (max-width: 900px){
+  .bulletin-workspace{padding:0 10px;}
+  .bulletin-workspace>.payroll-print{width:auto;}
+  .payroll-print .print-actions{justify-content:flex-start;}
+  .payroll-print .return-action{margin-right:auto;}
+}
+
+@media (max-width: 600px){
+  .bulletin-workspace{padding:0 6px;}
+  .bulletin-employee-panel{margin-left:0;margin-right:0;}
+  .payroll-print{margin-left:0!important;margin-right:0!important;padding-left:10px!important;padding-right:10px!important;}
+  .payroll-print .print-title{font-size:20px;line-height:1.25;letter-spacing:.04em;}
+  .payroll-print .print-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;justify-content:stretch;}
+  .payroll-print .print-actions .print-button,
+  .payroll-print .print-actions .add-prime{width:100%;min-width:0;padding:9px 8px;font-size:12px;line-height:1.25;}
+  .payroll-print .print-actions .return-action{margin-right:0;}
+  .payroll-print .employee-info{grid-template-columns:1fr;}
+  .payroll-print .employee-info .item,
+  .payroll-print .employee-info .item:nth-child(2n),
+  .payroll-print .employee-info .item:nth-child(4n){border-right:0;border-bottom:1px solid var(--line);}
+  .payroll-print .employee-info .item:last-child{border-bottom:0;}
+  .payroll-print .pay-table{display:block;width:100%!important;min-width:0!important;max-width:100%;overflow-x:auto;overflow-y:hidden;white-space:nowrap;table-layout:auto;}
+  .payroll-print .pay-table th,.payroll-print .pay-table td{padding:7px 6px;}
+  .payroll-print .totals{width:100%;max-width:none;}
+  .payroll-print .prime-dialog{width:calc(100vw - 24px);max-width:none;}
+  .payroll-print .prime-dialog-content{padding:16px;}
+  .payroll-print .prime-dialog-actions{flex-wrap:wrap;}
+  .payroll-print .prime-dialog-actions button{flex:1 1 120px;min-width:0;}
+}
+
+@media (max-width: 380px){
+  .payroll-print .print-actions{grid-template-columns:1fr;}
+  .payroll-print .annual-cumulative-grid{grid-template-columns:1fr;}
+  .bulletin-employee-panel-header{padding:12px;}
+  .bulletin-panel-body{padding:10px;}
+}
+
+@media (max-width: 768px){
+  html,body{max-width:100%;overflow-x:hidden;}
+  .main-wrapper{width:calc(100% - 64px);}
+  .page-content{width:100%;max-width:100%;overflow-x:hidden;}
+}

@@ -8,6 +8,7 @@ import {
     ,createTaxablePrime
     ,getEmployeeCategories
     ,getEmployeeFunctions
+    ,setEmployeeTaxablePrime
 } from "../services/employeeService.js";
 import { calculatePayroll } from "../payroll-engine/PayrollEngine.js";
 import { resolveCompanyId } from "../lib/company.js";
@@ -91,6 +92,8 @@ export const handleCreateEmployee = async (req, res) => {
             bonusIds, bonusAmounts,
             customBonusNames, customBonusAmounts,
             employeePrimeIds, employeePrimeAmounts,
+            employeePrimeLeaveIds,
+            employeePrimeHolidayIds,
             newPrimeNames, newPrimeAmounts, newPrimeCodes,
             employeeIndemniteIds, employeeIndemniteAmounts,
             newIndemniteNames, newIndemniteAmounts, newIndemniteCodes,
@@ -100,9 +103,11 @@ export const handleCreateEmployee = async (req, res) => {
 
         const primeIds = employeePrimeIds ? (Array.isArray(employeePrimeIds) ? employeePrimeIds : [employeePrimeIds]) : [];
         const primeAmounts = employeePrimeAmounts ? (Array.isArray(employeePrimeAmounts) ? employeePrimeAmounts : [employeePrimeAmounts]) : [];
+        const primeLeaveIds = new Set(employeePrimeLeaveIds ? (Array.isArray(employeePrimeLeaveIds) ? employeePrimeLeaveIds : [employeePrimeLeaveIds]) : []);
+        const primeHolidayIds = new Set(employeePrimeHolidayIds ? (Array.isArray(employeePrimeHolidayIds) ? employeePrimeHolidayIds : [employeePrimeHolidayIds]) : []);
         primeIds.forEach((bonusId, index) => {
             if (bonusId && primeAmounts[index] && Number(primeAmounts[index]) > 0) {
-                bonusList.push({ bonusId, amount: primeAmounts[index] });
+                bonusList.push({ bonusId, amount: primeAmounts[index], implementerEnConge: primeLeaveIds.has(String(bonusId)), implementerEnJourFerie: primeHolidayIds.has(String(bonusId)) });
             }
         });
         const primeNames = newPrimeNames ? (Array.isArray(newPrimeNames) ? newPrimeNames : [newPrimeNames]) : [];
@@ -267,7 +272,10 @@ export const handleEmployeeIndemnites = async (req, res) => {
         const activeCompanyId = await getSessionCompanyId(req);
         const ids = req.body.employeeIndemniteIds ? (Array.isArray(req.body.employeeIndemniteIds) ? req.body.employeeIndemniteIds : [req.body.employeeIndemniteIds]) : [];
         const amounts = req.body.employeeIndemniteAmounts ? (Array.isArray(req.body.employeeIndemniteAmounts) ? req.body.employeeIndemniteAmounts : [req.body.employeeIndemniteAmounts]) : [];
-        const rows = ids.map((bonusId, index) => ({ bonusId, amount: amounts[index] }));
+        const rows = ids.map((bonusId, index) => ({
+            bonusId,
+            amount: amounts[index],
+        }));
         const names = req.body.newIndemniteNames ? (Array.isArray(req.body.newIndemniteNames) ? req.body.newIndemniteNames : [req.body.newIndemniteNames]) : [];
         const newAmounts = req.body.newIndemniteAmounts ? (Array.isArray(req.body.newIndemniteAmounts) ? req.body.newIndemniteAmounts : [req.body.newIndemniteAmounts]) : [];
         const newCodes = req.body.newIndemniteCodes ? (Array.isArray(req.body.newIndemniteCodes) ? req.body.newIndemniteCodes : [req.body.newIndemniteCodes]) : [];
@@ -293,6 +301,25 @@ export const handleRemoveEmployeeIndemnite = async (req, res) => {
     return res.redirect(`/employees/${req.params.id}/edit?tab=indemnites`);
 };
 
+export const handleEmployeeTaxablePrime = async (req, res) => {
+    try {
+        const enabled = req.body.enabled === 'true' || req.body.enabled === '1';
+        const result = await setEmployeeTaxablePrime(
+            req.params.id,
+            req.body.bonusId,
+            req.body.amount,
+            await getSessionCompanyId(req),
+            enabled,
+            req.body.implementerEnConge === undefined ? undefined : (req.body.implementerEnConge === 'true' || req.body.implementerEnConge === '1'),
+            req.body.implementerEnJourFerie === undefined ? undefined : (req.body.implementerEnJourFerie === 'true' || req.body.implementerEnJourFerie === '1'),
+        );
+        return res.json({ ok: true, ...result });
+    } catch (error) {
+        console.error("Error saving employee taxable prime:", error);
+        return res.status(400).json({ ok: false, error: "Impossible d'enregistrer la prime imposable." });
+    }
+};
+
 // POST /employees/:id/edit — Update employee
 export const handleUpdateEmployee = async (req, res) => {
     const { id } = req.params;
@@ -311,14 +338,18 @@ export const handleUpdateEmployee = async (req, res) => {
             bonusIds, bonusAmounts,
             customBonusNames, customBonusAmounts,
             employeePrimeIds, employeePrimeAmounts,
+            employeePrimeLeaveIds,
+            employeePrimeHolidayIds,
             newPrimeNames, newPrimeAmounts, newPrimeCodes,
             ...employeeData
         } = req.body;
         const bonusList = [];
         const primeIds = employeePrimeIds ? (Array.isArray(employeePrimeIds) ? employeePrimeIds : [employeePrimeIds]) : [];
         const primeAmounts = employeePrimeAmounts ? (Array.isArray(employeePrimeAmounts) ? employeePrimeAmounts : [employeePrimeAmounts]) : [];
+        const primeLeaveIds = new Set(employeePrimeLeaveIds ? (Array.isArray(employeePrimeLeaveIds) ? employeePrimeLeaveIds : [employeePrimeLeaveIds]) : []);
+        const primeHolidayIds = new Set(employeePrimeHolidayIds ? (Array.isArray(employeePrimeHolidayIds) ? employeePrimeHolidayIds : [employeePrimeHolidayIds]) : []);
         primeIds.forEach((bonusId, index) => {
-            if (bonusId && primeAmounts[index] && Number(primeAmounts[index]) > 0) bonusList.push({ bonusId, amount: primeAmounts[index] });
+            if (bonusId && primeAmounts[index] && Number(primeAmounts[index]) > 0) bonusList.push({ bonusId, amount: primeAmounts[index], implementerEnConge: primeLeaveIds.has(String(bonusId)), implementerEnJourFerie: primeHolidayIds.has(String(bonusId)) });
         });
         const primeNames = newPrimeNames ? (Array.isArray(newPrimeNames) ? newPrimeNames : [newPrimeNames]) : [];
         const primeDefaults = newPrimeAmounts ? (Array.isArray(newPrimeAmounts) ? newPrimeAmounts : [newPrimeAmounts]) : [];

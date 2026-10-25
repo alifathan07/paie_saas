@@ -149,6 +149,10 @@ export async function saveEmployeeIndemnites(employeeId, companyId, rows = []) {
     const cId = companyKey(companyId);
     const employee = await prisma.employee.findFirst({ where: { id: empId, companyId: cId }, select: { id: true } });
     if (!employee) throw new Error("EMPLOYEE_NOT_FOUND");
+    const existingAssignments = await prisma.employeeBonus.findMany({
+        where: { employeeId: empId, bonus: { taxable: false } },
+        select: { bonusId: true },
+    });
     const normalized = [];
     const seen = new Set();
     let representationSelected = false;
@@ -161,8 +165,15 @@ export async function saveEmployeeIndemnites(employeeId, companyId, rows = []) {
         if (isRepresentationName(definition.name)) {
             representationSelected = true;
             representationDefinition = definition;
+            normalized.push({
+                bonusId,
+                amount: cleanAmount(definition.defaultAmount || 0.01),
+            });
         } else {
-            normalized.push({ bonusId, amount: cleanAmount(row.amount) });
+            normalized.push({
+                bonusId,
+                amount: cleanAmount(row.amount),
+            });
         }
         seen.add(bonusId);
     }

@@ -9,6 +9,25 @@
 <section class="card company-settings-card">
     <% if (error) { %><div class="alert alert-error" role="alert"><%= error %></div><% } %>
     <% if (typeof success !== 'undefined' && success) { %><div class="alert alert-success" role="status"><%= success %></div><% } %>
+    <section class="settings-section">
+        <h2 class="settings-section-title">Logo de la société</h2>
+        <form method="POST" action="/parametrage/logo" enctype="multipart/form-data" class="company-logo-form">
+            <label class="form-label settings-wide">Fichier du logo
+                <input class="form-input" type="file" name="logo" accept="image/png,image/jpeg" required>
+                <small class="form-help">PNG ou JPEG, 2 Mo maximum. Sans logo, la raison sociale s’affiche dans l’en-tête.</small>
+            </label>
+            <div class="company-logo-actions">
+                <button type="submit" class="btn-primary">Enregistrer le logo</button>
+                <% if (form.hasLogo) { %>
+                    <button type="submit" form="delete-company-logo-form" class="btn-secondary">Supprimer le logo</button>
+                <% } %>
+            </div>
+        </form>
+        <% if (form.hasLogo) { %>
+            <form id="delete-company-logo-form" method="POST" action="/parametrage/logo/delete" onsubmit="return confirm('Supprimer le logo de la société ?');"></form>
+        <% } %>
+    </section>
+
     <form method="POST" action="/parametrage" class="company-settings-form">
         <div class="settings-section">
             <h2 class="settings-section-title">Informations de la société</h2>
@@ -47,10 +66,34 @@
             <input type="hidden" name="standardMonthlyHours" value="<%= form.standardMonthlyHours %>">
             <label class="form-label settings-smig">SMIG<input class="form-input" type="number" name="smig" min="0.01" step="0.01" required value="<%= form.smig %>"></label>
         </div>
+
     </form>
 </section>
 
 <script>
+    const logoForm = document.querySelector('.company-logo-form');
+    const logoInput = logoForm?.querySelector('input[name="logo"]');
+    logoForm?.addEventListener('submit', (event) => {
+        const file = logoInput?.files?.[0];
+        if (!file) return;
+        event.preventDefault();
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const response = await fetch(logoForm.action, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'text/html' },
+                    body: JSON.stringify({ logoData: reader.result }),
+                });
+                if (!response.ok) throw new Error('Logo non enregistré.');
+                window.location.assign('/parametrage?logo=saved');
+            } catch (error) {
+                window.alert(error.message);
+            }
+        };
+        reader.readAsDataURL(file);
+    });
+
     const settingsForm = document.querySelector('.company-settings-form');
     let settingsSubmitting = false;
 

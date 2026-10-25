@@ -225,7 +225,6 @@ async function runPayrollSpecs() {
         heuresSup25: "6",
         heuresSup50: "4",
         heuresSup100: "0",
-        avances: "1000",
         primesLabels: ["Prime de projet"],
         primesAmounts: ["3500"]
     };

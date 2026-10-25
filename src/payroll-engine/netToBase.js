@@ -15,7 +15,7 @@ export function calculateNormalMonth(employee, baseSalary, period) {
         ...workingTime,
         workedDays: workingTime.workingTimeMode === 'DAYS' ? workingTime.standardMonthlyDays : undefined,
         workedHours: workingTime.workingTimeMode === 'HOURS' ? workingTime.standardMonthlyHours : undefined,
-        heuresSup25: 0, heuresSup50: 0, heuresSup100: 0, avances: 0,
+        heuresSup25: 0, heuresSup50: 0, heuresSup100: 0,
     });
     const tax = calculateCumulativeIR({
         employeeId: employee.id || 1, ...period, previousPayslips: [], currentSNI: payroll.sni,
@@ -23,7 +23,7 @@ export function calculateNormalMonth(employee, baseSalary, period) {
     const irBrut = Number(tax.currentMonthIR.toFixed(2));
     const irNet = Math.max(0, Number((irBrut - payroll.chargesDeFamille).toFixed(2)));
     const exactNetAPayer = Number((payroll.sbg - payroll.cnss - payroll.amo - payroll.cimr
-        - irNet - payroll.avances).toFixed(2));
+        - irNet).toFixed(2));
     const arrondi = Number((Math.round(exactNetAPayer) - exactNetAPayer).toFixed(2));
     return {
         ...payroll,

@@ -16,6 +16,9 @@
 #overtime-dialog .prime-dialog-actions{margin-top:24px}
 #overtime-dialog .prime-dialog-actions button{min-width:92px;border-radius:8px;padding:10px 14px;font:600 13px inherit}
 #overtime-dialog .prime-dialog-actions .confirm{border-color:#176b5b;background:#176b5b}
+.paid-leave-row .paid-leave-base,
+.public-holiday-row .paid-leave-base{display:block;margin-top:5px;text-align:right;white-space:nowrap;font-size:11px;color:#66727e}
+.avance-box{margin:0 0 18px;padding:16px;border:1px solid #d8dee5;border-radius:8px;background:#f8fafb}.avance-box h3{margin:0 0 6px;font-size:16px}.avance-box p{margin:0 0 12px;color:#66727e;font-size:13px}.avance-form{display:flex;align-items:end;flex-wrap:wrap;gap:10px}.avance-form label{display:grid;gap:5px;color:#34414b;font-size:12px;font-weight:700}.avance-form select,.avance-form input{min-height:36px;border:1px solid #c4ced6;border-radius:6px;background:#fff;padding:7px 9px;font:inherit}.avance-form button{min-height:36px;border:0;border-radius:6px;background:#176b5b;color:#fff;padding:0 14px;font-weight:700;cursor:pointer}.avance-deduction-note{color:#176b5b;font-weight:700}
 </style>
 <style>
     .payroll-print {
@@ -701,6 +704,253 @@
         }
     }
 </style>
+<style id="bulletin-responsive">
+    .bulletin-workspace,
+    .bulletin-workspace > .payroll-print,
+    .payroll-print,
+    .payroll-print .pay-table {
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .bulletin-workspace {
+        width: 100%;
+        max-width: 1450px;
+        padding: 0 16px;
+    }
+
+    .bulletin-workspace > .payroll-print {
+        width: 100%;
+    }
+
+    @media (max-width: 900px) {
+        .bulletin-workspace {
+            display: block;
+            padding: 0 10px;
+        }
+
+        .bulletin-employee-panel {
+            position: relative;
+            top: auto;
+            width: auto;
+            max-height: none;
+            margin: 0 0 12px;
+        }
+
+        .bulletin-workspace > .payroll-print {
+            width: 100%;
+            margin: 0;
+        }
+
+        .payroll-print .print-actions {
+            justify-content: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .payroll-print .employee-info {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .payroll-print .pay-table {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            overflow: visible;
+            white-space: normal;
+            border: 0;
+            box-shadow: none;
+        }
+
+        .payroll-print .pay-table thead { display: none; }
+
+        .payroll-print .pay-table tbody,
+        .payroll-print .pay-table tr { display: block; }
+
+        .payroll-print .pay-table tr {
+            margin: 0 0 10px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        .payroll-print .pay-table td {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            width: auto;
+            min-height: 38px;
+            padding: 8px 10px;
+            border: 0;
+            border-bottom: 1px solid var(--line);
+            text-align: right;
+            white-space: normal;
+        }
+
+        .payroll-print .pay-table td:last-child { border-bottom: 0; }
+
+        .payroll-print .pay-table td::before {
+            flex: 0 0 38%;
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-align: left;
+        }
+
+        .payroll-print .pay-table td:nth-child(1)::before { content: "RUB"; }
+        .payroll-print .pay-table td:nth-child(2)::before { content: "LIBELLÉ"; }
+        .payroll-print .pay-table td:nth-child(3)::before { content: "NBR / BASE"; }
+        .payroll-print .pay-table td:nth-child(4)::before { content: "TAUX"; }
+        .payroll-print .pay-table td:nth-child(5)::before { content: "GAINS"; }
+        .payroll-print .pay-table td:nth-child(6)::before { content: "RETENUES"; }
+        .payroll-print .pay-table td:nth-child(7)::before { content: "COTIS. PATR."; }
+
+        .payroll-print .pay-table td.description {
+            display: grid;
+            grid-template-columns: 38% minmax(0, 1fr);
+            align-items: center;
+            text-align: left;
+        }
+
+        .payroll-print .pay-table td.description::before { grid-column: 1; }
+
+        .payroll-print .pay-table td.description > *,
+        .payroll-print .pay-table td.description > input {
+            grid-column: 2;
+            min-width: 0;
+        }
+
+        .payroll-print .pay-table td[colspan] {
+            display: block;
+            text-align: left;
+        }
+
+        .payroll-print .pay-table td[colspan]::before {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .payroll-print .pay-table input {
+            max-width: 100%;
+            min-width: 0!important;
+        }
+
+    }
+
+    @media (max-width: 768px) {
+        html,
+        body {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
+        .main-wrapper,
+        .page-content {
+            min-width: 0;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .main-wrapper {
+            width: calc(100% - 64px);
+        }
+
+        .page-content {
+            padding: 16px 8px;
+            overflow-x: hidden;
+        }
+
+        .bulletin-workspace {
+            padding: 0;
+        }
+
+        .payroll-print {
+            padding: 16px 10px 20px !important;
+            margin: 0 0 20px !important;
+        }
+
+        .payroll-print .print-title {
+            font-size: 20px;
+            line-height: 1.25;
+            letter-spacing: .03em;
+        }
+
+        .payroll-print .print-actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .payroll-print .print-actions .print-button,
+        .payroll-print .print-actions .add-prime {
+            width: 100%;
+            min-width: 0;
+            min-height: 40px;
+            padding: 8px 7px;
+            font-size: 12px;
+            line-height: 1.2;
+        }
+
+        .payroll-print .return-action {
+            margin-right: 0;
+        }
+
+        .payroll-print .employee-info {
+            grid-template-columns: 1fr;
+        }
+
+        .payroll-print .employee-info .item,
+        .payroll-print .employee-info .item:nth-child(2n),
+        .payroll-print .employee-info .item:nth-child(4n) {
+            border-right: 0;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .payroll-print .employee-info .item:last-child {
+            border-bottom: 0;
+        }
+
+        .payroll-print .totals {
+            width: 100%;
+            max-width: none;
+        }
+
+        .payroll-print .prime-dialog {
+            width: calc(100vw - 24px);
+            max-width: none;
+        }
+
+        .payroll-print .prime-dialog-content {
+            padding: 16px;
+        }
+
+        .payroll-print .prime-dialog-actions {
+            flex-wrap: wrap;
+        }
+
+        .payroll-print .prime-dialog-actions button {
+            flex: 1 1 120px;
+            min-width: 0;
+        }
+    }
+
+    @media (max-width: 380px) {
+        .payroll-print .print-actions {
+            grid-template-columns: 1fr;
+        }
+
+        .payroll-print .annual-cumulative-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .bulletin-employee-panel-header {
+            padding: 12px;
+        }
+    }
+
+</style>
 <%
     const values = bulletin || previewResult || {};
     const workingTimeMode = values.workingTimeMode || emp.company?.workingTimeMode || 'DAYS';
@@ -744,15 +994,27 @@
     const manualRetenus = bulletin ? (bulletin.retenus || []) : [];
     const excludedNimpLines = bulletin ? (bulletin.excludedNimpLines || []) : [];
     const annual = annualCumulative || values.annualCumulative || {};
+    const isPaidLeaveRubrique = row => {
+        const key = String(row?.calculationKey || '').toLowerCase();
+        const name = String(row?.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        return key === 'paid_leave' || key === 'paid_leave_days' || name.includes('conge');
+    };
+    const taxablePaidLeaveDefinition = (taxableRubriques || []).find(row => row.active !== false && isPaidLeaveRubrique(row));
+    const paidLeaveDefinition = taxablePaidLeaveDefinition || (typeof paidLeaveRubrique !== 'undefined' ? paidLeaveRubrique : null);
+    const publicHolidayDefinition = typeof publicHolidayRubrique !== 'undefined' ? publicHolidayRubrique : null;
     const arrondi = Number(values.arrondi || 0);
     const totalGains = Number(values.sbg || 0) + Math.max(0, arrondi);
     const totalDeductions = Number(values.cnss || 0)
         + Number(values.amo || 0)
         + Number(values.cimr || 0)
         + Number(values.irNet || 0)
-        + Number(values.avances || 0)
+        + Number(values.avanceDeduction || 0)
         + Number(values.manualRetenusTotal || manualRetenus.reduce((sum, row) => sum + Number(row.amount || 0), 0))
         + Math.max(0, -arrondi);
+    const totalAvanceSolde = (employeeAvances || []).reduce((sum, avance) => sum + Number(avance.solde || 0), 0);
+    // A saved bulletin owns its deduction amount, including an explicit 0.
+    // The available advance balance is only the initial value for a preview.
+    const avanceInputValue = bulletin?.avanceDeductionConfigured ? Number(values.avanceDeduction || 0) : totalAvanceSolde;
 %>
 
 <% if (month && year) { %>
@@ -807,6 +1069,8 @@
     <form id="payroll-form" method="POST" action="/bulletins/<%= emp.id %>/generate">
         <input type="hidden" name="month" value="<%= month || '' %>">
         <input type="hidden" name="year" value="<%= year || '' %>">
+        <input type="hidden" name="paidLeaveDays" value="<%= values.paidLeaveDays ?? 0 %>" id="paid-leave-days-value">
+        <input type="hidden" name="joursFeries" value="<%= values.joursFeries ?? 0 %>" id="jours-feries-value">
 
         <div class="print-actions">
             <a class="print-button return-action" href="/bulletins">Retour</a>
@@ -883,17 +1147,16 @@
 
         <div class="print-actions">
             <% if (!locked) { %>
-                <button type="button" class="add-prime" id="add-prime">+ Ajouter une prime imposable</button>
-                <% if ((taxableRubriques || []).some(row => row.active !== false && !String(row.calculationKey || '').startsWith('overtime_'))) { %>
-                    <button type="button" class="add-prime" id="add-other-rubrique">+ Ajouter une autre rubrique de base</button>
+                <button type="button" class="add-prime" id="add-prime">+ Prime imposable</button>
+                <% if ((paidLeaveDefinition && Number(values.paidLeaveDays || 0) <= 0) || (publicHolidayDefinition && Number(values.joursFeries || 0) <= 0) || (taxableRubriques || []).some(row => row.active !== false && !isPaidLeaveRubrique(row) && !String(row.calculationKey || '').startsWith('overtime_'))) { %>
+                    <button type="button" class="add-prime" id="add-other-rubrique">+ Autre rubrique de base</button>
                 <% } %>
                 <button type="button" class="add-prime" id="add-overtime">+ Heures supplémentaires</button>
             <% } %>
             <% if (canManageIndemnity) { %>
-                <button type="button" class="add-prime" id="add-indemnity">+ Ajouter une indemnité non imposable</button>
+                <button type="button" class="add-prime" id="add-indemnity">+ Indemnité non imposable</button>
             <% } %>
         </div>
-
 
         <table class="pay-table">
             <thead>
@@ -962,7 +1225,25 @@
                         <td class="num"><%= fmt(line.amount) %></td><td class="num">—</td><td class="num">—</td>
                     </tr>
                 <% }); %>
-                <tr class="gross">
+                <% if (Number(values.paidLeaveDays || 0) > 0) { %><tr class="prime-row paid-leave-row">
+                    <td class="rubrique-code"><%= paidLeaveDefinition?.code || '' %></td>
+                    <td class="description"><%= paidLeaveDefinition?.name || 'Nombre jours congé payé' %></td>
+                    <td class="num"><input class="live-input paid-leave-row-input" type="number" min="0" max="26" step="1" value="<%= values.paidLeaveDays ?? 0 %>" aria-label="Nombre entier de jours de congé payé" <%= locked ? 'disabled' : '' %>><small class="paid-leave-base">Base congé : <output data-result="baseConge"><%= fmt(values.baseConge ?? 0) %></output></small></td>
+                    <td class="num">—</td>
+                    <td class="num"><output data-result="paidLeaveAmount"><%= fmt(values.paidLeaveAmount ?? 0) %></output></td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                </tr><% } %>
+                <% if (Number(values.joursFeries || 0) > 0) { %><tr class="prime-row public-holiday-row">
+                    <td class="rubrique-code"><%= publicHolidayDefinition?.code || rubriqueCodes['Nombre jours fériés'] || '' %></td>
+                    <td class="description"><%= publicHolidayDefinition?.name || 'Nombre jours fériés' %></td>
+                    <td class="num"><input class="live-input public-holiday-row-input" type="number" min="0" max="26" step="1" value="<%= values.joursFeries ?? 0 %>" aria-label="Nombre entier de jours fériés" <%= locked ? 'disabled' : '' %>><small class="paid-leave-base">Base férié : <output data-result="baseFerie"><%= fmt(values.baseFerie ?? 0) %></output></small></td>
+                    <td class="num">—</td>
+                    <td class="num"><output data-result="joursFeriesAmount"><%= fmt(values.joursFeriesAmount ?? 0) %></output></td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                </tr><% } %>
+                <tr class="gross" id="taxable-gross-row">
                     <td class="rubrique-code"><%= rubriqueCodes['Salaire brut imposable'] || '' %></td><td colspan="3" class="description">SALAIRE BRUT IMPOSABLE <br></td>
                     <td class="num"><span data-result="sbi"><%= fmt(values.sbi) %></span></td>
                     <td class="num">—</td>
@@ -993,14 +1274,6 @@
                     <td class="num"><span data-result="cimr"><%= fmt(values.cimr) %></span></td>
                     <td class="num">—</td>
                 </tr>
-                <tr>
-                    <td class="rubrique-code"><%= rubriqueCodes['Avance sur salaire'] || '' %></td><td class="description">Avance sur salaire</td>
-                    <td class="num">—</td>
-                    <td class="num">—</td>
-                    <td class="num">—</td>
-                    <td class="num"><%= fmt(values.avances) %></td>
-                    <td class="num">—</td>
-                </tr>
                 <% manualRetenus.forEach(row => { %>
                     <tr class="manual-retenu-row">
                         <td class="rubrique-code"><%= row.code %></td><td class="description"><%= row.label %></td>
@@ -1008,7 +1281,6 @@
                         <td class="num"><%= fmt(row.amount) %></td><td class="num"><form method="POST" action="/bulletins/<%= emp.id %>/retenus/delete" class="inline-delete-form"><input type="hidden" name="retenuId" value="<%= row.id %>"><input type="hidden" name="month" value="<%= month %>"><input type="hidden" name="year" value="<%= year %>"><button class="remove-prime" type="submit" aria-label="Supprimer la retenue">×</button></form></td>
                     </tr>
                 <% }); %>
-
                 <tr>
                     <td class="rubrique-code"><%= rubriqueCodes['Frais professionnels'] || '' %></td><td class="description" title="Déduction utilisée pour calculer le revenu imposable.">Frais professionnels (déduction fiscale)</td>
                     <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
@@ -1026,6 +1298,18 @@
                     <td class="num"><span data-result="irNet"><%= fmt(values.irNet) %></span></td>
                     <td class="num">—</td>
                 </tr>
+        <% if (totalAvanceSolde > 0 || Number(values.avanceDeduction || 0) > 0) { %>
+                <tr class="manual-retenu-row avance-deduction-row">
+                    <td class="rubrique-code">AV</td><td class="description">Avance sur salaire</td>
+                    <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+                    <td class="num">
+                        <% if (bulletin && !locked) { %>
+                            <input class="live-input avance-deduction-input" name="avanceDeduction" type="number" min="0" step="0.01" max="<%= (bulletin ? totalAvanceSolde + Number(values.avanceDeduction || 0) : totalAvanceSolde).toFixed(2) %>" value="<%= avanceInputValue.toFixed(2) %>" data-saved-value="<%= avanceInputValue.toFixed(2) %>" title="Tab, Entrée ou clic ailleurs pour enregistrer" aria-label="Montant de l'avance à retenir">
+                        <% } else { %><%= fmt(values.avanceDeduction || 0) %><% } %>
+                    </td>
+                    <td class="num">—</td>
+                </tr>
+                <% } %>
                 <tr>
                     <td class="rubrique-code"><%= rubriqueCodes.Arrondi || '' %></td><td class="description">ARRONDI</td>
                     <td class="num">—</td>
@@ -1110,7 +1394,11 @@
                     <span>Salaire brut imposable (SBI)</span>
                     <strong data-result="annualSbi"><%= money(annual.sbi) %></strong>
                 </div>
-                
+                <div class="annual-cumulative-item">
+                    <span>Brut global</span>
+                    <strong data-result="annualBrutGlobal"><%= money(annual.brutGlobal) %></strong>
+                </div>
+
                 <div class="annual-cumulative-item">
                     <span>IR </span>
                     <strong data-result="annualIrNet"><%= money(annual.irNet) %></strong>
@@ -1130,14 +1418,6 @@
         <div id="calculation-error" hidden></div>
 
         <% if (bulletin && !locked && (manualRetenuRubriques || []).length) { %>
-            <div class="manual-retenu-box">
-                <div><strong>Ajouter une retenue manuelle</strong><small>Cette retenue diminue uniquement le net à payer.</small></div>
-                <form method="POST" action="/bulletins/<%= emp.id %>/retenus" class="manual-retenu-form">
-                    <input type="hidden" name="month" value="<%= month %>"><input type="hidden" name="year" value="<%= year %>">
-                    <select name="rubriqueRetenuId" required><option value="">Choisir une retenue</option><% manualRetenuRubriques.forEach(row => { %><option value="<%= row.id %>"><%= row.code %> — <%= row.name %></option><% }); %></select>
-                    <input type="number" name="amount" min="0.01" step="0.01" required placeholder="Montant DH"><button class="btn-primary" type="submit">Ajouter</button>
-                </form>
-            </div>
         <% } %>
         <div class="print-note">Document généré automatiquement. SBG - indemnités non imposablesLes montants sont calculés selon les données de l'employé et la période sélectionnée.</div>
     </form>
@@ -1149,15 +1429,6 @@
                 <h2>Ajouter une prime imposable</h2>
                 <p>Cette prime sera ajoutée uniquement au bulletin du mois courant.</p>
                 <div class="prime-dialog-fields">
-                    <label class="settings-wide">
-                        Rubrique imposable existante
-                        <select id="prime-rubrique-select" class="form-input">
-                            <option value="">Saisie manuelle</option>
-                            <% (taxableRubriques || []).filter(row => row.active !== false).forEach(row => { %>
-                                <option value="<%= row.id %>" data-code="<%= row.code %>" data-name="<%= row.name %>"><%= row.code %> — <%= row.name %></option>
-                            <% }); %>
-                        </select>
-                    </label>
                     <label>
                         Code rubrique
                         <input id="prime-code-input" required placeholder="Ex. 3001">
@@ -1165,7 +1436,7 @@
                     <label>
                         Nom de la prime
                         <input id="prime-label-input" required placeholder="Ex. Prime de rendement">
-                
+                    </label>
                     <label>
                         Montant en DH
                         <input id="prime-amount-input" required type="number" min="0.01" step="0.01" placeholder="Ex. 1 000,00">
@@ -1212,13 +1483,19 @@
                             Rubrique
                             <select id="other-rubrique-select" class="form-input" required>
                                 <option value="">Choisir une rubrique</option>
-                                <% (taxableRubriques || []).filter(row => row.active !== false && !String(row.calculationKey || '').startsWith('overtime_')).forEach(row => { %>
+                                <% if (paidLeaveDefinition && Number(values.paidLeaveDays || 0) <= 0) { %>
+                                    <option value="paid_leave_days" data-type="paid_leave" data-code="<%= paidLeaveDefinition.code %>" data-name="<%= paidLeaveDefinition.name %>"><%= paidLeaveDefinition.code %> — <%= paidLeaveDefinition.name %></option>
+                                <% } %>
+                                <% if (publicHolidayDefinition && Number(values.joursFeries || 0) <= 0) { %>
+                                    <option value="public_holiday_days" data-type="public_holiday" data-code="<%= publicHolidayDefinition.code %>" data-name="<%= publicHolidayDefinition.name %>"><%= publicHolidayDefinition.code %> — <%= publicHolidayDefinition.name %></option>
+                                <% } %>
+                                <% (taxableRubriques || []).filter(row => row.active !== false && !isPaidLeaveRubrique(row) && !String(row.calculationKey || '').startsWith('overtime_')).forEach(row => { %>
                                     <option value="<%= row.id %>" data-code="<%= row.code %>" data-name="<%= row.name %>"><%= row.code %> — <%= row.name %></option>
                                 <% }); %>
                             </select>
                         </label>
                         <label>
-                            Montant en DH
+                            <span id="other-rubrique-value-label">Montant en DH</span>
                             <input id="other-rubrique-amount-input" type="number" min="0" step="0.01" placeholder="Optionnel">
                         </label>
                     </div>
@@ -1228,6 +1505,7 @@
                     </div>
                 </form>
             </dialog>
+
         <% } %>
 
         <dialog class="prime-dialog" id="indemnity-dialog">

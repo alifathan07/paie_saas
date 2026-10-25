@@ -61,7 +61,6 @@ try {
     assert.equal(result.payroll.bonusesNIMP, 700);
     assert.equal(result.indemnities[1].name, 'Panier');
     assert.equal(result.workedDays, 26);
-    assert.equal(result.payroll.avances, 0);
     assert.equal((await request({ employeeId: 7 })).body.ok, true);
     assert.equal((await request({ employeeId: 8 })).code, 404);
     assert.equal((await request({}, {})).body.ok, true);

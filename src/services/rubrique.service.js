@@ -65,11 +65,12 @@ export async function getRubriqueMaps(companyId) {
         "Salaire brut imposable": base.taxable_gross_salary,
         "Salaire net imposable": base.taxable_net_salary,
         "Salaire net à payer": base.net_salary,
+        "Nombre jours congé payé": base.paid_leave_days,
+        "Nombre jours fériés": base.public_holiday_days,
         "CNSS": retenu.cnss,
         "AMO": retenu.amo,
         "CIMR": retenu.cimr,
         "Impôt sur le revenu": retenu.income_tax,
-        "Avance sur salaire": retenu.salary_advance,
         "Frais professionnels": retenu.professional_expenses,
         "Arrondi": retenu.rounding,
     };
@@ -92,11 +93,25 @@ export async function updateFixedRubrique(category, id, companyId, data) {
     });
 }
 
+export async function createFixedRubrique(category, companyId, data) {
+    const categoryName = categoryKey(category);
+    const id = companyKey(companyId);
+    const config = CATEGORY_CONFIG[categoryName];
+    const name = cleanName(data.name);
+    const key = clean(data.key, 64) || calculationKeyFromName(name);
+    if (!key) throw new Error("INVALID_RUBRIQUE_KEY");
+    const existingCodes = await prisma[config.model].findMany({ where: { companyId: id }, select: { code: true } });
+    const code = clean(data.code, 64) || nextGeneratedCode(existingCodes.map(row => row.code), config.start, config.end);
+    const createData = { companyId: id, key, name, code, active: true };
+    if (categoryName === "retenu") createData.entryType = data.entryType === "SYSTEM" ? "SYSTEM" : "MANUAL";
+    return prisma[config.model].create({ data: createData });
+}
+
 export async function createImposableRubrique(companyId, data) {
     const id = companyKey(companyId);
     const entryType = data.entryType === "CALCULATED" ? "CALCULATED" : "MANUAL_AMOUNT";
     const name = cleanName(data.name);
-    const calculationKey = clean(data.calculationKey, 64) || null;
+    const calculationKey = clean(data.calculationKey, 64) || calculationKeyFromName(name);
     if (entryType === "CALCULATED" && !calculationKey) throw new Error("INVALID_CALCULATION_KEY");
     const [baseRows, otherBaseRows] = await Promise.all([
         prisma.rubriqueBase.findMany({ where: { companyId: id }, select: { code: true } }),
@@ -113,15 +128,24 @@ export async function createImposableRubrique(companyId, data) {
 export async function updateImposableRubrique(id, companyId, data) {
     const existing = await prisma.rubriqueImposable.findFirst({ where: { id: Number(id), companyId: companyKey(companyId) } });
     if (!existing) throw new Error("RUBRIQUE_NOT_FOUND");
+    const calculationKey = existing.calculationKey || calculationKeyFromName(cleanName(data.name));
     return prisma.rubriqueImposable.update({
         where: { id: existing.id },
         data: {
             code: cleanCode(data.code), name: cleanName(data.name),
             entryType: data.entryType === "CALCULATED" ? "CALCULATED" : "MANUAL_AMOUNT",
-            calculationKey: clean(data.calculationKey, 64) || null,
+            calculationKey,
             active: data.active !== false,
         },
     });
+}
+
+export async function deleteRubrique(category, id, companyId) {
+    const categoryName = categoryKey(category);
+    const config = CATEGORY_CONFIG[categoryName];
+    const existing = await prisma[config.model].findFirst({ where: { id: Number(id), companyId: companyKey(companyId) } });
+    if (!existing) throw new Error("RUBRIQUE_NOT_FOUND");
+    return prisma[config.model].delete({ where: { id: existing.id } });
 }
 
 export function nextGeneratedCode(existingCodes, start, end) {
