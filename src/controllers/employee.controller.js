@@ -8,6 +8,7 @@ import {
     ,createTaxablePrime
     ,getEmployeeCategories
     ,getEmployeeFunctions
+    ,getBanques
     ,setEmployeeTaxablePrime
 } from "../services/employeeService.js";
 import { calculatePayroll } from "../payroll-engine/PayrollEngine.js";
@@ -20,8 +21,20 @@ import {
     removeEmployeeIndemnite,
     setEmployeeIndemnite,
 } from "../services/indemniteService.js";
+import { listChantiers, syncChantiers } from "../services/chantier.service.js";
 
 const getSessionCompanyId = async (req) => resolveCompanyId(req);
+
+// POST /employees/chantiers/sync — Refresh the local chantier catalog from the API.
+export const syncEmployeeChantiers = async (req, res) => {
+    try {
+        const chantiers = await syncChantiers();
+        return res.json({ ok: true, count: chantiers.length, chantiers });
+    } catch (error) {
+        console.error("Error synchronizing chantiers:", error);
+        return res.status(502).json({ ok: false, error: "Impossible de synchroniser les chantiers." });
+    }
+};
 
 // GET /employees — List all employees
 export const listEmployees = async (req, res) => {
@@ -64,6 +77,8 @@ export const renderCreateForm = async (req, res) => {
         const bonusTypes = await getAllBonusTypes(companyId);
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
+        const banques = await getBanques();
+        const chantiers = await listChantiers();
         const indemnites = await listIndemnites(companyId);
         const representationRate = await getRepresentationRate(companyId);
         res.render("employees/create", {
@@ -73,6 +88,8 @@ export const renderCreateForm = async (req, res) => {
             bonusTypes,
             categories,
             functions,
+            banques,
+            chantiers,
             indemnites,
             representationAvailable: indemnites.some(item => item.isRepresentation),
             defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
@@ -187,6 +204,8 @@ export const handleCreateEmployee = async (req, res) => {
         const bonusTypes = await getAllBonusTypes(companyId);
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
+        const banques = await getBanques();
+        const chantiers = await listChantiers();
         res.status(400).render("employees/create", {
             title: "Nouveau Salarié",
             currentPage: "employees",
@@ -194,6 +213,8 @@ export const handleCreateEmployee = async (req, res) => {
             bonusTypes,
             categories,
             functions,
+            banques,
+            chantiers,
             indemnites: await listIndemnites(companyId),
             defaultRepresentationRate: Number((await getRepresentationRate(companyId) * 100).toFixed(2)),
             error: "Erreur lors de la création. CIN ou Matricule déjà utilisés, ou champs invalides."
@@ -243,6 +264,8 @@ export const renderEditForm = async (req, res) => {
         const bonusTypes = await getAllBonusTypes(companyId);
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
+        const banques = await getBanques();
+        const chantiers = await listChantiers();
         const indemnites = await listIndemnites(companyId);
         const representationRate = await getRepresentationRate(companyId);
         employee.indemnitesNonImposables = employee.bonuses.filter(item => item.bonus && !item.bonus.taxable)
@@ -258,6 +281,8 @@ export const renderEditForm = async (req, res) => {
             bonusTypes,
             categories,
             functions,
+            banques,
+            chantiers,
             indemnites,
             representationAvailable: indemnites.some(item => item.isRepresentation),
             defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
@@ -367,6 +392,12 @@ export const handleUpdateEmployee = async (req, res) => {
             newPrimeNames, newPrimeAmounts, newPrimeCodes,
             ...employeeData
         } = req.body;
+        const normalizedEmployeeData = {
+            ...employeeData,
+            matricule: Array.isArray(employeeData.matricule)
+                ? employeeData.matricule[0]
+                : employeeData.matricule,
+        };
         const bonusList = [];
         const primeIds = employeePrimeIds ? (Array.isArray(employeePrimeIds) ? employeePrimeIds : [employeePrimeIds]) : [];
         const primeAmounts = employeePrimeAmounts ? (Array.isArray(employeePrimeAmounts) ? employeePrimeAmounts : [employeePrimeAmounts]) : [];
@@ -406,7 +437,7 @@ export const handleUpdateEmployee = async (req, res) => {
         }
 
         await updateEmp(id, {
-            ...employeeData,
+            ...normalizedEmployeeData,
             ...(bonusFieldsProvided ? { bonusList } : {}),
             replaceNonTaxableBonuses: bonusFieldsProvided && (bonusIds !== undefined || bonusAmounts !== undefined),
             actif: req.body.actif === '1' || req.body.actif === 'true',
@@ -424,9 +455,12 @@ export const handleUpdateEmployee = async (req, res) => {
     } catch (error) {
         console.error("Error updating employee:", error);
         const companyId = await getSessionCompanyId(req);
+        const employees = await getEmployees({ companyId });
         const bonusTypes = await getAllBonusTypes(companyId);
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
+        const banques = await getBanques();
+        const chantiers = await listChantiers();
         const indemnites = await listIndemnites(companyId);
         const representationRate = await getRepresentationRate(companyId);
 
@@ -435,10 +469,14 @@ export const handleUpdateEmployee = async (req, res) => {
             currentPage: "employees",
             user: req.session.user,
             employee: employee || {},
+            employees,
             bonusTypes,
             categories,
             functions,
+            banques,
+            chantiers,
             indemnites,
+            representationAvailable: indemnites.some(item => item.isRepresentation),
             defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
             error: "Erreur lors de la mise à jour. Vérifiez les informations saisies."
         });

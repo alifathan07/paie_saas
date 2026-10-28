@@ -206,14 +206,12 @@ export function generateBulletinPdf(data, outputStream, options = {}) {
         `Période du : 01/${String(data.month).padStart(2, '0')}/${data.year} au : ${new Date(data.year, data.month, 0).getDate()}/${String(data.month).padStart(2, '0')}/${data.year}    Mois : ${String(data.month).padStart(2, '0')}/${String(data.year).slice(-2)}`,
         LEFT, 127, { width: WIDTH, align: 'center' }
     );
-    doc.text(`Service : ${data.codeService || '—'}`, LEFT, 151, { width: WIDTH, align: 'right' });
-
-    const identityColumns = [55, 155, 75, 65, 65, 45, 75];
-    row(doc, 166, 22, identityColumns, ['Mle', 'Nom & Prénom', 'N° CNSS', 'Retraite', 'Mutuelle', 'Sce', 'CAT.'], {
-        bold: [0, 1, 2, 3, 4, 5, 6], align: ['center', 'center', 'center', 'center', 'center', 'center', 'center'], size: 7.2, top: 7, fill: NAVY, border: NAVY,
+    const identityColumns = [55, 155, 75, 65, 65, 75];
+    row(doc, 166, 22, identityColumns, ['Mle', 'Nom & Prénom', 'N° CNSS', 'Retraite', 'Mutuelle', 'CAT.'], {
+        bold: [0, 1, 2, 3, 4, 5], align: ['center', 'center', 'center', 'center', 'center', 'center'], size: 7.2, top: 7, fill: NAVY, border: NAVY,
     });
-    row(doc, 188, 22, identityColumns, [data.employeeMatricule, data.employeeName, data.employeeCNSS, '', '', data.codeService || '', ''], {
-        bold: [0, 1], align: ['center', 'left', 'center', 'center', 'center', 'center', 'center'], size: 7.2, top: 7, fill: '#ffffff', border: BORDER,
+    row(doc, 188, 22, identityColumns, [data.employeeMatricule, data.employeeName, data.employeeCNSS, '', '', ''], {
+        bold: [0, 1], align: ['center', 'left', 'center', 'center', 'center', 'center'], size: 7.2, top: 7, fill: '#ffffff', border: BORDER,
     });
     doc.font('Helvetica').fontSize(7.5).text(`Adresse : ${data.employeeAddress || '—'}`, LEFT, 214);
 

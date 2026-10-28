@@ -99,8 +99,8 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         dateEmbauche: "YYYY-MM-DD, required",
         dateAnciennete: "YYYY-MM-DD or null",
         dateSortie: "YYYY-MM-DD or null",
+        motifSortie: "string or null",
         fonction: "string or null",
-        codeService: "string or null",
         category: "string, required; use the employee category name",
         natureEmploi: "PERMANENT, OCCASIONNEL, STAGIAIRE, EXONERE, or DOCTORANT",
         contratDateDebut: "YYYY-MM-DD or null",
@@ -271,7 +271,7 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         }
         const functionName = String(employee.fonction || '').trim();
         if (functionName && !functionIds.has(functionName)) {
-            const employeeFunction = await getOrCreateEmployeeFunction(targetCompanyId, undefined, functionName, employee.codeService);
+            const employeeFunction = await getOrCreateEmployeeFunction(targetCompanyId, undefined, functionName);
             functionIds.set(functionName, employeeFunction.id);
         }
     }
@@ -285,8 +285,8 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         dateEmbauche: new Date(employee.dateEmbauche),
         dateAnciennete: new Date(employee.dateAnciennete),
         dateSortie: employee.dateSortie ? new Date(employee.dateSortie) : null,
+        motifSortie: String(employee.motifSortie || '').trim() || null,
         functionId: functionIds.get(String(employee.fonction || '').trim()) || null,
-        codeService: employee.codeService || null,
         categoryId: categoryIds.get(employee.category),
         natureEmploi: employee.natureEmploi,
         contratDateDebut: employee.contratDateDebut ? new Date(employee.contratDateDebut) : null,

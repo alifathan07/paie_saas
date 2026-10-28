@@ -52,7 +52,7 @@
         </a>
         <a href="/rubriques" class="sidebar-link rubriques-standalone <%= typeof currentPage !== 'undefined' && currentPage === 'rubriques' ? 'active' : '' %>"><span class="sidebar-link-icon">#</span><span>Rubriques de paie</span></a>
         <a href="/avances" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'avances' ? 'active' : '' %>"><span class="sidebar-link-icon">↘</span><span>Avances sur salaire</span></a>
-        <details class="sidebar-dropdown" <%= typeof currentPage !== 'undefined' && (currentPage === 'employees' || currentPage === 'employeeCategories') ? 'open' : '' %>>
+        <details class="sidebar-dropdown" <%= typeof currentPage !== 'undefined' && (currentPage === 'employees' || currentPage === 'employeeCategories' || currentPage === 'banques') ? 'open' : '' %>>
             <summary class="sidebar-dropdown-toggle">
                 <svg class="sidebar-nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3.87-4" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
@@ -62,6 +62,7 @@
             <div class="sidebar-dropdown-children">
                 <a href="/employees" class="sidebar-sub-link <%= typeof currentPage !== 'undefined' && currentPage === 'employees' ? 'active' : '' %>"><svg class="sidebar-sub-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>Liste des employés</a>
                 <a href="/employees/categories" class="sidebar-sub-link <%= typeof currentPage !== 'undefined' && currentPage === 'employeeCategories' ? 'active' : '' %>"><svg class="sidebar-sub-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4 12 8 4.5 8-4.5M4 16.5l8 4.5 8-4.5"/></svg>Catégories des employés</a>
+                <a href="/employees/banques" class="sidebar-sub-link <%= typeof currentPage !== 'undefined' && currentPage === 'banques' ? 'active' : '' %>"><span class="sidebar-sub-icon">▣</span>Banques</a>
             </div>
         </details>
         <details class="sidebar-dropdown" <%= typeof currentPage !== 'undefined' && (currentPage === 'indemnites' || currentPage === 'primes') ? 'open' : '' %>>

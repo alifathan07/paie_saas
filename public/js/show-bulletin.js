@@ -119,6 +119,7 @@
         if (!option?.value) return;
         primeCodeInput.value = option.dataset.code || '';
         primeLabelInput.value = option.dataset.name || '';
+        primeAmountInput.value = option.dataset.amount || '';
     });
     const confirmDeletion = message => window.AppDialog.confirm(message, {
         title: 'Confirmer la suppression', confirmLabel: 'Supprimer', danger: true,
@@ -129,6 +130,29 @@
         primeLabelInput?.focus();
     });
     document.querySelector('#prime-dialog-cancel')?.addEventListener('click', () => primeDialog?.close());
+    document.querySelector('#prime-save-catalogue')?.addEventListener('click', async event => {
+        const button = event.currentTarget;
+        const code = primeCodeInput.value.trim();
+        const label = primeLabelInput.value.trim();
+        const amount = Number(primeAmountInput.value);
+        if (!code || !label || !Number.isFinite(amount) || amount < 0) {
+            window.AppDialog.alert('Saisissez le code, le nom et le montant de la prime.');
+            return;
+        }
+        button.disabled = true;
+        try {
+            const response = await fetch(`/bulletins/${page.dataset.employeeId}/primes/catalogue`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ code, label, amount }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’ajouter la prime au catalogue.');
+            window.location.reload();
+        } catch (errorObject) {
+            button.disabled = false;
+            window.AppDialog.alert(errorObject.message);
+        }
+    });
     primeDialogForm?.addEventListener('submit', async event => {
         if (event.submitter?.value !== 'add') return;
         event.preventDefault();
@@ -142,7 +166,7 @@
             const response = await fetch(`/bulletins/${page.dataset.employeeId}/primes`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({ code, label, amount, rubriqueImposableId: primeRubriqueSelect?.value || null, month: page.dataset.month, year: page.dataset.year })
+        body: JSON.stringify({ code, label, amount, rubriqueImposableId: null, month: page.dataset.month, year: page.dataset.year })
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer la prime.');
@@ -296,6 +320,37 @@
         indemnityLabelInput?.focus();
     });
     document.querySelector('#indemnity-dialog-cancel')?.addEventListener('click', () => indemnityDialog?.close());
+    const indemnityCatalogueSelect = document.querySelector('#indemnity-catalogue-select');
+    indemnityCatalogueSelect?.addEventListener('change', () => {
+        const option = indemnityCatalogueSelect.selectedOptions[0];
+        if (!option?.value) return;
+        indemnityCodeInput.value = option.dataset.code || '';
+        indemnityLabelInput.value = option.dataset.name || '';
+        indemnityAmountInput.value = option.dataset.amount || '';
+    });
+    document.querySelector('#indemnity-save-catalogue')?.addEventListener('click', async event => {
+        const button = event.currentTarget;
+        const code = indemnityCodeInput.value.trim();
+        const label = indemnityLabelInput.value.trim();
+        const amount = Number(indemnityAmountInput.value);
+        if (!code || !label || !Number.isFinite(amount) || amount < 0) {
+            window.AppDialog.alert('Saisissez le code, le nom et le montant de l’indemnité.');
+            return;
+        }
+        button.disabled = true;
+        try {
+            const response = await fetch(`/bulletins/${page.dataset.employeeId}/indemnities/catalogue`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ code, label, amount }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’ajouter l’indemnité au catalogue.');
+            window.location.reload();
+        } catch (errorObject) {
+            button.disabled = false;
+            window.AppDialog.alert(errorObject.message);
+        }
+    });
     document.querySelectorAll('.restore-indemnity').forEach(button => button.addEventListener('click', async () => {
         button.disabled = true;
         try {
@@ -510,6 +565,13 @@
 
     function renderPayroll(result) {
         ['baseSalary', 'baseConge', 'paidLeaveAmount', 'baseFerie', 'joursFeriesAmount', 'sbg', 'sbi', 'sni', 'cnss', 'amo', 'irNet', 'fraisPro', 'netAPayer', 'primeAnciennete', 'cnssPatronale', 'amoPatronale'].forEach(key => setResult(key, result[key]));
+        document.querySelectorAll('[data-overtime-amount]').forEach(node => {
+            const hours = Number(result[node.dataset.overtimeAmount] || 0);
+            const base = Number(result.baseSalary || 0);
+            const monthlyHours = Number(result.standardMonthlyHours || 191);
+            const multiplier = Number(node.dataset.overtimeMultiplier || 1);
+            node.textContent = money(hours * base / monthlyHours * multiplier);
+        });
         document.querySelectorAll('[data-result="paidLeaveDays"]').forEach(node => { node.textContent = days(result.paidLeaveDays); });
         document.querySelectorAll('.public-holiday-row-input').forEach(node => { node.value = result.joursFeries ?? 0; });
         if (publicHolidayStoredInput) publicHolidayStoredInput.value = result.joursFeries ?? 0;

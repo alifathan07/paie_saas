@@ -646,6 +646,16 @@ a:hover {
     0 2px 6px rgba(40, 70, 110, 0.15);
 }
 
+.employee-matricule-field {
+  max-width: 360px;
+  margin: 0 auto 16px;
+  text-align: center;
+}
+
+.employee-matricule-field .form-input {
+  text-align: center;
+}
+
 .section-title {
   font-size: var(--font-size-section);
   font-weight: 600;

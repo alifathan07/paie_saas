@@ -16,6 +16,9 @@ import { generateBulletinPdf } from "../pdf/bulletinPdf.js";
 import { getBulletinRubriqueCodes } from "../services/bulletinRubrique.service.js";
 import { getRubriqueMaps } from "../services/rubrique.service.js";
 import { listEmployeeAvances, removeAvanceDeduction, setAvanceDeduction } from "../services/avance.service.js";
+import { createPrimes } from "../services/primeService.js";
+import { createIndemnite, listIndemnites } from "../services/indemniteService.js";
+import { listChantiers } from "../services/chantier.service.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -637,6 +640,10 @@ export const listBulletins = async (req, res) => {
         }
         const month = parseInt(req.query.month) || currentMonth();
         const year = parseInt(req.query.year) || currentYear();
+        const categoryId = req.query.categoryId ? Number(req.query.categoryId) : null;
+        const chantierId = req.query.chantierId ? Number(req.query.chantierId) : null;
+        const netMin = req.query.netMin !== undefined && req.query.netMin !== '' && Number.isFinite(Number(req.query.netMin)) ? Number(req.query.netMin) : null;
+        const netMax = req.query.netMax !== undefined && req.query.netMax !== '' && Number.isFinite(Number(req.query.netMax)) ? Number(req.query.netMax) : null;
         const bulkResult = req.query.bulkResult
             ? JSON.parse(decodeURIComponent(req.query.bulkResult))
             : null;
@@ -647,6 +654,7 @@ export const listBulletins = async (req, res) => {
             orderBy: [{ nomComplet: 'asc' }, { id: 'asc' }],
             include: {
                 company: true,
+                category: true,
                 payslips: {
                     where: { month, year },
                     include: { bonuses: true },
@@ -678,6 +686,10 @@ export const listBulletins = async (req, res) => {
                 id: emp.id,
                 nomComplet: emp.nomComplet,
                 matricule: emp.matricule,
+                categoryId: emp.categoryId,
+                categoryName: emp.category?.name || '',
+                chantierId: emp.chantierId,
+                chantierNom: emp.chantierNom || '',
                 // A generated bulletin is a monthly snapshot. Prefer it over the
                 // employee's current contract values for this period.
                 baseSalary: payslip ? Number(payslip.baseSalary) : Number(emp.baseSalary),
@@ -694,7 +706,25 @@ export const listBulletins = async (req, res) => {
                 bulletinStatus: status,
                 variablesEntered,
             };
-        }).filter(emp => !emp.maskedForPeriod);
+        }).filter(emp => !emp.maskedForPeriod)
+            .filter(emp => !categoryId || emp.categoryId === categoryId)
+            .filter(emp => !chantierId || Number(emp.chantierId) === chantierId)
+            .filter(emp => netMin === null || (emp.bulletin && Number(emp.bulletin.netAPayer) >= netMin))
+            .filter(emp => netMax === null || (emp.bulletin && Number(emp.bulletin.netAPayer) <= netMax));
+
+        const categories = await prisma.employeeCategory.findMany({
+            where: { companyId },
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true },
+        });
+        const apiChantiers = await listChantiers();
+        const knownChantierIds = new Set(apiChantiers.map(item => Number(item.id)));
+        const storedChantiers = dbEmployees
+            .filter(emp => emp.chantierId && !knownChantierIds.has(Number(emp.chantierId)))
+            .map(emp => ({ id: Number(emp.chantierId), nom: emp.chantierNom || `Chantier ${emp.chantierId}` }));
+        const chantiers = [...apiChantiers, ...storedChantiers]
+            .filter((item, index, rows) => rows.findIndex(candidate => Number(candidate.id) === Number(item.id)) === index)
+            .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
 
 
         const closeResult = req.session.closeBulletinsResult || null;
@@ -718,6 +748,9 @@ export const listBulletins = async (req, res) => {
             closeResult,
             validateResult,
             draftResult,
+            categories,
+            chantiers,
+            filters: { categoryId: categoryId || '', chantierId: chantierId || '', netMin: netMin ?? '', netMax: netMax ?? '' },
         });
     } catch (err) {
         console.error("Error listing bulletins:", err);
@@ -1195,6 +1228,36 @@ export const addMonthlyPrime = async (req, res) => {
     } catch (err) {
         console.error("Add monthly prime error:", err);
         return res.status(500).json({ ok: false, error: "Impossible d'enregistrer la prime." });
+    }
+};
+
+export const createBulletinPrimeCatalogue = async (req, res) => {
+    try {
+        const emp = await getActiveEmployee(req, Number(req.params.id));
+        if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
+        const [prime] = await createPrimes({
+            companyId: emp.companyId,
+            rows: [{ code: req.body.code, name: req.body.label, defaultAmount: req.body.amount }],
+        });
+        return res.json({ ok: true, prime });
+    } catch (error) {
+        return res.status(400).json({ ok: false, error: error.code === "P2002" ? "Cette prime existe déjà dans le catalogue." : "Code, libellé ou montant invalide." });
+    }
+};
+
+export const createBulletinIndemniteCatalogue = async (req, res) => {
+    try {
+        const emp = await getActiveEmployee(req, Number(req.params.id));
+        if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
+        const indemnity = await createIndemnite({
+            companyId: emp.companyId,
+            code: req.body.code,
+            name: req.body.label,
+            defaultAmount: req.body.amount,
+        });
+        return res.json({ ok: true, indemnity });
+    } catch (error) {
+        return res.status(400).json({ ok: false, error: error.code === "P2002" ? "Cette indemnité existe déjà dans le catalogue." : "Code, libellé ou montant invalide." });
     }
 };
 
@@ -2045,6 +2108,7 @@ export const showBulletin = async (req, res) => {
             where: { companyId: emp.companyId, taxable: true },
             orderBy: { name: 'asc' },
         });
+        const availableIndemnites = await listIndemnites(emp.companyId);
 
         const month = req.query.month ? parseInt(req.query.month) : null;
         const year = req.query.year ? parseInt(req.query.year) : null;
@@ -2149,6 +2213,7 @@ export const showBulletin = async (req, res) => {
                 paidLeaveRubrique: rubriqueMaps.baseRows.find(row => row.key === 'paid_leave_days' && row.active) || null,
                 publicHolidayRubrique: rubriqueMaps.baseRows.find(row => row.key === 'public_holiday_days' && row.active) || null,
                 availablePrimes,
+                availableIndemnites,
                 taxableRubriques: rubriqueMaps.imposableRows,
                 manualRetenuRubriques: rubriqueMaps.retenuRows.filter(row => row.entryType === 'MANUAL' && row.active),
                 employeeAvances: [],
@@ -2235,6 +2300,7 @@ export const showBulletin = async (req, res) => {
             paidLeaveRubrique: rubriqueMaps.baseRows.find(row => row.key === 'paid_leave_days' && row.active) || null,
             publicHolidayRubrique: rubriqueMaps.baseRows.find(row => row.key === 'public_holiday_days' && row.active) || null,
             availablePrimes,
+            availableIndemnites,
             taxableRubriques: rubriqueMaps.imposableRows,
             manualRetenuRubriques: rubriqueMaps.retenuRows.filter(row => row.entryType === 'MANUAL' && row.active),
             employeeAvances,
@@ -2346,7 +2412,6 @@ export const downloadPdfBulletin = async (req, res) => {
             employeeCNSS: emp.numeroCNSS || '—',
             employeeFonction: emp.employeeFunction ? emp.employeeFunction.name : '—',
             employeeAddress: emp.adresse || '—',
-            codeService: emp.codeService || '—',
             birthDate: emp.dateNaissance ? new Date(emp.dateNaissance).toLocaleDateString('fr-MA') : '—',
             hireDate: emp.dateEmbauche ? new Date(emp.dateEmbauche).toLocaleDateString('fr-MA') : '—',
             sexe: emp.sexe || '—',

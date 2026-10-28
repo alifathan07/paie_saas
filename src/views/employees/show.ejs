@@ -47,10 +47,8 @@
                         </strong>
                     </div>
                     <div>
-                        <span style="color: var(--color-text-subtle); display: block;">Code Service:</span>
-                        <strong>
-                            <%= employee.codeService || 'Non défini' %>
-                        </strong>
+                        <span style="color: var(--color-text-subtle); display: block;">Chantier:</span>
+                        <strong><%= employee.chantier ? `${employee.chantier.code} — ${employee.chantier.nom}` : (employee.chantierNom || 'Non défini') %></strong>
                     </div>
                     <div>
                         <span style="color: var(--color-text-subtle); display: block;">Date d'embauche:</span>

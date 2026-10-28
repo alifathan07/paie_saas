@@ -17,8 +17,10 @@ import {
     updateBulletinPaidLeave,
     updateBulletinPublicHoliday,
     addMonthlyPrime,
+    createBulletinPrimeCatalogue,
     deleteMonthlyPrime,
     addMonthlyIndemnity,
+    createBulletinIndemniteCatalogue,
     stickMonthlyIndemnity,
     deleteMonthlyIndemnity,
     restoreEmployeeIndemnity,
@@ -53,8 +55,10 @@ bulletins.post("/:id/public-holiday", updateBulletinPublicHoliday);
 
 // Add a taxable prime directly to the selected month's payslip
 bulletins.post("/:id/primes", addMonthlyPrime);
+bulletins.post("/:id/primes/catalogue", createBulletinPrimeCatalogue);
 bulletins.post("/:id/primes/delete", deleteMonthlyPrime);
 bulletins.post("/:id/indemnities", addMonthlyIndemnity);
+bulletins.post("/:id/indemnities/catalogue", createBulletinIndemniteCatalogue);
 bulletins.post("/:id/indemnities/stick", stickMonthlyIndemnity);
 bulletins.post("/:id/indemnities/delete", deleteMonthlyIndemnity);
 bulletins.post("/:id/indemnities/restore", restoreEmployeeIndemnity);

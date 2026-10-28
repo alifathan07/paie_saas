@@ -11,6 +11,7 @@ import {
     handleRemoveEmployeeIndemnite,
     handleEmployeeTaxablePrime,
     handleEmployeeIndemniteToggle,
+    syncEmployeeChantiers,
 
 } from "../controllers/employee.controller.js";
 import { isAuth } from "../../middlewares/auth.js";
@@ -20,18 +21,24 @@ import { employeeImportUpload } from "../../middlewares/employeeImportUpload.js"
 import { importPage, importEmployees } from "../controllers/employeeImport.controller.js";
 import { index as categoryIndex, create as createCategory, createInline as createCategoryInline, update as updateCategory, remove as removeCategory } from "../controllers/employeeCategory.controller.js";
 import { createInline as createFunctionInline } from "../controllers/employeeFunction.controller.js";
+import { index as banqueIndex, create as createBanque, update as updateBanque, remove as removeBanque } from "../controllers/banque.controller.js";
 
 export const employee = express.Router();
 employee.post("/net-to-base", isAuth, calculateNetToBase);
 
 // CRUD Routes
 employee.get("/", listEmployees);
+employee.post("/chantiers/sync", syncEmployeeChantiers);
 employee.get("/categories", categoryIndex);
+employee.get("/banques", banqueIndex);
 employee.post("/categories", createCategory);
+employee.post("/banques", createBanque);
 employee.post("/categories/inline", createCategoryInline);
 employee.post("/functions/inline", createFunctionInline);
 employee.post("/categories/:id/edit", updateCategory);
+employee.post("/banques/:id/edit", updateBanque);
 employee.post("/categories/:id/delete", removeCategory);
+employee.post("/banques/:id/delete", removeBanque);
 employee.get("/create", renderCreateForm);
 employee.post("/create", handleCreateEmployee);
 employee.get("/import", importPage);

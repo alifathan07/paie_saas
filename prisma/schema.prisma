@@ -168,9 +168,12 @@ model Employee {
   dateEmbauche      DateTime // Dte Embauche
   dateAnciennete    DateTime? // Dte Ancienneté — separate from hire date (rehires, transferred seniority)
   dateSortie        DateTime? // Date Sortie
+  motifSortie       String? // Motif de sortie
   functionId        Int?
   employeeFunction  EmployeeFunction? @relation(fields: [functionId], references: [id])
-  codeService       String? // Code Service (department/cost center)
+  chantierId        Int? // Chantier identifier from the external API
+  chantier          Chantier?         @relation(fields: [chantierId], references: [id], onDelete: SetNull)
+  chantierNom       String? // Snapshot of the external chantier name
   categoryId        Int
   category          EmployeeCategory  @relation(fields: [categoryId], references: [id])
   natureEmploi      NatureEmploi      @default(PERMANENT) // gates CNSS/AMO logic — stagiaire/exonere ≠ same contributions
@@ -217,6 +220,26 @@ model Employee {
   @@unique([companyId, matricule])
   @@index([categoryId])
   @@index([functionId])
+  @@index([chantierId])
+}
+
+model Banque {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("banques")
+}
+
+model Chantier {
+  id        Int        @id // Identifier provided by the chantiers API
+  code      Int        @unique
+  nom       String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  employees Employee[]
+
+  @@map("chantiers")
 }
 
 model EmployeeCategory {
@@ -236,7 +259,6 @@ model EmployeeCategory {
 model EmployeeFunction {
   id        Int      @id @default(autoincrement())
   name      String
-  code      String
   companyId Int
   createdAt DateTime @default(now())
 
@@ -244,7 +266,6 @@ model EmployeeFunction {
   employees Employee[]
 
   @@unique([companyId, name])
-  @@unique([companyId, code])
   @@index([companyId])
   @@map("employee_functions")
 }
@@ -332,35 +353,35 @@ model Payslip {
   validatedById        Int?
 
   // Money amounts: Decimal(12, 2)
-  baseSalary        Decimal @db.Decimal(12, 2)
-  primeAnciennete   Decimal @default(0.00) @db.Decimal(12, 2)
-  bonusesIMP        Decimal @default(0.00) @db.Decimal(12, 2)
-  bonusesNIMP       Decimal @default(0.00) @db.Decimal(12, 2)
-  baseConge         Decimal @default(0.00) @db.Decimal(12, 2)
-  paidLeaveAmount   Decimal @default(0.00) @db.Decimal(12, 2)
-  baseFerie         Decimal @default(0.00) @db.Decimal(12, 2)
-  joursFeriesAmount Decimal @default(0.00) @db.Decimal(12, 2)
-  brutGlobal       Decimal @default(0.00) @db.Decimal(12, 2) // SBI + indemnités non imposables
-  sbg               Decimal @db.Decimal(12, 2) // Salaire Brut Global
-  sbi               Decimal @db.Decimal(12, 2) // Salaire Brut Imposable
-  cnss              Decimal @db.Decimal(12, 2) // CNSS Salariale
-  amo               Decimal @db.Decimal(12, 2) // AMO Salariale
-  cimr              Decimal @default(0.00) @db.Decimal(12, 2) // CIMR Salariale
-  fraisPro          Decimal @db.Decimal(12, 2) // Frais Professionnels
-  sni               Decimal @db.Decimal(12, 2) // Salaire Net Imposable
-  sniCumule         Decimal @default(0.00) @db.Decimal(14, 2)
-  moisEcoules       Int     @default(1) // Période sauvegardée : bulletins antérieurs validés/clôturés de l'année + bulletin courant
-  sniAnnuelEstime   Decimal @default(0.00) @db.Decimal(14, 2) // SNI annuel estimé
-  irAnnuelEstime    Decimal @default(0.00) @db.Decimal(14, 2) // IR annuel estimé
-  irCumule          Decimal @default(0.00) @db.Decimal(14, 2) // IR cumulé dû jusqu'au mois courant
-  irPrecedent       Decimal @default(0.00) @db.Decimal(14, 2) // IR déjà retenu avant le mois courant
-  irNet             Decimal @default(0.00) @db.Decimal(12, 2)
-  irBrut            Decimal @db.Decimal(12, 2) // IR Brut (après barème)
-  irTheorique       Decimal @default(0.00) @db.Decimal(12, 2) // IR Théorique = SNI × taux
-  sommeADeduire     Decimal @default(0.00) @db.Decimal(12, 2) // Somme à déduire du barème
-  chargesDeFamille  Decimal @default(0.00) @db.Decimal(12, 2) // Charges de famille
-  netAPayer         Decimal @db.Decimal(12, 2) // Net à payer
-  avanceDeduction   Decimal @default(0.00) @db.Decimal(12, 2)
+  baseSalary                Decimal @db.Decimal(12, 2)
+  primeAnciennete           Decimal @default(0.00) @db.Decimal(12, 2)
+  bonusesIMP                Decimal @default(0.00) @db.Decimal(12, 2)
+  bonusesNIMP               Decimal @default(0.00) @db.Decimal(12, 2)
+  baseConge                 Decimal @default(0.00) @db.Decimal(12, 2)
+  paidLeaveAmount           Decimal @default(0.00) @db.Decimal(12, 2)
+  baseFerie                 Decimal @default(0.00) @db.Decimal(12, 2)
+  joursFeriesAmount         Decimal @default(0.00) @db.Decimal(12, 2)
+  brutGlobal                Decimal @default(0.00) @db.Decimal(12, 2) // SBI + indemnités non imposables
+  sbg                       Decimal @db.Decimal(12, 2) // Salaire Brut Global
+  sbi                       Decimal @db.Decimal(12, 2) // Salaire Brut Imposable
+  cnss                      Decimal @db.Decimal(12, 2) // CNSS Salariale
+  amo                       Decimal @db.Decimal(12, 2) // AMO Salariale
+  cimr                      Decimal @default(0.00) @db.Decimal(12, 2) // CIMR Salariale
+  fraisPro                  Decimal @db.Decimal(12, 2) // Frais Professionnels
+  sni                       Decimal @db.Decimal(12, 2) // Salaire Net Imposable
+  sniCumule                 Decimal @default(0.00) @db.Decimal(14, 2)
+  moisEcoules               Int     @default(1) // Période sauvegardée : bulletins antérieurs validés/clôturés de l'année + bulletin courant
+  sniAnnuelEstime           Decimal @default(0.00) @db.Decimal(14, 2) // SNI annuel estimé
+  irAnnuelEstime            Decimal @default(0.00) @db.Decimal(14, 2) // IR annuel estimé
+  irCumule                  Decimal @default(0.00) @db.Decimal(14, 2) // IR cumulé dû jusqu'au mois courant
+  irPrecedent               Decimal @default(0.00) @db.Decimal(14, 2) // IR déjà retenu avant le mois courant
+  irNet                     Decimal @default(0.00) @db.Decimal(12, 2)
+  irBrut                    Decimal @db.Decimal(12, 2) // IR Brut (après barème)
+  irTheorique               Decimal @default(0.00) @db.Decimal(12, 2) // IR Théorique = SNI × taux
+  sommeADeduire             Decimal @default(0.00) @db.Decimal(12, 2) // Somme à déduire du barème
+  chargesDeFamille          Decimal @default(0.00) @db.Decimal(12, 2) // Charges de famille
+  netAPayer                 Decimal @db.Decimal(12, 2) // Net à payer
+  avanceDeduction           Decimal @default(0.00) @db.Decimal(12, 2)
   avanceDeductionConfigured Boolean @default(false)
 
   absenceDays      Int     @default(0)

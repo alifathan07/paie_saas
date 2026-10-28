@@ -80,7 +80,40 @@ export const getEmployeeFunctions = async (companyId) => {
     });
 };
 
-export const getOrCreateEmployeeFunction = async (companyId, functionId, name, code) => {
+export const getBanques = async () => prisma.banque.findMany({
+    orderBy: { name: 'asc' },
+});
+
+const cleanBanqueName = name => String(name || '').trim().slice(0, 191);
+
+export const createBanque = async name => {
+    const clean = cleanBanqueName(name);
+    if (!clean) throw new Error('INVALID_BANQUE');
+    return prisma.banque.create({ data: { name: clean } });
+};
+
+export const updateBanque = async (id, name) => {
+    const clean = cleanBanqueName(name);
+    if (!clean) throw new Error('INVALID_BANQUE');
+    const banque = await prisma.banque.findUnique({ where: { id: Number(id) } });
+    if (!banque) throw new Error('BANQUE_NOT_FOUND');
+    return prisma.$transaction(async tx => {
+        if (banque.name !== clean) {
+            await tx.employee.updateMany({ where: { banque: banque.name }, data: { banque: clean } });
+        }
+        return tx.banque.update({ where: { id: banque.id }, data: { name: clean } });
+    });
+};
+
+export const deleteBanque = async id => {
+    const banque = await prisma.banque.findUnique({ where: { id: Number(id) } });
+    if (!banque) throw new Error('BANQUE_NOT_FOUND');
+    const employeeCount = await prisma.employee.count({ where: { banque: banque.name } });
+    if (employeeCount > 0) throw new Error('BANQUE_IN_USE');
+    return prisma.banque.delete({ where: { id: banque.id } });
+};
+
+export const getOrCreateEmployeeFunction = async (companyId, functionId, name) => {
     const cId = Number(companyId);
     if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
     if (functionId !== undefined && functionId !== null && String(functionId).trim() !== '') {
@@ -92,18 +125,16 @@ export const getOrCreateEmployeeFunction = async (companyId, functionId, name, c
     if (!clean) return null;
     const existing = await prisma.employeeFunction.findUnique({ where: { companyId_name: { companyId: cId, name: clean } } });
     if (existing) return existing;
-    const generatedCode = String(code || `FONCTION-${Date.now()}`).trim().slice(0, 64);
     return prisma.employeeFunction.upsert({
         where: { companyId_name: { companyId: cId, name: clean } },
-        create: { companyId: cId, name: clean, code: generatedCode }, update: {},
+        create: { companyId: cId, name: clean }, update: {},
     });
 };
 
-export const createEmployeeFunction = async (companyId, name, code) => {
+export const createEmployeeFunction = async (companyId, name) => {
     const clean = String(name || '').trim().slice(0, 191);
-    const cleanCode = String(code || '').trim().slice(0, 64);
-    if (!clean || !cleanCode) throw new Error('INVALID_EMPLOYEE_FUNCTION');
-    return prisma.employeeFunction.create({ data: { companyId: Number(companyId), name: clean, code: cleanCode } });
+    if (!clean) throw new Error('INVALID_EMPLOYEE_FUNCTION');
+    return prisma.employeeFunction.create({ data: { companyId: Number(companyId), name: clean } });
 };
 
 // Find or create a bonus definition scoped to a specific company
@@ -167,6 +198,7 @@ export const getEmployees = async (query = {}) => {
             company: true,
             category: true,
             employeeFunction: true,
+            chantier: true,
             bonuses: {
                 include: { bonus: true }
             }
@@ -183,6 +215,7 @@ export const getEmployee = async (id, companyId) => {
             company: true,
             category: true,
             employeeFunction: true,
+            chantier: true,
             bonuses: {
                 include: { bonus: true }
             }
@@ -229,7 +262,7 @@ async function resolveBonusList(bonusList, fallbackCompanyId) {
 export const createEmployee = async (data) => {
     const {
         matricule, nomComplet, cin, dateNaissance, sexe,
-        dateEmbauche, dateAnciennete, dateSortie, fonction, functionId, codeService,
+        dateEmbauche, dateAnciennete, dateSortie, motifSortie, fonction, functionId, chantierId, chantierNom,
         contratDateDebut, contratDateFin,
         categoryId, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
@@ -257,8 +290,10 @@ export const createEmployee = async (data) => {
             dateEmbauche: new Date(dateEmbauche),
             dateAnciennete: dateAnciennete ? new Date(dateAnciennete) : new Date(dateEmbauche),
             dateSortie: dateSortie ? new Date(dateSortie) : null,
+            motifSortie: String(motifSortie || '').trim() || null,
             functionId: employeeFunction?.id || null,
-            codeService: employeeFunction?.code || null,
+            chantierId: chantierId ? Number(chantierId) : null,
+            chantierNom: String(chantierNom || '').trim() || null,
             contratDateDebut: contratDateDebut ? new Date(contratDateDebut) : null,
             contratDateFin: contratDateFin ? new Date(contratDateFin) : null,
             categoryId: category.id,
@@ -302,7 +337,7 @@ export const createEmployee = async (data) => {
 export const updateEmployee = async (id, data, activeCompanyId) => {
     const {
         matricule, nomComplet, cin, dateNaissance, sexe,
-        dateEmbauche, dateAnciennete, dateSortie, fonction, functionId, codeService,
+        dateEmbauche, dateAnciennete, dateSortie, motifSortie, fonction, functionId, chantierId, chantierNom,
         contratDateDebut, contratDateFin,
         categoryId, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
@@ -359,8 +394,10 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
             dateEmbauche: dateEmbauche ? new Date(dateEmbauche) : undefined,
             dateAnciennete: dateAnciennete ? new Date(dateAnciennete) : undefined,
             dateSortie: dateSortie ? new Date(dateSortie) : null,
+            motifSortie: String(motifSortie || '').trim() || null,
             functionId: employeeFunction === undefined ? undefined : (employeeFunction?.id || null),
-            codeService: employeeFunction === undefined ? undefined : (employeeFunction?.code || null),
+            chantierId: chantierId === undefined ? undefined : (chantierId === '' || chantierId === null ? null : Number(chantierId)),
+            chantierNom: chantierNom === undefined ? undefined : (String(chantierNom || '').trim() || null),
             contratDateDebut: contratDateDebut ? new Date(contratDateDebut) : null,
             contratDateFin: contratDateFin ? new Date(contratDateFin) : null,
             categoryId: category ? category.id : undefined,

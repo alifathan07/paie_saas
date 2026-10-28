@@ -22,7 +22,6 @@ const employees = [
     dateEmbauche: '2022-04-11',
     category: 'Administration',
     fonction: 'Responsable Ressources Humaines',
-    codeService: 'RH-01',
     situationFam: 'MARIE' as const,
     nbPersonacharge: 2,
     nbEnfantCharge: 1,
@@ -43,7 +42,6 @@ const employees = [
     dateEmbauche: '2021-09-06',
     category: 'Technicien',
     fonction: 'Technicien Maintenance',
-    codeService: 'TECH-02',
     situationFam: 'CELIBATAIRE' as const,
     nbPersonacharge: 0,
     nbEnfantCharge: 0,
@@ -64,7 +62,6 @@ const employees = [
     dateEmbauche: '2023-02-20',
     category: 'Cadre',
     fonction: 'Comptable',
-    codeService: 'FIN-01',
     situationFam: 'CELIBATAIRE' as const,
     nbPersonacharge: 0,
     nbEnfantCharge: 0,
@@ -95,13 +92,13 @@ async function main() {
       create: { companyId: company.id, name },
     });
   }
-  const employeeFunction = async (name: string, code: string) => prisma.employeeFunction.upsert({
+  const employeeFunction = async (name: string) => prisma.employeeFunction.upsert({
     where: { companyId_name: { companyId: company.id, name } },
-    update: { code }, create: { companyId: company.id, name, code },
+    update: {}, create: { companyId: company.id, name },
   });
 
   for (const employee of employees) {
-    const employeeFunctionRecord = await employeeFunction(employee.fonction, employee.codeService);
+    const employeeFunctionRecord = await employeeFunction(employee.fonction);
     const employeeCategory = await prisma.employeeCategory.findUniqueOrThrow({
       where: { companyId_name: { companyId: company.id, name: employee.category } },
     });
@@ -112,7 +109,6 @@ async function main() {
         nomComplet: employee.nomComplet,
         functionId: employeeFunctionRecord.id,
         categoryId: employeeCategory.id,
-        codeService: employee.codeService,
         baseSalary: employee.baseSalary,
         companyId: company.id,
       },

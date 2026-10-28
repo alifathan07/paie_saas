@@ -80,6 +80,24 @@
             <input type="number" name="year" id="inp-year" class="form-input"
                 value="<%= year %>" min="2020" max="2040" style="width: 90px;"
                 onchange="this.form.submit()">
+            <select name="categoryId" class="form-input" aria-label="Filtrer par catégorie">
+                <option value="">Toutes les catégories</option>
+                <% (categories || []).forEach(category => { %>
+                    <option value="<%= category.id %>" <%= String(filters?.categoryId || '') === String(category.id) ? 'selected' : '' %>><%= category.name %></option>
+                <% }); %>
+            </select>
+            <select name="chantierId" class="form-input" aria-label="Filtrer par chantier">
+                <option value="">Tous les chantiers</option>
+                <% (chantiers || []).forEach(item => { %>
+                    <option value="<%= item.id %>" <%= String(filters?.chantierId || '') === String(item.id) ? 'selected' : '' %>><%= item.nom %></option>
+                <% }); %>
+            </select>
+            <input type="number" name="netMin" class="form-input" value="<%= filters?.netMin ?? '' %>" min="0" step="0.01" placeholder="Net de">
+            <input type="number" name="netMax" class="form-input" value="<%= filters?.netMax ?? '' %>" min="0" step="0.01" placeholder="Net à">
+            <button type="submit" class="btn-secondary">Filtrer</button>
+            <% if (filters?.categoryId || filters?.chantierId || filters?.netMin !== '' || filters?.netMax !== '') { %>
+                <a href="/bulletins?month=<%= month %>&year=<%= year %>" class="btn-secondary">Réinitialiser</a>
+            <% } %>
             <% if (employees.some(emp => !emp.bulletin)) { %>
             <button type="submit" id="btn-bulk-generate" class="btn-primary" formmethod="POST" formaction="/bulletins/generate-bulk" data-confirm="Générer les bulletins pour tous les employés actifs qui n’en ont pas encore pour <%= monthName %> <%= year %> ?" data-confirm-title="Générer les bulletins" data-confirm-label="Générer">
                 <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none"

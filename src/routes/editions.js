@@ -98,7 +98,6 @@ async function pdfDataFromPayslip(payslip, rubriqueCodes = {}) {
         employeeCNSS: emp.numeroCNSS || "—",
         employeeFonction: emp.employeeFunction ? emp.employeeFunction.name : "—",
         employeeAddress: emp.adresse || "—",
-        codeService: emp.codeService || "—",
         birthDate: emp.dateNaissance ? new Date(emp.dateNaissance).toLocaleDateString("fr-MA") : "—",
         hireDate: emp.dateEmbauche ? new Date(emp.dateEmbauche).toLocaleDateString("fr-MA") : "—",
         sexe: emp.sexe || "—",

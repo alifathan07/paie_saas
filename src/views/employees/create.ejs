@@ -28,6 +28,10 @@
                     </div>
                 </nav>
                 <div class="employee-general-content">
+                <div class="employee-matricule-field form-group">
+                    <label for="matricule">Matricule (Auto si vide)</label>
+                    <input type="text" id="matricule" name="matricule" class="form-input" placeholder="ex: EMP-001">
+                </div>
                 <!-- Section 1: Informations Personnelles -->
                 <div class="form-section">
                     <h2 class="section-title">1. État Civil & Identité</h2>
@@ -75,26 +79,31 @@
                             <input type="number" id="nbPersonacharge" name="nbPersonacharge" class="form-input" min="0"
                                 max="6" value="0">
                         </div>
+                        </div>
                     </div>
-                </div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="chantierId">Chantier</label>
+                            <select id="chantierId" name="chantierId" class="form-input">
+                                <option value="">Sélectionner un chantier</option>
+                                <% (chantiers || []).forEach(function(item) { %><option value="<%= item.id %>" data-chantier-name="<%= item.nom %>"><%= item.code %> — <%= item.nom %></option><% }); %>
+                            </select>
+                            <input type="hidden" name="chantierNom" id="chantierNom">
+                        </div>
+                    </div>
 
                 <!-- Section 2: Poste & Contrat -->
                 <div class="form-section">
                     <h2 class="section-title">2. Emploi & Contrat</h2>
                     <div class="form-grid-3">
                         <div class="form-group">
-                            <label for="matricule">Matricule (Auto si vide)</label>
-                            <input type="text" id="matricule" name="matricule" class="form-input"
-                                placeholder="ex: EMP-001">
+                            <label for="matricule-secondary">Matricule (Auto si vide)</label>
+                            <input type="text" id="matricule-secondary" name="matricule" class="form-input" placeholder="ex: EMP-001">
                         </div>
                         <div class="form-group">
                             <label for="functionId">Fonction / Poste</label>
-                            <div class="category-select-with-add"><select id="functionId" name="functionId" class="form-input"><option value="">Sélectionner une fonction</option><% (functions || []).forEach(function(item) { %><option value="<%= item.id %>" data-function-code="<%= item.code %>"><%= item.name %></option><% }); %></select><button type="button" class="btn-secondary category-add-button" data-function-add aria-label="Ajouter une fonction">+</button></div>
-                            <div id="function-modal" class="app-modal" hidden><div class="app-modal-backdrop" data-close-function></div><div class="app-modal-card category-modal-card" role="dialog" aria-modal="true" aria-labelledby="function-modal-title"><div class="app-modal-header"><div><h2 id="function-modal-title">Ajouter une fonction</h2><p>Créez une fonction et son code service.</p></div><button type="button" class="modal-close" data-close-function>×</button></div><div class="category-modal-field"><label for="new-function-name">Nom de la fonction</label><input id="new-function-name" type="text" class="form-input" data-function-input maxlength="191" placeholder="Ex. Comptable Senior"><label for="new-function-code">Code service / département</label><input id="new-function-code" type="text" class="form-input" data-function-code-input maxlength="64" placeholder="Ex. FIN-01"></div><div class="app-modal-actions"><button type="button" class="btn-secondary" data-close-function>Annuler</button><button type="button" class="btn-primary" data-function-save>Ajouter</button></div></div></div>
-                        </div>
-                        <div class="form-group">
-                            <label for="codeService">Code Service / Département</label>
-                            <select id="codeService" name="codeService" class="form-input"><option value="">Sélectionner un code</option><% (functions || []).forEach(function(item) { %><option value="<%= item.code %>" data-function-id="<%= item.id %>"><%= item.code %></option><% }); %></select>
+                            <div class="category-select-with-add"><select id="functionId" name="functionId" class="form-input"><option value="">Sélectionner une fonction</option><% (functions || []).forEach(function(item) { %><option value="<%= item.id %>"><%= item.name %></option><% }); %></select><button type="button" class="btn-secondary category-add-button" data-function-add aria-label="Ajouter une fonction">+</button></div>
+                            <div id="function-modal" class="app-modal" hidden><div class="app-modal-backdrop" data-close-function></div><div class="app-modal-card category-modal-card" role="dialog" aria-modal="true" aria-labelledby="function-modal-title"><div class="app-modal-header"><div><h2 id="function-modal-title">Ajouter une fonction</h2><p>Créez une fonction disponible pour les employés.</p></div><button type="button" class="modal-close" data-close-function>×</button></div><div class="category-modal-field"><label for="new-function-name">Nom de la fonction</label><input id="new-function-name" type="text" class="form-input" data-function-input maxlength="191" placeholder="Ex. Comptable Senior"></div><div class="app-modal-actions"><button type="button" class="btn-secondary" data-close-function>Annuler</button><button type="button" class="btn-primary" data-function-save>Ajouter</button></div></div></div>
                         </div>
                     </div>
                     <div class="form-grid-3">
@@ -133,8 +142,14 @@
                         </div>
                     </div>
                     <div class="form-grid-3">
-
-
+                        <div class="form-group">
+                            <label for="dateSortie">Date de sortie</label>
+                            <input type="date" id="dateSortie" name="dateSortie" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="motifSortie">Motif de sortie</label>
+                            <input type="text" id="motifSortie" name="motifSortie" class="form-input" maxlength="191" placeholder="Ex. Démission, retraite, fin de contrat">
+                        </div>
                     </div>
                     <div class="form-grid-2">
                         <div class="form-group">
@@ -186,9 +201,13 @@
                     </div>
                     <div class="form-grid-3">
                         <div class="form-group">
-                            <label for="banque">Banque</label>
-                            <input type="text" id="banque" name="banque" class="form-input"
-                                placeholder="ex: Attijariwafa Bank">
+                            <label for="banque">Banque <a href="/employees/banques" target="_blank" style="font-size: 12px; margin-left: 6px;">Gérer</a></label>
+                            <select id="banque" name="banque" class="form-input">
+                                <option value="">Sélectionner une banque</option>
+                                <% (banques || []).forEach(function(bank) { %>
+                                    <option value="<%= bank.name %>"><%= bank.name %></option>
+                                <% }); %>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label for="agence">Agence</label>
@@ -388,27 +407,27 @@
                 });
                 const functionModal = document.getElementById('function-modal');
                 const functionInput = document.querySelector('[data-function-input]');
-                const functionCodeInput = document.querySelector('[data-function-code-input]');
                 const functionSelect = document.getElementById('functionId');
-                const codeSelect = document.getElementById('codeService');
                 document.querySelector('[data-function-add]').addEventListener('click', () => { functionModal.hidden = false; functionInput.focus(); });
-                document.querySelectorAll('[data-close-function]').forEach(button => button.addEventListener('click', () => { functionModal.hidden = true; functionInput.value = ''; functionCodeInput.value = ''; }));
-                functionSelect.addEventListener('change', () => { const option = functionSelect.selectedOptions[0]; codeSelect.value = option?.dataset.functionCode || ''; });
-                codeSelect.addEventListener('change', () => { const option = codeSelect.selectedOptions[0]; functionSelect.value = option?.dataset.functionId || ''; });
+                document.querySelectorAll('[data-close-function]').forEach(button => button.addEventListener('click', () => { functionModal.hidden = true; functionInput.value = ''; }));
+                const chantierSelect = document.getElementById('chantierId');
+                const chantierNameInput = document.getElementById('chantierNom');
+                chantierSelect?.addEventListener('change', () => { chantierNameInput.value = chantierSelect.selectedOptions[0]?.dataset.chantierName || ''; });
+                chantierSelect?.addEventListener('keydown', event => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    chantierNameInput.value = chantierSelect.selectedOptions[0]?.dataset.chantierName || '';
+                    chantierSelect.form?.requestSubmit();
+                });
                 document.querySelector('[data-function-save]').addEventListener('click', async () => {
                     const name = functionInput.value.trim();
-                    const code = functionCodeInput.value.trim();
                     if (!name) return functionInput.focus();
-                    if (!code) return functionCodeInput.focus();
-                    const response = await fetch('/employees/functions/inline', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ name, code }) });
+                    const response = await fetch('/employees/functions/inline', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ name }) });
                     const result = await response.json();
                     if (!response.ok) return alert(result.error || 'Impossible d’ajouter la fonction.');
                     functionSelect.add(new Option(result.name, result.id, true, true));
-                    codeSelect.add(new Option(result.code, result.code, true, true));
-                    codeSelect.selectedOptions[0].dataset.functionId = result.id;
                     functionModal.hidden = true;
                     functionInput.value = '';
-                    functionCodeInput.value = '';
                 });
 
                 function toggleContractFields(nature) {

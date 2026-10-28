@@ -985,7 +985,7 @@
         return base > 0 ? Number(line.amount || 0) / base : null;
     };
     const primes = values.variablePrimes || [];
-    const taxableAdditions = values.taxableAdditions || [];
+    const taxableAdditions = (values.taxableAdditions || []).filter(line => !String(line.calculationKey || '').startsWith('overtime_'));
     const fixedPrimeKeys = new Set((emp.bonuses || [])
         .filter(item => item.bonus ? item.bonus.taxable : item.taxable)
         .map(item => `${String(item.bonus ? item.bonus.name : item.name || '').toLowerCase()}|${Number(item.amount)}`));
@@ -999,6 +999,24 @@
         const name = String(row?.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
         return key === 'paid_leave' || key === 'paid_leave_days' || name.includes('conge');
     };
+    const catalogueRubriques = (taxableRubriques || []).filter(row => row.active !== false && !isPaidLeaveRubrique(row) && !String(row.calculationKey || '').startsWith('overtime_'));
+    const cataloguePrimeLines = catalogueRubriques.map(definition => {
+        const existing = primes.find(prime => Number(prime.rubriqueImposableId) === Number(definition.id)
+            || String(prime.label || '').trim().toLowerCase() === String(definition.name || '').trim().toLowerCase());
+        return { definition, amount: existing ? Number(existing.amount || 0) : 0 };
+    });
+    const cataloguePrimeLabels = new Set(cataloguePrimeLines.map(line => line.definition.name.trim().toLowerCase()));
+    const manualPrimes = primes.filter(prime => !cataloguePrimeLabels.has(String(prime.label || '').trim().toLowerCase()));
+    const overtimeRows = [
+        ['heuresSup25', 'overtime_25', 'Heures supplémentaires 25%', 1.25],
+        ['heuresSup50', 'overtime_50', 'Heures supplémentaires 50%', 1.5],
+        ['heuresSup100', 'overtime_100', 'Heures supplémentaires 100%', 2],
+    ].map(([field, key, fallbackName, multiplier]) => ({
+        field,
+        definition: (taxableRubriques || []).find(row => row.calculationKey === key),
+        fallbackName,
+        amount: Number((Number(values[field] || 0) * Number(values.baseSalary || emp.baseSalary || 0) / standardMonthlyHours * multiplier).toFixed(2)),
+    }));
     const taxablePaidLeaveDefinition = (taxableRubriques || []).find(row => row.active !== false && isPaidLeaveRubrique(row));
     const paidLeaveDefinition = taxablePaidLeaveDefinition || (typeof paidLeaveRubrique !== 'undefined' ? paidLeaveRubrique : null);
     const publicHolidayDefinition = typeof publicHolidayRubrique !== 'undefined' ? publicHolidayRubrique : null;
@@ -1148,10 +1166,6 @@
         <div class="print-actions">
             <% if (!locked) { %>
                 <button type="button" class="add-prime" id="add-prime">+ Prime imposable</button>
-                <% if ((paidLeaveDefinition && Number(values.paidLeaveDays || 0) <= 0) || (publicHolidayDefinition && Number(values.joursFeries || 0) <= 0) || (taxableRubriques || []).some(row => row.active !== false && !isPaidLeaveRubrique(row) && !String(row.calculationKey || '').startsWith('overtime_'))) { %>
-                    <button type="button" class="add-prime" id="add-other-rubrique">+ Autre rubrique de base</button>
-                <% } %>
-                <button type="button" class="add-prime" id="add-overtime">+ Heures supplémentaires</button>
             <% } %>
             <% if (canManageIndemnity) { %>
                 <button type="button" class="add-prime" id="add-indemnity">+ Indemnité non imposable</button>
@@ -1197,7 +1211,18 @@
                     <td class="num">—</td>
                     <td class="num">—</td>
                 </tr>
-                <% primes.forEach(prime => { %>
+                <% cataloguePrimeLines.forEach(line => { %>
+                    <tr class="prime-row taxable-prime-line catalogue-rubrique-line" data-rubrique-imposable-id="<%= line.definition.id %>">
+                        <td class="rubrique-code"><%= line.definition.code || '' %></td>
+                        <td class="description"><input name="primesLabels" value="<%= line.definition.name %>" readonly></td>
+                        <td class="num">—</td>
+                        <td class="num">—</td>
+                        <td class="num"><input class="live-input catalogue-rubrique-amount" name="primesAmounts" type="number" min="0" step="0.01" value="<%= line.amount %>" placeholder="0,00 DH" <%= locked ? 'disabled' : '' %>></td>
+                        <td class="num">—</td>
+                        <td class="num">—</td>
+                    </tr>
+                <% }); %>
+                <% manualPrimes.forEach(prime => { %>
                     <% const fixedPrime = !prime.rubriqueImposableId && fixedPrimeKeys.has(`${String(prime.label).toLowerCase()}|${Number(prime.amount)}`); %>
                     <tr class="prime-row taxable-prime-line <%= prime.rubriqueImposableId ? 'catalogue-rubrique-line' : '' %>" data-rubrique-imposable-id="<%= prime.rubriqueImposableId || '' %>">
                         <td class="rubrique-code"><%= prime.code || '' %></td><td class="description">
@@ -1225,7 +1250,7 @@
                         <td class="num"><%= fmt(line.amount) %></td><td class="num">—</td><td class="num">—</td>
                     </tr>
                 <% }); %>
-                <% if (Number(values.paidLeaveDays || 0) > 0) { %><tr class="prime-row paid-leave-row">
+                <tr class="prime-row paid-leave-row">
                     <td class="rubrique-code"><%= paidLeaveDefinition?.code || '' %></td>
                     <td class="description"><%= paidLeaveDefinition?.name || 'Nombre jours congé payé' %></td>
                     <td class="num"><input class="live-input paid-leave-row-input" type="number" min="0" max="26" step="1" value="<%= values.paidLeaveDays ?? 0 %>" aria-label="Nombre entier de jours de congé payé" <%= locked ? 'disabled' : '' %>><small class="paid-leave-base">Base congé : <output data-result="baseConge"><%= fmt(values.baseConge ?? 0) %></output></small></td>
@@ -1233,8 +1258,8 @@
                     <td class="num"><output data-result="paidLeaveAmount"><%= fmt(values.paidLeaveAmount ?? 0) %></output></td>
                     <td class="num">—</td>
                     <td class="num">—</td>
-                </tr><% } %>
-                <% if (Number(values.joursFeries || 0) > 0) { %><tr class="prime-row public-holiday-row">
+                </tr>
+                <tr class="prime-row public-holiday-row">
                     <td class="rubrique-code"><%= publicHolidayDefinition?.code || rubriqueCodes['Nombre jours fériés'] || '' %></td>
                     <td class="description"><%= publicHolidayDefinition?.name || 'Nombre jours fériés' %></td>
                     <td class="num"><input class="live-input public-holiday-row-input" type="number" min="0" max="26" step="1" value="<%= values.joursFeries ?? 0 %>" aria-label="Nombre entier de jours fériés" <%= locked ? 'disabled' : '' %>><small class="paid-leave-base">Base férié : <output data-result="baseFerie"><%= fmt(values.baseFerie ?? 0) %></output></small></td>
@@ -1242,7 +1267,18 @@
                     <td class="num"><output data-result="joursFeriesAmount"><%= fmt(values.joursFeriesAmount ?? 0) %></output></td>
                     <td class="num">—</td>
                     <td class="num">—</td>
-                </tr><% } %>
+                </tr>
+                <% overtimeRows.forEach(row => { %>
+                    <tr class="prime-row overtime-row">
+                        <td class="rubrique-code"><%= row.definition?.code || '' %></td>
+                        <td class="description"><%= row.definition?.name || row.fallbackName %></td>
+                        <td class="num"><input class="live-input overtime-hours-row-input" name="<%= row.field %>" type="number" min="0" step="0.01" value="<%= values[row.field] ?? 0 %>" aria-label="<%= row.fallbackName %>" <%= locked ? 'disabled' : '' %>></td>
+                        <td class="num">—</td>
+                        <td class="num"><span data-overtime-amount="<%= row.field %>" data-overtime-multiplier="<%= row.definition?.calculationKey === 'overtime_25' ? 1.25 : row.definition?.calculationKey === 'overtime_50' ? 1.5 : 2 %>"><%= fmt(row.amount) %></span></td>
+                        <td class="num">—</td>
+                        <td class="num">—</td>
+                    </tr>
+                <% }); %>
                 <tr class="gross" id="taxable-gross-row">
                     <td class="rubrique-code"><%= rubriqueCodes['Salaire brut imposable'] || '' %></td><td colspan="3" class="description">SALAIRE BRUT IMPOSABLE <br></td>
                     <td class="num"><span data-result="sbi"><%= fmt(values.sbi) %></span></td>
@@ -1427,8 +1463,17 @@
             <dialog class="prime-dialog" id="prime-dialog">
             <form method="dialog" id="prime-dialog-form" class="prime-dialog-content">
                 <h2>Ajouter une prime imposable</h2>
-                <p>Cette prime sera ajoutée uniquement au bulletin du mois courant.</p>
+                <p>Choisissez une prime du catalogue ou saisissez-en une nouvelle.</p>
                 <div class="prime-dialog-fields">
+                    <label>
+                        Prime existante
+                        <select id="prime-rubrique-select" class="form-input">
+                            <option value="">Nouvelle prime</option>
+                            <% (availablePrimes || []).forEach(prime => { %>
+                                <option value="<%= prime.id %>" data-code="<%= prime.code %>" data-name="<%= prime.name %>" data-amount="<%= prime.defaultAmount %>"><%= prime.code %> — <%= prime.name %></option>
+                            <% }); %>
+                        </select>
+                    </label>
                     <label>
                         Code rubrique
                         <input id="prime-code-input" required placeholder="Ex. 3001">
@@ -1444,6 +1489,7 @@
                 </div>
                 <div class="prime-dialog-actions">
                     <button type="button" id="prime-dialog-cancel">Annuler</button>
+                    <button type="button" id="prime-save-catalogue">Ajouter au catalogue</button>
                     <button class="confirm" value="add" type="submit">Ajouter la prime</button>
                 </div>
             </form>
@@ -1474,43 +1520,12 @@
                 </form>
             </dialog>
 
-            <dialog class="prime-dialog" id="other-rubrique-dialog">
-                <form method="dialog" id="other-rubrique-dialog-form" class="prime-dialog-content">
-                    <h2>Ajouter une autre rubrique de base</h2>
-                    <p>Cette rubrique sera ajoutée au brut imposable de ce bulletin uniquement.</p>
-                    <div class="prime-dialog-fields">
-                        <label>
-                            Rubrique
-                            <select id="other-rubrique-select" class="form-input" required>
-                                <option value="">Choisir une rubrique</option>
-                                <% if (paidLeaveDefinition && Number(values.paidLeaveDays || 0) <= 0) { %>
-                                    <option value="paid_leave_days" data-type="paid_leave" data-code="<%= paidLeaveDefinition.code %>" data-name="<%= paidLeaveDefinition.name %>"><%= paidLeaveDefinition.code %> — <%= paidLeaveDefinition.name %></option>
-                                <% } %>
-                                <% if (publicHolidayDefinition && Number(values.joursFeries || 0) <= 0) { %>
-                                    <option value="public_holiday_days" data-type="public_holiday" data-code="<%= publicHolidayDefinition.code %>" data-name="<%= publicHolidayDefinition.name %>"><%= publicHolidayDefinition.code %> — <%= publicHolidayDefinition.name %></option>
-                                <% } %>
-                                <% (taxableRubriques || []).filter(row => row.active !== false && !isPaidLeaveRubrique(row) && !String(row.calculationKey || '').startsWith('overtime_')).forEach(row => { %>
-                                    <option value="<%= row.id %>" data-code="<%= row.code %>" data-name="<%= row.name %>"><%= row.code %> — <%= row.name %></option>
-                                <% }); %>
-                            </select>
-                        </label>
-                        <label>
-                            <span id="other-rubrique-value-label">Montant en DH</span>
-                            <input id="other-rubrique-amount-input" type="number" min="0" step="0.01" placeholder="Optionnel">
-                        </label>
-                    </div>
-                    <div class="prime-dialog-actions">
-                        <button type="button" id="other-rubrique-dialog-cancel">Annuler</button>
-                        <button class="confirm" value="add" type="submit">Ajouter</button>
-                    </div>
-                </form>
-            </dialog>
-
         <% } %>
 
         <dialog class="prime-dialog" id="indemnity-dialog">
             <form method="dialog" id="indemnity-dialog-form" class="prime-dialog-content">
                 <h2>Ajouter une indemnité non imposable</h2>
+                <p>Choisissez une indemnité du catalogue ou saisissez-en une nouvelle.</p>
                 <% if (canManageIndemnity && excludedNimpLines.length) { %>
                     <div class="restore-indemnity-list">
                         <strong>Remettre une indemnité supprimée</strong>
@@ -1520,6 +1535,15 @@
                     </div>
                 <% } %>
                 <div class="prime-dialog-fields">
+                    <label>
+                        Indemnité existante
+                        <select id="indemnity-catalogue-select" class="form-input">
+                            <option value="">Nouvelle indemnité</option>
+                            <% (availableIndemnites || []).forEach(indemnity => { %>
+                                <option value="<%= indemnity.id %>" data-code="<%= indemnity.code %>" data-name="<%= indemnity.name %>" data-amount="<%= indemnity.defaultAmount %>"><%= indemnity.code %> — <%= indemnity.name %></option>
+                            <% }); %>
+                        </select>
+                    </label>
                     <label>
                         Code rubrique
                         <input id="indemnity-code-input" required placeholder="Ex. 2001">
@@ -1535,6 +1559,7 @@
                 </div>
                 <div class="prime-dialog-actions">
                     <button type="button" id="indemnity-dialog-cancel">Annuler</button>
+                    <button type="button" id="indemnity-save-catalogue">Ajouter au catalogue</button>
                     <button class="confirm" value="add" type="submit">Ajouter l'indemnité</button>
                 </div>
             </form>

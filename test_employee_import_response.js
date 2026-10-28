@@ -34,7 +34,6 @@ const employee = {
     dateAnciennete: null,
     dateSortie: null,
     fonction: null,
-    codeService: null,
     statut: "TITULAIRE",
     natureEmploi: "PERMANENT",
     contratDateDebut: null,

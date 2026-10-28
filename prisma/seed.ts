@@ -70,14 +70,14 @@ async function main() {
     where: { companyId_name: { companyId: company2.id, name: "Titulaire" } },
     update: {}, create: { companyId: company2.id, name: "Titulaire" },
   });
-  const seedFunction = async (companyId: number, name: string, code: string) => prisma.employeeFunction.upsert({
-    where: { companyId_name: { companyId, name } }, update: { code }, create: { companyId, name, code },
+  const seedFunction = async (companyId: number, name: string) => prisma.employeeFunction.upsert({
+    where: { companyId_name: { companyId, name } }, update: {}, create: { companyId, name },
   });
-  const functionEngineer = await seedFunction(company1.id, "Ingénieur d'État", "ING-01");
-  const functionTechnician = await seedFunction(company1.id, "Technicien Supérieur", "TECH-01");
-  const functionTraining = await seedFunction(company2.id, "Conseillère en Formation", "FORM-01");
-  const functionDirector = await seedFunction(company1.id, "Directeur Technique", "DIR-01");
-  const functionDeveloper = await seedFunction(company1.id, "Développeuse Web", "IT-01");
+  const functionEngineer = await seedFunction(company1.id, "Ingénieur d'État");
+  const functionTechnician = await seedFunction(company1.id, "Technicien Supérieur");
+  const functionTraining = await seedFunction(company2.id, "Conseillère en Formation");
+  const functionDirector = await seedFunction(company1.id, "Directeur Technique");
+  const functionDeveloper = await seedFunction(company1.id, "Développeuse Web");
 
   // 2. Seed Reusable Non-Taxable Bonus Catalog per Company
   const bonusRendement = await prisma.bonus.upsert({
@@ -158,7 +158,6 @@ async function main() {
       sexe: "M",
       dateEmbauche: new Date("2019-06-15"),
       functionId: functionEngineer.id,
-      codeService: "ING-01",
       categoryId: categoryTitulaire1.id,
       natureEmploi: "PERMANENT",
       situationFam: "MARIE",
@@ -194,7 +193,6 @@ async function main() {
       sexe: "M",
       dateEmbauche: new Date("2021-02-10"),
       functionId: functionTechnician.id,
-      codeService: "TECH-01",
       categoryId: categoryTitulaire1.id,
       natureEmploi: "PERMANENT",
       situationFam: "MARIE",
@@ -229,7 +227,6 @@ async function main() {
       sexe: "F",
       dateEmbauche: new Date("2023-09-01"),
       functionId: functionTraining.id,
-      codeService: "FORM-01",
       categoryId: categoryTitulaire2.id,
       natureEmploi: "PERMANENT",
       situationFam: "MARIE",
@@ -259,7 +256,6 @@ async function main() {
       sexe: "M",
       dateEmbauche: new Date("2021-08-24"),
       functionId: functionDirector.id,
-      codeService: "DIR-01",
       categoryId: categoryTitulaire1.id,
       natureEmploi: "PERMANENT",
       situationFam: "MARIE",
@@ -297,7 +293,6 @@ async function main() {
       sexe: "F",
       dateEmbauche: new Date("2025-11-15"),
       functionId: functionDeveloper.id,
-      codeService: "IT-01",
       categoryId: categoryNonTitulaire1.id,
       natureEmploi: "STAGIAIRE",
       situationFam: "CELIBATAIRE",
