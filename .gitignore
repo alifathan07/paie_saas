@@ -3,3 +3,11 @@ node_modules
 .env
 
 /src/generated/prisma
+SECURITY_AUDIT.md
+ROUTE_MANIFEST.md
+BASELINE_REPORT.md
+structure.txt
+.env
+.env.test
+backup_*.sql
+*.dump
