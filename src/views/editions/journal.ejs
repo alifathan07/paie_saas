@@ -1,0 +1,28 @@
+<%- include('../partials/header') %>
+<div class="page-header editions-header">
+    <div class="header-title-area">
+        <h1 class="page-title">Journal mensuel de paie</h1>
+        <p class="page-subtitle"><%= journal.company.name %> · bulletins de <%= monthName %> <%= year %></p>
+    </div>
+</div>
+<% if (error) { %><div class="bulk-summary editions-error" role="alert"><%= error %></div><% } %>
+<section class="edition-form-card">
+    <form method="GET" action="/editions/journal" class="bulletin-export-form">
+        <div class="bulletin-export-grid">
+            <label><span>Mois</span><select class="form-input" name="month"><% for (let m = 1; m <= 12; m++) { %><option value="<%= m %>" <%= m === month ? 'selected' : '' %>><%= monthNames[m] %></option><% } %></select></label>
+            <label><span>Année</span><input class="form-input" type="number" name="year" min="2020" max="2040" value="<%= year %>"></label>
+        </div>
+        <div class="edition-form-actions"><button class="btn-primary" type="submit">Afficher</button><a class="button secondary" href="/editions/journal/pdf?month=<%= month %>&year=<%= year %>">Télécharger le journal PDF</a></div>
+    </form>
+</section>
+<% if (journal.rows.length) { %>
+<section class="contribution-report">
+    <h2>JOURNAL DE PAIE <%= String(month).padStart(2, '0') %>/<%= String(year).slice(-2) %></h2>
+    <p>Total effectif : <strong><%= journal.totals.effectif %></strong></p>
+    <div class="contribution-table-wrap"><table class="contribution-table">
+        <thead><tr><th>MLE</th><th>NOM &amp; PRENOM</th><th>NB HR</th><th>JRS</th><th>BRUT</th><th>RETRAITE</th><th>BASE IR</th><th>IR</th><th>CNSS</th><th>MUTUEL.</th><th>NET</th></tr></thead>
+        <tbody><% journal.rows.forEach(row => { %><tr><td><%= row.matricule %></td><td><%= row.nomPrenom %></td><td><%= row.nbHr === '' ? '' : fmt(row.nbHr) %></td><td><%= fmt(row.jours) %></td><td><%= fmt(row.brut) %></td><td><%= fmt(row.retraite) %></td><td><%= fmt(row.baseIr) %></td><td><%= fmt(row.ir) %></td><td><%= fmt(row.cnss) %></td><td><%= fmt(row.mutuel) %></td><td><%= fmt(row.net) %></td></tr><% }); %><tr class="contribution-total"><th colspan="2">TOTAL</th><th><%= fmt(journal.totals.nbHr) %></th><th><%= fmt(journal.totals.jours) %></th><th><%= fmt(journal.totals.brut) %></th><th><%= fmt(journal.totals.retraite) %></th><th><%= fmt(journal.totals.baseIr) %></th><th><%= fmt(journal.totals.ir) %></th><th><%= fmt(journal.totals.cnss) %></th><th><%= fmt(journal.totals.mutuel) %></th><th><%= fmt(journal.totals.net) %></th></tr></tbody>
+    </table></div>
+</section>
+<% } %>
+<%- include('../partials/footer') %>

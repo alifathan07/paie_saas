@@ -1225,15 +1225,12 @@ select.form-input {
 
 /* --- Tables --- */
 .data-table-wrapper {
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.9), rgba(240, 246, 252, 0.75));
-  backdrop-filter: blur(14px) saturate(150%);
-  border: 1px solid var(--color-border-soft);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.8) inset,
-    0 12px 30px -10px rgba(40, 70, 110, 0.35),
-    0 2px 6px rgba(40, 70, 110, 0.15);
+  background: #fff;
+  border: 1px solid #aeb9c3;
+  border-radius: 4px;
+  overflow-x: auto;
+  overflow-y: visible;
+  box-shadow: none;
 }
 
 .data-table {
@@ -1243,23 +1240,25 @@ select.form-input {
 }
 
 .data-table thead {
-  background-image: linear-gradient(to bottom, #e6eef7, #d3e0ee);
-  border-bottom: 1px solid var(--color-border);
+  background: #eef2f5;
+  border-bottom: 2px solid #8f9eaa;
 }
 
 .data-table th {
-  padding: 12px 16px;
+  padding: 10px 12px;
+  border-right: 1px solid #b9c4cc;
   text-align: left;
   font-size: var(--font-size-caption-lg);
   font-weight: 600;
   color: var(--color-text-muted);
   white-space: nowrap;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+  text-shadow: none;
 }
 
 .data-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(185, 203, 222, 0.6);
+  padding: 10px 12px;
+  border-right: 1px solid #d0d8de;
+  border-bottom: 1px solid #b9c4cc;
   color: var(--color-text);
   vertical-align: middle;
 }
@@ -1269,7 +1268,7 @@ select.form-input {
 }
 
 .data-table tbody tr:hover {
-  background: rgba(47, 127, 214, 0.08);
+  background: #f7fafc;
 }
 
 .table-empty {
@@ -4073,6 +4072,62 @@ select.form-input {
 .main-wrapper {
   transition: width .2s ease, margin-left .2s ease;
 }
+
+.bulletins-scrollbar {
+  height: 18px;
+  margin: 0 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid #b8c8d5;
+  border-radius: 999px;
+  background: #e8eef3;
+  box-shadow: inset 0 1px 2px rgba(23, 32, 42, .12);
+  cursor: ew-resize;
+}
+.bulletins-scrollbar > div { height: 1px; }
+.bulletins-scrollbar::-webkit-scrollbar { height: 14px; }
+.bulletins-scrollbar::-webkit-scrollbar-thumb { border-radius: 999px; background: #176b5b; border: 3px solid #e8eef3; }
+.bulletins-scrollbar::-webkit-scrollbar-track { background: transparent; }
+
+#bulletins-table { min-width: 1600px; }
+
+.bulletin-component-button { display: inline-block; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+.bulletin-components-details { min-width: 160px; }
+.bulletin-components-details summary { display: inline-block; cursor: pointer; color: #fff; background: #176b5b; border-radius: 5px; padding: 7px 12px; font-weight: 700; list-style: none; }
+.bulletin-components-details summary::-webkit-details-marker { display: none; }
+.bulletin-components-details[open] summary { background: #0f5145; }
+.bulletin-components-scroll { width: min(1100px, calc(100vw - 48px)); max-height: 560px; overflow: auto; margin-top: 10px; padding: 14px; border: 1px solid #cbd6df; border-radius: 8px; background: #f8fafc; box-shadow: 0 6px 18px rgba(23, 32, 42, .12); }
+.bulletin-components-table { width: 100%; min-width: 920px; border-collapse: collapse; font-size: 13px; white-space: nowrap; background: #fff; }
+.bulletin-components-table th, .bulletin-components-table td { padding: 7px 9px; border-bottom: 1px solid #e1e7ec; text-align: right; }
+.bulletin-components-table th:nth-child(1), .bulletin-components-table th:nth-child(2), .bulletin-components-table td:nth-child(1), .bulletin-components-table td:nth-child(2) { text-align: left; }
+.bulletin-components-table th { background: #eef3f7; color: #52606d; position: sticky; top: 0; }
+.bulletin-component-input { width: 105px; box-sizing: border-box; padding: 5px 6px; border: 1px solid #aeb9c3; border-radius: 4px; text-align: right; }
+.bulletin-components-save { margin-top: 10px; padding: 7px 13px; font-size: 12px; }
+.rubrique-column-header { min-width: 125px; max-width: 170px; white-space: normal !important; line-height: 1.25; }
+.rubrique-column-cell { min-width: 125px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.data-table th.net-column, .data-table td.net-column,
+.data-table th.actions-column, .data-table td.actions-column { position: sticky; z-index: 3; background: #fff; box-shadow: -2px 0 0 #aeb9c3; }
+.data-table th.net-column, .data-table td.net-column { right: 150px; min-width: 135px; }
+.data-table th.actions-column, .data-table td.actions-column { right: 0; min-width: 150px; }
+.data-table thead th.net-column, .data-table thead th.actions-column { z-index: 5; background: #eef2f5; }
+.data-table tbody tr:hover td.net-column, .data-table tbody tr:hover td.actions-column { background: #f7fafc; }
+.bulletin-components-form { display: inline; }
+.bulletin-components-form .bulletin-components-save { margin-top: 0; }
+.arrondi-gain { color: #18794e; font-weight: 700; }
+.arrondi-retenue { color: #c62828; font-weight: 700; }
+.contribution-report { margin: 24px 0; padding: 22px; background: #fff; border: 1px solid #aeb9c3; border-radius: 4px; }
+.contribution-report h2 { margin: 0 0 10px; text-align: center; font-size: 18px; letter-spacing: .12em; }
+.contribution-table-wrap { overflow-x: auto; }
+.contribution-table, .contribution-summary-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.contribution-table th, .contribution-table td, .contribution-summary-table th, .contribution-summary-table td { padding: 8px 7px; border: 1px solid #9eabb4; white-space: nowrap; }
+.contribution-table th, .contribution-summary-table th { background: #eef2f5; text-align: center; font-weight: 700; }
+.contribution-table td:nth-child(n+5), .contribution-summary-table td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.contribution-total th, .contribution-total td { background: #e3e9ed; font-weight: 700; }
+.contribution-summary-table { max-width: 760px; margin: 16px auto; }
+.contribution-totals { max-width: 760px; margin: 24px auto 0; line-height: 1.9; text-align: right; }
+.contribution-summary { display: inline-block; width: calc(50% - 14px); margin-right: 20px; vertical-align: top; box-sizing: border-box; }
+.contribution-summary:nth-of-type(even) { margin-right: 0; }
+@media (max-width: 900px) { .contribution-summary { display: block; width: 100%; margin-right: 0; } }
 
 .sidebar {
   position: fixed;

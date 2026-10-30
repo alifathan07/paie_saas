@@ -122,17 +122,21 @@
 </div>
 
 <!-- Employees payroll table -->
-<div class="data-table-wrapper">
+<div class="bulletins-scrollbar" id="bulletins-scrollbar" aria-label="Faire défiler les rubriques horizontalement" tabindex="0"><div></div></div>
+<div class="data-table-wrapper" id="bulletins-table-wrapper">
     <table class="data-table" id="bulletins-table">
         <thead>
             <tr>
                 <th>Salarié</th>
                 <th>Salaire de base</th>
                 <th>Brut imposable</th>
+                <% (rubriqueColumns || []).forEach(column => { %>
+                    <th class="rubrique-column-header"><%= ['CNSS', 'AMO', 'CIMR'].includes(column.label) ? 'Retenue · ' : '' %><%= column.label %></th>
+                <% }); %>
                 <th>Temps travaillé</th>
                 <th>Statut bulletin</th>
-                <th>Net à payer</th>
-                <th>Actions</th>
+                <th class="net-column">Net à payer</th>
+                <th class="actions-column">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -155,6 +159,9 @@
                     <td data-payroll-sbi>
                         <%= emp.bulletin ? fmt(emp.bulletin.sbi) + ' DH' : '—' %>
                     </td>
+                    <% (rubriqueColumns || []).forEach(column => { const component = (emp.bulletinComponents || []).find(item => `${item.code}|${item.label}` === column.key); %>
+                        <td class="rubrique-column-cell" onclick="event.stopPropagation();"><% if (component?.label === 'ARRONDI') { %><% if (component.gains !== null) { %><span class="arrondi-gain">Gain <%= fmt(component.gains) %></span><% } else if (component.retenues !== null) { %><span class="arrondi-retenue">Retenue <%= fmt(component.retenues) %></span><% } else { %>—<% } %><% } else if (component?.kind === 'prime' || component?.kind === 'nimp') { %><input form="bulletin-form-<%= emp.id %>" class="bulletin-component-input" type="number" name="<%= component.kind === 'prime' ? 'primesAmounts' : 'nimpAmounts' %>" value="<%= component.gains ?? 0 %>" min="0" step="0.01"><input form="bulletin-form-<%= emp.id %>" type="hidden" name="<%= component.kind === 'prime' ? 'primesLabels' : 'nimpLabels' %>" value="<%= component.label %>"><% } else if (['salary', 'paidLeave', 'holiday', 'overtime'].includes(component?.kind)) { %><input form="bulletin-form-<%= emp.id %>" class="bulletin-component-input" type="number" name="<%= component.kind === 'salary' ? (emp.workingTimeMode === 'HOURS' ? 'workedHours' : 'workedDays') : component.kind === 'paidLeave' ? 'paidLeaveDays' : component.kind === 'holiday' ? 'joursFeries' : component.label.includes('25%') ? 'heuresSup25' : component.label.includes('50%') ? 'heuresSup50' : 'heuresSup100' %>" value="<%= component.base ?? 0 %>" min="0" step="0.01"><% } else { %><%= !component ? '—' : component.gains !== null ? fmt(component.gains) : component.retenues !== null ? fmt(component.retenues) : component.base !== null ? fmt(component.base) : '—' %><% } %></td>
+                    <% }); %>
                     <td>
                         <% if (emp.bulletin && emp.actif && !emp.blocageSaisiePaie && ['draft', 'generated'].includes(emp.bulletin.status)) { %>
                             <form class="worked-days-form" action="/bulletins/<%= emp.id %>/worked-days" method="POST">
@@ -198,7 +205,7 @@
                         <% } %>
                     </td>
 
-                    <td data-payroll-net style="font-variant-numeric: tabular-nums;">
+                    <td class="net-column" data-payroll-net style="font-variant-numeric: tabular-nums;">
                         <% if (emp.bulletin && emp.bulletin.netAPayer !== undefined && emp.bulletinStatus !== 'error') { %>
                             <strong><%= fmt(emp.bulletin.netAPayer) %> DH</strong>
                         <% } else { %>
@@ -206,8 +213,12 @@
                         <% } %>
                     </td>
 
-                    <td onclick="event.stopPropagation();">
+                    <td class="actions-column" onclick="event.stopPropagation();">
                         <div class="table-actions">
+                            <form id="bulletin-form-<%= emp.id %>" method="POST" action="/bulletins/<%= emp.id %>/generate" class="bulletin-components-form">
+                                <input type="hidden" name="month" value="<%= month %>"><input type="hidden" name="year" value="<%= year %>">
+                                <button type="submit" class="btn-primary bulletin-components-save" style="padding: 7px 12px; font-size: 12px;">Enregistrer</button>
+                            </form>
                             <% if (!emp.bulletin && emp.actif || emp.bulletinStatus === 'error' && emp.actif) { %>
                                 <form method="POST" action="/bulletins/<%= emp.id %>/generate" style="display:inline;">
                                     <input type="hidden" name="month" value="<%= month %>">

@@ -5,6 +5,9 @@ import { resolveCompanyId } from "../lib/company.js";
 import { generateBulletinPdf } from "../pdf/bulletinPdf.js";
 import { mapPayslipToViewModel, getBulletinPdfCumulative } from "../controllers/bulletins.controller.js";
 import { getRubriqueMaps } from "../services/rubrique.service.js";
+import { getMonthlyContributionReports } from "../services/monthlyContributionReports.service.js";
+import { getMonthlyPayrollJournal } from "../services/monthlyPayrollJournal.service.js";
+import { generateAmoReportPdf, generateContributionReportsPdf, generatePayrollJournalPdf } from "../pdf/contributionReportsPdf.js";
 
 export const editions = express.Router();
 
@@ -30,6 +33,84 @@ editions.get("/", (req, res) => {
         selectedReport,
     });
 });
+
+const contributionError = error => ({
+    COMPANY_CNSS_NUMBER_MISSING: "Le numéro d'affiliation CNSS de l'entreprise n'est pas renseigné.",
+    NO_MONTHLY_PAYROLL: "Aucun bulletin généré, validé ou clôturé pour cette période.",
+}[error.message] || "Impossible de générer les états CNSS/AMO.");
+
+const journalError = error => ({
+    NO_MONTHLY_PAYROLL: "Aucun bulletin généré, validé ou clôturé pour cette période.",
+}[error.message] || "Impossible de générer le journal de paie.");
+
+async function renderPayrollJournalPage(req, res) {
+    const month = Number(req.query.month) || new Date().getMonth() + 1;
+    const year = Number(req.query.year) || new Date().getFullYear();
+    const fmt = value => Number(value || 0).toLocaleString("fr-MA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    try {
+        const journal = await getMonthlyPayrollJournal(await resolveCompanyId(req), month, year);
+        return res.render("editions/journal", { title: "Journal de paie", currentPage: "editions", user: req.session.user, journal, month, year, monthName: MONTH_NAMES_FR[month], monthNames: MONTH_NAMES_FR, fmt, error: null });
+    } catch (error) {
+        const company = await prisma.company.findUnique({ where: { id: await resolveCompanyId(req) } });
+        return res.render("editions/journal", { title: "Journal de paie", currentPage: "editions", user: req.session.user, journal: { company: company || { name: "Entreprise" }, rows: [], totals: {} }, month, year, monthName: MONTH_NAMES_FR[month], monthNames: MONTH_NAMES_FR, fmt, error: journalError(error) });
+    }
+}
+
+editions.get("/journal", renderPayrollJournalPage);
+
+editions.get("/journal/pdf", async (req, res) => {
+    try {
+        const journal = await getMonthlyPayrollJournal(await resolveCompanyId(req), Number(req.query.month), Number(req.query.year));
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="JOURNAL_DE_PAIE_${journal.month}-${journal.year}.pdf"`);
+        return generatePayrollJournalPdf(journal, res);
+    } catch (error) {
+        res.status(error.message === "NO_MONTHLY_PAYROLL" ? 404 : 400).send(journalError(error));
+    }
+});
+
+async function renderContributionPage(req, res, reportType = "all") {
+    const month = Number(req.query.month) || new Date().getMonth() + 1;
+    const year = Number(req.query.year) || new Date().getFullYear();
+    const fmt = value => Number(value || 0).toLocaleString("fr-MA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    try {
+        const companyId = await resolveCompanyId(req);
+        const report = await getMonthlyContributionReports(companyId, month, year);
+        return res.render("editions/contributions", { title: reportType === "cnss" ? "État CNSS" : reportType === "amo" ? "État AMO" : "États CNSS / AMO", currentPage: "editions", user: req.session.user, report, reportType, month, year, monthName: MONTH_NAMES_FR[month], monthNames: MONTH_NAMES_FR, fmt, error: null });
+    } catch (error) {
+        const company = await prisma.company.findUnique({ where: { id: await resolveCompanyId(req) } });
+        return res.render("editions/contributions", { title: reportType === "cnss" ? "État CNSS" : reportType === "amo" ? "État AMO" : "États CNSS / AMO", currentPage: "editions", user: req.session.user, report: { company: company || { name: "Entreprise", numeroAffiliationCnss: "—" }, rows: [], cnssTotals: {}, amoTotals: {}, transfer: {} }, reportType, month, year, monthName: MONTH_NAMES_FR[month], monthNames: MONTH_NAMES_FR, fmt, error: contributionError(error) });
+    }
+}
+
+editions.get("/contributions", (req, res) => renderContributionPage(req, res));
+editions.get("/cnss", (req, res) => renderContributionPage(req, res, "cnss"));
+editions.get("/amo", (req, res) => renderContributionPage(req, res, "amo"));
+
+editions.get("/contributions/pdf", async (req, res) => {
+    try {
+        const report = await getMonthlyContributionReports(await resolveCompanyId(req), Number(req.query.month), Number(req.query.year));
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", "attachment; filename=\"ETAT_CNSS_" + report.month + "-" + report.year + ".pdf\"");
+        return generateContributionReportsPdf(report, res);
+    } catch (error) {
+        res.status(error.message === "NO_MONTHLY_PAYROLL" ? 404 : 400).send(contributionError(error));
+    }
+});
+
+editions.get("/contributions/amo/pdf", async (req, res) => {
+    try {
+        const report = await getMonthlyContributionReports(await resolveCompanyId(req), Number(req.query.month), Number(req.query.year));
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", "attachment; filename=\"ETAT_AMO_" + report.month + "-" + report.year + ".pdf\"");
+        return generateAmoReportPdf(report, res);
+    } catch (error) {
+        res.status(error.message === "NO_MONTHLY_PAYROLL" ? 404 : 400).send(contributionError(error));
+    }
+});
+
+editions.get("/cnss/pdf", (req, res) => res.redirect(`/editions/contributions/pdf?month=${encodeURIComponent(req.query.month || "")}&year=${encodeURIComponent(req.query.year || "")}`));
+editions.get("/amo/pdf", (req, res) => res.redirect(`/editions/contributions/amo/pdf?month=${encodeURIComponent(req.query.month || "")}&year=${encodeURIComponent(req.query.year || "")}`));
 
 async function getMatricules(companyId) {
     const employees = await prisma.employee.findMany({

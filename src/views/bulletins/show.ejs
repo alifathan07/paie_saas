@@ -1090,8 +1090,12 @@
         <input type="hidden" name="paidLeaveDays" value="<%= values.paidLeaveDays ?? 0 %>" id="paid-leave-days-value">
         <input type="hidden" name="joursFeries" value="<%= values.joursFeries ?? 0 %>" id="jours-feries-value">
 
+        <span id="primes"></span>
         <div class="print-actions">
             <a class="print-button return-action" href="/bulletins">Retour</a>
+            <% if (bulletin) { %>
+                <a class="print-button bulletin-action primary" href="/bulletins/<%= emp.id %>/pdf?month=<%= month %>&year=<%= year %>">Télécharger le PDF</a>
+            <% } %>
             <% if (bulletin && !payrollBlocked && ['draft', 'generated'].includes(bulletinStatus)) { %>
                 <button class="print-button bulletin-action primary" type="submit" formaction="/bulletins/<%= emp.id %>/validate">Valider</button>
             <% } else if (bulletinStatus === 'validated') { %>
@@ -1171,6 +1175,7 @@
                 <button type="button" class="add-prime" id="add-indemnity">+ Indemnité non imposable</button>
             <% } %>
         </div>
+        <span id="indemnites"></span>
 
         <table class="pay-table">
             <thead>

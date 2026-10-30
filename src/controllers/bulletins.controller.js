@@ -101,6 +101,70 @@ function fmt(amount) {
     });
 }
 
+function listBulletinComponents(values, rubriqueMaps) {
+    const v = values || {};
+    const codes = rubriqueMaps.codes || {};
+    const money = value => value === null || value === undefined ? null : Number(value || 0);
+    const row = (code, label, base = null, rate = null, gains = null, retenues = null, patronal = null) => ({
+        code: code || '', label, base: money(base), rate: rate === null || rate === undefined ? null : Number(rate),
+        gains: money(gains), retenues: money(retenues), patronal: money(patronal),
+    });
+    const primes = v.variablePrimes || [];
+    const primeRows = (rubriqueMaps.imposableRows || [])
+        .filter(definition => definition.active !== false && !String(definition.calculationKey || '').startsWith('overtime_')
+            && !['paid_leave', 'paid_leave_days'].includes(String(definition.calculationKey || '')))
+        .map(definition => {
+            const prime = primes.find(item => Number(item.rubriqueImposableId) === Number(definition.id)
+                || String(item.label || '').trim().toLowerCase() === String(definition.name).trim().toLowerCase());
+            return row(definition.code, definition.name, null, null, prime?.amount || 0);
+        });
+    const cataloguePrimeLabels = new Set((rubriqueMaps.imposableRows || [])
+        .map(definition => String(definition.name || '').trim().toLowerCase()));
+    const manualPrimeRows = primes
+        .filter(item => !cataloguePrimeLabels.has(String(item.label || '').trim().toLowerCase()))
+        .map(item => row(item.code, item.label, null, null, item.amount));
+    const standardHours = Number(v.standardMonthlyHours || 191);
+    const baseSalary = Number(v.baseSalary || 0);
+    const overtime = [
+        ['overtime_25', v.heuresSup25, 1.25, 'Heures supplémentaires 25%'],
+        ['overtime_50', v.heuresSup50, 1.50, 'Heures supplémentaires 50%'],
+        ['overtime_100', v.heuresSup100, 2, 'Heures supplémentaires 100%'],
+    ].map(([key, hours, multiplier, fallback]) => {
+        const definition = (rubriqueMaps.imposableRows || []).find(item => item.calculationKey === key);
+        const amount = Number((Number(hours || 0) * baseSalary / standardHours * multiplier).toFixed(2));
+        return row(definition?.code, definition?.name || fallback, hours || 0, null, amount);
+    });
+    const components = [
+        row(codes['Salaire de base'], 'Salaire de base', v.workingTimeMode === 'HOURS' ? v.workedHours : v.workedDays, null, v.baseSalary),
+        row(codes["Prime d'ancienneté"], "Prime d'ancienneté", v.baseSalary, v.ancienneteRate, v.primeAnciennete),
+        ...primeRows,
+        ...manualPrimeRows,
+        row(codes['Nombre jours congé payé'], 'Nombre jours congé payé', v.paidLeaveDays, null, v.paidLeaveAmount),
+        row(codes['Nombre jours fériés'], 'Nombre jours fériés', v.joursFeries, null, v.joursFeriesAmount),
+        ...overtime,
+        row(codes['Salaire brut imposable'], 'SALAIRE BRUT IMPOSABLE', null, null, v.sbi),
+        row(codes.CNSS, 'CNSS', Math.min(Number(v.sbi || 0), 6000), v.cnssRate, null, v.cnss, v.cnssPatronale),
+        row(codes.AMO, 'AMO', v.sbi, v.amoRate, null, v.amo, v.amoPatronale),
+        row(codes.CIMR, 'CIMR', v.sbi, v.cimrRate, null, v.cimr),
+        row(codes['Frais professionnels'], 'Frais professionnels (déduction fiscale)', v.sbi, v.fraisProRate, null, v.fraisPro),
+        row(codes['Salaire net imposable'], 'SNI / IR', v.sni, v.irTaux, null, v.irNet),
+        ...(v.retenus || []).map(item => row(item.code, item.label, null, null, null, item.amount)),
+        row(codes.Arrondi, 'ARRONDI', null, null, Number(v.arrondi || 0) > 0 ? v.arrondi : null, Number(v.arrondi || 0) < 0 ? Math.abs(v.arrondi) : null),
+        ...(v.nimpLines || []).map(item => row(item.code, item.label, null, null, item.amount)),
+    ];
+    const primeLabels = new Set([...primeRows, ...manualPrimeRows].map(item => item.label));
+    const nimpLabels = new Set((v.nimpLines || []).map(item => item.label));
+    return components.map(item => ({
+        ...item,
+        kind: primeLabels.has(item.label) ? 'prime'
+            : nimpLabels.has(item.label) ? 'nimp'
+            : item.label === 'Nombre jours congé payé' ? 'paidLeave'
+                : item.label === 'Nombre jours fériés' ? 'holiday'
+                    : item.label.startsWith('Heures supplémentaires') ? 'overtime'
+                        : item.label === 'Salaire de base' ? 'salary' : 'display',
+    }));
+}
+
 function currentYear() { return new Date().getFullYear(); }
 function currentMonth() { return new Date().getMonth() + 1; }
 
@@ -666,6 +730,7 @@ export const listBulletins = async (req, res) => {
                 }
             }
         });
+        const rubriqueMaps = await getRubriqueMaps(companyId);
 
         const employees = dbEmployees.map(emp => {
             const payslip = emp.payslips[0] || null;
@@ -703,6 +768,7 @@ export const listBulletins = async (req, res) => {
                 standardMonthlyHours: Number(emp.company?.standardMonthlyHours || payslip?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS),
                 maskedForPeriod: emp.bulletinMasks.length > 0,
                 bulletin: payslip ? mapPayslipToViewModel(payslip) : null,
+                bulletinComponents: listBulletinComponents(payslip ? mapPayslipToViewModel(payslip) : null, rubriqueMaps),
                 bulletinStatus: status,
                 variablesEntered,
             };
@@ -711,6 +777,14 @@ export const listBulletins = async (req, res) => {
             .filter(emp => !chantierId || Number(emp.chantierId) === chantierId)
             .filter(emp => netMin === null || (emp.bulletin && Number(emp.bulletin.netAPayer) >= netMin))
             .filter(emp => netMax === null || (emp.bulletin && Number(emp.bulletin.netAPayer) <= netMax));
+        const rubriqueColumns = [];
+        const rubriqueColumnKeys = new Set();
+        employees.forEach(employee => (employee.bulletinComponents || []).forEach(component => {
+            const key = `${component.code}|${component.label}`;
+            if (rubriqueColumnKeys.has(key)) return;
+            rubriqueColumnKeys.add(key);
+            rubriqueColumns.push({ key, code: component.code, label: component.label, kind: component.kind });
+        }));
 
         const categories = await prisma.employeeCategory.findMany({
             where: { companyId },
@@ -739,6 +813,7 @@ export const listBulletins = async (req, res) => {
             currentPage: "bulletins",
             user: req.session.user,
             employees,
+            rubriqueColumns,
             month,
             year,
             monthName: MONTH_NAMES_FR[month],

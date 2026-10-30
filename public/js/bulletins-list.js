@@ -1,4 +1,26 @@
 (() => {
+    const tableWrapper = document.querySelector('#bulletins-table-wrapper');
+    const topScrollbar = document.querySelector('#bulletins-scrollbar');
+    const bulletinTable = document.querySelector('#bulletins-table');
+    if (tableWrapper && topScrollbar && bulletinTable) {
+        const scrollbarContent = topScrollbar.firstElementChild;
+        const syncWidth = () => { scrollbarContent.style.width = `${bulletinTable.scrollWidth}px`; };
+        let syncing = false;
+        topScrollbar.addEventListener('scroll', () => {
+            if (syncing) return;
+            syncing = true;
+            tableWrapper.scrollLeft = topScrollbar.scrollLeft;
+            syncing = false;
+        });
+        tableWrapper.addEventListener('scroll', () => {
+            if (syncing) return;
+            syncing = true;
+            topScrollbar.scrollLeft = tableWrapper.scrollLeft;
+            syncing = false;
+        });
+        new ResizeObserver(syncWidth).observe(bulletinTable);
+        syncWidth();
+    }
     const maskDialog = document.querySelector('#mask-dialog');
     const maskForm = document.querySelector('#mask-dialog-form');
     const maskMessage = document.querySelector('#mask-dialog-message');
@@ -29,7 +51,7 @@
     });
     document.querySelectorAll('.bulletin-row').forEach(row => {
         row.addEventListener('click', event => {
-            if (event.target.closest('a, button, input, form, select')) return;
+            if (event.target.closest('a, button, input, form, select, details, summary')) return;
             window.location.href = row.dataset.href;
         });
         const form = row.querySelector('.worked-days-form');
@@ -120,6 +142,57 @@
         form.addEventListener('submit', event => {
             event.preventDefault();
             if (form.reportValidity()) saveDays();
+        });
+    });
+    const listMoney = value => `${Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DH`;
+    document.querySelectorAll('.bulletin-components-form').forEach(form => {
+        let liveTimer;
+        const formControls = () => document.querySelectorAll(`[form="${form.id}"]`);
+        const refreshLiveTotals = async () => {
+            const body = new URLSearchParams(new FormData(form));
+            const employeeId = form.id.replace('bulletin-form-', '');
+            const response = await fetch(`/bulletins/${employeeId}/calculate?${body}`, { headers: { Accept: 'application/json' } });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Calcul impossible.');
+            const row = document.querySelector(`[data-href^="/bulletins/${employeeId}"]`);
+            row?.querySelector('[data-payroll-sbi]')?.replaceChildren(document.createTextNode(`${listMoney(result.sbi)}`));
+            const netCell = row?.querySelector('[data-payroll-net]');
+            if (netCell) {
+                netCell.replaceChildren(document.createElement('strong'));
+                netCell.querySelector('strong').textContent = listMoney(result.netAPayer);
+            }
+        };
+        formControls().forEach(input => input.addEventListener('input', () => {
+            clearTimeout(liveTimer);
+            liveTimer = setTimeout(() => refreshLiveTotals().catch(() => {}), 350);
+        }));
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            const button = form.querySelector('.bulletin-components-save');
+            const body = new URLSearchParams(new FormData(form));
+            button.disabled = true;
+            button.textContent = 'Enregistrement…';
+            try {
+                const saved = await fetch(form.action, { method: 'POST', headers: { Accept: 'application/json' }, body });
+                const savedResult = await saved.json();
+                if (!saved.ok || !savedResult.ok) throw new Error(savedResult.error || 'Impossible d’enregistrer le bulletin.');
+                const calculated = await fetch(`/bulletins/${form.action.split('/bulletins/')[1].split('/')[0]}/calculate?${body}`, { headers: { Accept: 'application/json' } });
+                const result = await calculated.json();
+                if (!calculated.ok || !result.ok) throw new Error(result.error || 'Impossible de recalculer le bulletin.');
+                const row = form.closest('tr.bulletin-row') || form.closest('details')?.closest('tr');
+                const parentRow = form.closest('tr')?.previousElementSibling || row;
+                const target = parentRow?.classList.contains('bulletin-row') ? parentRow : document.querySelector(`[data-href^="/bulletins/${form.action.split('/bulletins/')[1].split('/')[0]}"]`);
+                target?.querySelector('[data-payroll-sbi]')?.replaceChildren(document.createTextNode(`${listMoney(result.sbi)}`));
+                target?.querySelector('[data-payroll-net]')?.replaceChildren(document.createElement('strong'));
+                const netNode = target?.querySelector('[data-payroll-net] strong');
+                if (netNode) netNode.textContent = listMoney(result.netAPayer);
+                button.textContent = 'Enregistré';
+                setTimeout(() => { button.textContent = 'Enregistrer les modifications'; }, 1500);
+            } catch (error) {
+                button.textContent = error.message || 'Erreur';
+            } finally {
+                button.disabled = false;
+            }
         });
     });
 })();
