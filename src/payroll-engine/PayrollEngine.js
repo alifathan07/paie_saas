@@ -185,12 +185,16 @@ export const calculatePayroll = (employee, overrides = {}) => {
   const joursFeriesAmount = Number((baseFerie * joursFeries / PAYROLL_WORKED_DAYS).toFixed(2));
 
   // Monthly non-taxable indemnities belong to the selected payslip only.
+  // Their entered amount is the exact amount payable for this bulletin. It
+  // must not be prorated again; recurring employee indemnities above keep their
+  // normal working-time proration.
   if (Array.isArray(overrides.monthlyNimpLines)) {
     overrides.monthlyNimpLines.forEach(line => {
       const label = String(line.label || line.name || 'Indemnité').trim();
-      const baseAmount = Math.max(0, Number(line.baseAmount ?? line.amount) || 0);
-      if (label && baseAmount > 0 && !nimpLabels.has(label.toLowerCase())) {
-        nimpLines.push({ code: String(line.code || ''), label, baseAmount: Number(baseAmount.toFixed(2)), amount: prorateAmount(baseAmount, indemnityRatio) });
+      const enteredAmount = Math.max(0, Number(line.amount ?? line.baseAmount) || 0);
+      const baseAmount = Math.max(0, Number(line.baseAmount ?? enteredAmount) || 0);
+      if (label && enteredAmount > 0 && !nimpLabels.has(label.toLowerCase())) {
+        nimpLines.push({ code: String(line.code || ''), label, baseAmount: Number(baseAmount.toFixed(2)), amount: Number(enteredAmount.toFixed(2)) });
         nimpLabels.add(label.toLowerCase());
       }
     });

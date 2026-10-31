@@ -961,7 +961,10 @@
     const locked = payrollBlocked || Boolean(bulletin && ['validated', 'closed'].includes(bulletinStatus));
     const closed = bulletinStatus === 'closed';
     const canManageIndemnity = !payrollBlocked && (!bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus));
-    const canEditIndemnityFields = !payrollBlocked && (!bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus));
+    // Non-taxable indemnities are the one bulletin-level exception: their
+    // amount can be overridden on the current bulletin, even when the rest
+    // of the bulletin is locked.
+    const canEditIndemnityFields = !payrollBlocked;
     const statusLabel = {
         draft: 'Brouillon',
         generated: 'Brouillon',
@@ -1257,7 +1260,7 @@
                 <% }); %>
                 <tr class="prime-row paid-leave-row">
                     <td class="rubrique-code"><%= paidLeaveDefinition?.code || '' %></td>
-                    <td class="description"><%= paidLeaveDefinition?.name || 'Nombre jours congé payé' %></td>
+                    <td class="description">Congé payé</td>
                     <td class="num"><input class="live-input paid-leave-row-input" type="number" min="0" max="26" step="1" value="<%= values.paidLeaveDays ?? 0 %>" aria-label="Nombre entier de jours de congé payé" <%= locked ? 'disabled' : '' %>><small class="paid-leave-base">Base congé : <output data-result="baseConge"><%= fmt(values.baseConge ?? 0) %></output></small></td>
                     <td class="num">—</td>
                     <td class="num"><output data-result="paidLeaveAmount"><%= fmt(values.paidLeaveAmount ?? 0) %></output></td>
@@ -1266,7 +1269,7 @@
                 </tr>
                 <tr class="prime-row public-holiday-row">
                     <td class="rubrique-code"><%= publicHolidayDefinition?.code || rubriqueCodes['Nombre jours fériés'] || '' %></td>
-                    <td class="description"><%= publicHolidayDefinition?.name || 'Nombre jours fériés' %></td>
+                    <td class="description">Jours fériés</td>
                     <td class="num"><input class="live-input public-holiday-row-input" type="number" min="0" max="26" step="1" value="<%= values.joursFeries ?? 0 %>" aria-label="Nombre entier de jours fériés" <%= locked ? 'disabled' : '' %>><small class="paid-leave-base">Base férié : <output data-result="baseFerie"><%= fmt(values.baseFerie ?? 0) %></output></small></td>
                     <td class="num">—</td>
                     <td class="num"><output data-result="joursFeriesAmount"><%= fmt(values.joursFeriesAmount ?? 0) %></output></td>
@@ -1323,7 +1326,7 @@
                     </tr>
                 <% }); %>
                 <tr>
-                    <td class="rubrique-code"><%= rubriqueCodes['Frais professionnels'] || '' %></td><td class="description" title="Déduction utilisée pour calculer le revenu imposable.">Frais professionnels (déduction fiscale)</td>
+                    <td class="rubrique-code"><%= rubriqueCodes['Frais professionnels'] || '' %></td><td class="description" title="Déduction utilisée pour calculer le revenu imposable.">Frais professionnels</td>
                     <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
                     <td class="num" data-result="fraisProRate"><%= percent(values.fraisProRate) %></td>
                     <td class="num">—</td>
@@ -1332,7 +1335,7 @@
                 </tr>
 
                 <tr class="gross">
-                    <td class="rubrique-code"><%= rubriqueCodes['Salaire net imposable'] || '' %></td><td class="description">SNI / IR</td>
+                    <td class="rubrique-code"><%= rubriqueCodes['Salaire net imposable'] || '' %></td><td class="description">SNI</td>
                     <td class="num"><span data-result="sni"><%= fmt(values.sni) %></span></td>
                     <td class="num" data-result="irTaux"><%= percent(values.irTaux) %></td>
                     <td class="num">—</td>
@@ -1360,29 +1363,29 @@
                     <td class="num">—</td>
                 </tr>
 
-                <% nimpLines.forEach(line => { const baseAmount = Number(line.baseAmount ?? line.amount); %>
-                    <tr class="disabled-row fixed-indemnity-line monthly-indemnity-line" data-sticky="true">
+                <% nimpLines.forEach(line => { const payableAmount = Number(line.amount ?? 0); const maxAmount = Number(line.maxAmount ?? line.baseAmount ?? line.amount); %>
+                    <tr class="fixed-indemnity-line monthly-indemnity-line" data-sticky="true">
                         <td class="rubrique-code"><%= line.code || '' %></td><td class="description">
-                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= baseAmount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" <%= canEditIndemnityFields ? '' : 'disabled' %>>
+                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" readonly title="Le libellé d'une indemnité récurrente se modifie depuis la fiche employé.">
                         </td>
                         <td class="num">—</td>
                         <td class="num"><%= percent(representationRate(line)) %></td>
-                        <td class="num"><input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= baseAmount %>" type="number" min="0" step="0.01" value="<%= baseAmount %>" placeholder="Montant mensuel DH" <%= canEditIndemnityFields ? '' : 'disabled' %>><small class="nimp-payable">Payable : <span data-nimp-payable><%= money(line.amount) %></span></small></td>
+                        <td class="num"><input class="live-input nimp-amount-input" name="nimpAmounts" aria-label="Montant payable de <%= line.label %>" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" data-max-amount="<%= maxAmount %>" data-fiche-amount="<%= line.ficheAmount ?? '' %>" type="number" min="0.01" step="0.01" value="<%= payableAmount %>" placeholder="Montant payable DH"></td>
                         <td class="num">—</td>
                         <td class="num">
                             <% if (canManageIndemnity) { %><button type="button" class="remove-prime" aria-label="Supprimer l'indemnité">×</button><% } else { %>—<% } %>
                         </td>
                     </tr>
                 <% }); %>
-                <% monthlyNimpLines.forEach(line => { const baseAmount = Number(line.baseAmount ?? line.amount); %>
+                <% monthlyNimpLines.forEach(line => { const payableAmount = Number(line.amount ?? 0); const maxAmount = Number(line.maxAmount ?? line.baseAmount ?? line.amount); %>
                     <tr class="monthly-indemnity-row prime-row monthly-indemnity-line">
                         <td class="rubrique-code"><%= line.code || '' %></td><td class="description">
-                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= baseAmount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" <%= canEditIndemnityFields ? '' : 'disabled' %>>
+                            <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité">
                         </td>
                         <td class="num">—</td>
                         <td class="num">—</td>
                         <td class="num">
-                            <input class="live-input" name="nimpAmounts" data-original-label="<%= line.label %>" data-original-amount="<%= baseAmount %>" type="number" min="0" step="0.01" value="<%= baseAmount %>" placeholder="Montant mensuel DH" <%= canEditIndemnityFields ? '' : 'disabled' %>><small class="nimp-payable">Payable : <span data-nimp-payable><%= money(line.amount) %></span></small>
+                            <input class="live-input nimp-amount-input" name="nimpAmounts" aria-label="Montant payable de <%= line.label %>" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" data-max-amount="<%= maxAmount %>" data-fiche-amount="<%= line.ficheAmount ?? '' %>" type="number" min="0.01" step="0.01" value="<%= payableAmount %>" placeholder="Montant payable DH">
                         </td>
                         <td class="num">—</td>
                         <td class="num">
@@ -1574,6 +1577,6 @@
     <% } %>
 </div>
 <% } %></div>
-<script src="/js/show-bulletin.js"></script>
+<script src="/js/show-bulletin.js?v=indemnity-edit-4"></script>
 <%- include('../partials/footer') %>
                 

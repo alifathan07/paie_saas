@@ -4107,10 +4107,13 @@ select.form-input {
 .rubrique-column-cell { min-width: 125px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .data-table th.net-column, .data-table td.net-column,
 .data-table th.actions-column, .data-table td.actions-column { position: sticky; z-index: 3; background: #fff; box-shadow: -2px 0 0 #aeb9c3; }
-.data-table th.net-column, .data-table td.net-column { right: 150px; min-width: 135px; }
+.data-table th.net-column, .data-table td.net-column { right: 270px; min-width: 135px; }
 .data-table th.actions-column, .data-table td.actions-column { right: 0; min-width: 150px; }
+.data-table th.status-column, .data-table td.status-column { position: sticky; right: 150px; z-index: 3; min-width: 120px; background: #fff; box-shadow: -2px 0 0 #aeb9c3; }
 .data-table thead th.net-column, .data-table thead th.actions-column { z-index: 5; background: #eef2f5; }
+.data-table thead th.status-column { z-index: 5; background: #eef2f5; }
 .data-table tbody tr:hover td.net-column, .data-table tbody tr:hover td.actions-column { background: #f7fafc; }
+.data-table tbody tr:hover td.status-column { background: #f7fafc; }
 .bulletin-components-form { display: inline; }
 .bulletin-components-form .bulletin-components-save { margin-top: 0; }
 .arrondi-gain { color: #18794e; font-weight: 700; }

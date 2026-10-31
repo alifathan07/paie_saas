@@ -248,8 +248,13 @@ export async function setEmployeeIndemnite(employeeId, bonusId, companyId, enabl
 
     await prisma.$transaction(async tx => {
         if (enabled) {
+            const hasAmount = amount !== null && amount !== undefined && String(amount).trim() !== '';
             const value = Number(amount);
-            const normalizedAmount = Number.isFinite(value) && value >= 0 ? Number(value.toFixed(2)) : 0;
+            const fallback = Number(definition.defaultAmount);
+            const effectiveValue = hasAmount && Number.isFinite(value) ? value : fallback;
+            const normalizedAmount = Number.isFinite(effectiveValue) && effectiveValue >= 0
+                ? Number(effectiveValue.toFixed(2))
+                : 0;
             await tx.employeeBonus.upsert({
                 where: { employeeId_bonusId: { employeeId: empId, bonusId: bId } },
                 update: { amount: normalizedAmount },

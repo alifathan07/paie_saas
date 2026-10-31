@@ -47,7 +47,9 @@ function hasPaidLeaveConflict(workedDays, paidLeaveDays, standardMonthlyDays = P
     const worked = Number(workedDays);
     const leave = Number(paidLeaveDays);
     const holidays = Number(publicHolidayDays);
-    const maximum = Number(standardMonthlyDays) || PAYROLL_WORKED_DAYS;
+    // Leave/worked-day overlap is bounded by the payroll engine's monthly
+    // calendar basis, not by a company's prorating basis.
+    const maximum = PAYROLL_WORKED_DAYS;
     return Number.isFinite(worked) && Number.isFinite(leave) && Number.isFinite(holidays)
         && worked + leave + holidays > maximum;
 }
@@ -90,7 +92,14 @@ function rejectLockedBulletin(res, payslip, action = "modifier") {
     const message = payslip.status === BULLETIN_STATUS.CLOSED
         ? "Ce bulletin est clôturé. Seule une indemnité non imposable peut être modifiée."
         : "Ce bulletin est validé et verrouillé. Utilisez Retourner en brouillon avant de le modifier.";
-    res.status(403).send(`Impossible de ${action} : ${message}`);
+    const error = `Impossible de ${action} : ${message}`;
+    if (String(res.req?.headers?.accept || '').includes('application/json')) {
+        res.status(403).json({ ok: false, error });
+    } else {
+        const month = res.req?.body?.month || res.req?.query?.month || currentMonth();
+        const year = res.req?.body?.year || res.req?.query?.year || currentYear();
+        res.redirect(`/bulletins?month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}&bulletinError=${encodeURIComponent(error)}`);
+    }
     return true;
 }
 
@@ -101,7 +110,7 @@ function fmt(amount) {
     });
 }
 
-function listBulletinComponents(values, rubriqueMaps) {
+function listBulletinComponents(values, rubriqueMaps, recurringNimpLabels = new Set()) {
     const v = values || {};
     const codes = rubriqueMaps.codes || {};
     const money = value => value === null || value === undefined ? null : Number(value || 0);
@@ -110,15 +119,23 @@ function listBulletinComponents(values, rubriqueMaps) {
         gains: money(gains), retenues: money(retenues), patronal: money(patronal),
     });
     const primes = v.variablePrimes || [];
+    const isPaidLeaveDefinition = definition => {
+        const key = String(definition.calculationKey || '').trim().toLowerCase();
+        const name = String(definition.name || '').trim().toLowerCase();
+        return ['paid_leave', 'paid_leave_days'].includes(key)
+            || name === 'congé payé'
+            || name === 'nombre jours congé payé';
+    };
     const primeRows = (rubriqueMaps.imposableRows || [])
         .filter(definition => definition.active !== false && !String(definition.calculationKey || '').startsWith('overtime_')
-            && !['paid_leave', 'paid_leave_days'].includes(String(definition.calculationKey || '')))
+            && !isPaidLeaveDefinition(definition))
         .map(definition => {
             const prime = primes.find(item => Number(item.rubriqueImposableId) === Number(definition.id)
                 || String(item.label || '').trim().toLowerCase() === String(definition.name).trim().toLowerCase());
             return row(definition.code, definition.name, null, null, prime?.amount || 0);
         });
     const cataloguePrimeLabels = new Set((rubriqueMaps.imposableRows || [])
+        .filter(definition => !isPaidLeaveDefinition(definition))
         .map(definition => String(definition.name || '').trim().toLowerCase()));
     const manualPrimeRows = primes
         .filter(item => !cataloguePrimeLabels.has(String(item.label || '').trim().toLowerCase()))
@@ -139,18 +156,27 @@ function listBulletinComponents(values, rubriqueMaps) {
         row(codes["Prime d'ancienneté"], "Prime d'ancienneté", v.baseSalary, v.ancienneteRate, v.primeAnciennete),
         ...primeRows,
         ...manualPrimeRows,
-        row(codes['Nombre jours congé payé'], 'Nombre jours congé payé', v.paidLeaveDays, null, v.paidLeaveAmount),
-        row(codes['Nombre jours fériés'], 'Nombre jours fériés', v.joursFeries, null, v.joursFeriesAmount),
         ...overtime,
-        row(codes['Salaire brut imposable'], 'SALAIRE BRUT IMPOSABLE', null, null, v.sbi),
-        row(codes.CNSS, 'CNSS', Math.min(Number(v.sbi || 0), 6000), v.cnssRate, null, v.cnss, v.cnssPatronale),
+        row(codes['Nombre jours congé payé'], 'Congé payé', v.paidLeaveDays, null, v.paidLeaveAmount),
+        row(codes['Nombre jours fériés'], 'Jours fériés', v.joursFeries, null, v.joursFeriesAmount),
+        row(codes['Salaire brut imposable'], 'Salaire brut imposable', null, null, v.sbi),
         row(codes.AMO, 'AMO', v.sbi, v.amoRate, null, v.amo, v.amoPatronale),
+        row(codes.CNSS, 'CNSS', Math.min(Number(v.sbi || 0), 6000), v.cnssRate, null, v.cnss, v.cnssPatronale),
         row(codes.CIMR, 'CIMR', v.sbi, v.cimrRate, null, v.cimr),
-        row(codes['Frais professionnels'], 'Frais professionnels (déduction fiscale)', v.sbi, v.fraisProRate, null, v.fraisPro),
-        row(codes['Salaire net imposable'], 'SNI / IR', v.sni, v.irTaux, null, v.irNet),
+        row(codes['Frais professionnels'], 'Frais professionnels', v.sbi, v.fraisProRate, null, v.fraisPro),
+        row(codes['Salaire net imposable'], 'SNI', v.sni, null, null),
+        row(codes['Impôt sur le revenu'], 'IR', v.sni, v.irTaux, null, v.irNet),
         ...(v.retenus || []).map(item => row(item.code, item.label, null, null, null, item.amount)),
-        row(codes.Arrondi, 'ARRONDI', null, null, Number(v.arrondi || 0) > 0 ? v.arrondi : null, Number(v.arrondi || 0) < 0 ? Math.abs(v.arrondi) : null),
-        ...(v.nimpLines || []).map(item => row(item.code, item.label, null, null, item.amount)),
+        ...(v.nimpLines || []).map(item => {
+            const baseAmount = Number(item.baseAmount ?? item.amount ?? 0);
+            return {
+                ...row(item.code, item.label, null, null, item.amount),
+                // The list edits the monthly base, exactly like the bulletin
+                // page. The payable amount is still shown underneath.
+                baseAmount,
+                sticky: recurringNimpLabels.has(String(item.label || '').trim().toLowerCase()),
+            };
+        }),
     ];
     const primeLabels = new Set([...primeRows, ...manualPrimeRows].map(item => item.label));
     const nimpLabels = new Set((v.nimpLines || []).map(item => item.label));
@@ -158,8 +184,8 @@ function listBulletinComponents(values, rubriqueMaps) {
         ...item,
         kind: primeLabels.has(item.label) ? 'prime'
             : nimpLabels.has(item.label) ? 'nimp'
-            : item.label === 'Nombre jours congé payé' ? 'paidLeave'
-                : item.label === 'Nombre jours fériés' ? 'holiday'
+                : item.label === 'Congé payé' ? 'paidLeave'
+                    : item.label === 'Jours fériés' ? 'holiday'
                     : item.label.startsWith('Heures supplémentaires') ? 'overtime'
                         : item.label === 'Salaire de base' ? 'salary' : 'display',
     }));
@@ -488,30 +514,57 @@ async function refreshOpenBulletinFromEmployee(emp, payslip) {
     const excludedNimpLabels = new Set((payslip.bonuses || [])
         .filter(item => String(item.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
         .map(item => String(item.name).slice(EXCLUDED_NIMP_PREFIX.length).trim().toLowerCase()));
+    const payslipWorkingTime = resolveWorkingTimeForPayslip(emp, payslip);
+    const payslipRatio = Number(payslipWorkingTime.ratio || 0);
+    const ficheNimpAmounts = new Map((emp.bonuses || [])
+        .filter(item => !(item.bonus ? item.bonus.taxable : item.taxable))
+        .map(item => [
+            String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase(),
+            Number(item.amount || 0) * payslipRatio,
+        ]));
+    const employeeRepresentationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+    if (employeeRepresentationLabel) {
+        ficheNimpAmounts.set(
+            employeeRepresentationLabel,
+            Number(emp.baseSalary || 0) * Number(emp.indemniteRepresentationRate || 0) * payslipRatio
+        );
+    }
+    const overriddenNimpLabels = new Set((payslip.bonuses || [])
+        .filter(item => !item.taxable
+            && !String(item.name || '').startsWith(EXCLUDED_NIMP_PREFIX)
+            && (ficheNimpAmounts.has(String(item.name || '').trim().toLowerCase())
+                ? ficheNimpAmounts.get(String(item.name || '').trim().toLowerCase()) > Number(item.amount || 0) + 0.005
+                : payslipBonusBaseAmount(item) > Number(item.amount || 0) + 0.005))
+        .map(item => String(item.name || '').trim().toLowerCase()));
+    const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+    const representationOverridden = overriddenNimpLabels.has(representationLabel);
     const calculationEmployee = {
         ...emp,
         bonuses: (emp.bonuses || []).filter(item => !excludedNimpLabels.has(
             String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()
+        ) && !overriddenNimpLabels.has(
+            String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()
         )),
-        ...(excludedNimpLabels.has(String(emp.indemniteRepresentationName || '').trim().toLowerCase())
+        ...(excludedNimpLabels.has(representationLabel) || representationOverridden
             ? { indemniteRepresentationName: null, indemniteRepresentationRate: null }
             : {}),
     };
     const fixedTaxableLabels = new Set((calculationEmployee.bonuses || [])
-        .filter(item => item.bonus ? Boolean(item.bonus.taxable) : Boolean(item.taxable))
-        .map(item => String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()));
+        .filter(b => b.bonus ? Boolean(b.bonus.taxable) : Boolean(b.taxable))
+        .map(b => `${String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()}|${Number(b.amount)}`));
     const fixedNimpLabels = new Set((calculationEmployee.bonuses || [])
         .filter(item => item.bonus ? !Boolean(item.bonus.taxable) : !Boolean(item.taxable))
         .map(item => String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()));
-    const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
-
     const variablePrimes = (payslip.bonuses || [])
         .filter(item => item.taxable && !fixedTaxableLabels.has(String(item.name).trim().toLowerCase()))
         .map(item => ({ rubriqueImposableId: item.rubriqueImposableId || null, code: item.code || '', label: item.name, amount: Number(item.amount), baseAmount: payslipBonusBaseAmount(item) }));
         const monthlyNimpLines = (payslip.bonuses || [])
         .filter(item => !item.taxable
-            && !fixedNimpLabels.has(String(item.name).trim().toLowerCase())
-            && (!representationLabel || String(item.name).trim().toLowerCase() !== representationLabel)
+            && (!fixedNimpLabels.has(String(item.name).trim().toLowerCase())
+                || overriddenNimpLabels.has(String(item.name).trim().toLowerCase()))
+            && (!representationLabel
+                || String(item.name).trim().toLowerCase() !== representationLabel
+                || representationOverridden)
             && !String(item.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
         .map(item => ({ code: item.code || '', label: item.name, amount: Number(item.amount), baseAmount: payslipBonusBaseAmount(item) }));
 
@@ -574,9 +627,15 @@ export function mapPayslipToViewModel(p) {
         amount: Number(row.amount || 0),
         avanceSolde: row.avance ? Number(row.avance.solde || 0) : null,
     }));
+    // An exclusion marker can mean two things: the indemnity was removed from
+    // this bulletin, or its recurring amount was overridden here. Only the
+    // former should offer a "restore" action; an override already has an
+    // editable line above.
+    const nimpLabelKeys = new Set(nimpLines.map(line => String(line.label || '').trim().toLowerCase()));
     const excludedNimpLines = (p.bonuses || [])
         .filter(b => String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
-        .map(b => ({ label: String(b.name).slice(EXCLUDED_NIMP_PREFIX.length), amount: Number(b.amount) }));
+        .map(b => ({ label: String(b.name).slice(EXCLUDED_NIMP_PREFIX.length), amount: Number(b.amount) }))
+        .filter(line => !nimpLabelKeys.has(String(line.label || '').trim().toLowerCase()));
 
     const sniNum = Number(p.sni);
     const irRateNum = p.irRate ? Number(p.irRate) : 0;
@@ -711,6 +770,7 @@ export const listBulletins = async (req, res) => {
         const bulkResult = req.query.bulkResult
             ? JSON.parse(decodeURIComponent(req.query.bulkResult))
             : null;
+        const bulletinError = req.query.bulletinError ? String(req.query.bulletinError) : null;
 
         // Keep inactive employees visible so their payroll state is explicit in the list.
         const dbEmployees = await prisma.employee.findMany({
@@ -719,6 +779,7 @@ export const listBulletins = async (req, res) => {
             include: {
                 company: true,
                 category: true,
+                bonuses: { include: { bonus: true } },
                 payslips: {
                     where: { month, year },
                     include: { bonuses: true },
@@ -739,6 +800,13 @@ export const listBulletins = async (req, res) => {
                 status = "blocked";
             }
 
+            const recurringNimpLabels = new Set((emp.bonuses || [])
+                .filter(item => !(item.bonus ? item.bonus.taxable : item.taxable))
+                .map(item => String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase()));
+            if (emp.indemniteRepresentationName) {
+                recurringNimpLabels.add(String(emp.indemniteRepresentationName).trim().toLowerCase());
+            }
+
             const variablesEntered = payslip ? (
                 Number(payslip.workedDays) < Number(emp.company?.standardMonthlyDays || PAYROLL_WORKED_DAYS) ||
                 Number(payslip.heuresSup25 || 0) > 0 ||
@@ -746,6 +814,31 @@ export const listBulletins = async (req, res) => {
                 Number(payslip.heuresSup100 || 0) > 0 ||
                 (payslip.bonuses && payslip.bonuses.length > 0)
             ) : false;
+            const bulletinView = payslip ? mapPayslipToViewModel(payslip) : null;
+            const bulletinComponents = listBulletinComponents(bulletinView, rubriqueMaps, recurringNimpLabels);
+            const workingTime = payslip ? resolveWorkingTimeForPayslip(emp, payslip) : null;
+            const ficheRatio = Number(workingTime?.ratio || 1);
+            const ficheAmounts = new Map((emp.bonuses || [])
+                .filter(item => !(item.bonus ? item.bonus.taxable : item.taxable))
+                .map(item => [
+                    String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase(),
+                    Number(item.amount || 0) * ficheRatio,
+                ]));
+            const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+            if (representationLabel) {
+                ficheAmounts.set(
+                    representationLabel,
+                    Number(emp.baseSalary || 0) * Number(emp.indemniteRepresentationRate || 0) * ficheRatio
+                );
+            }
+            const editableBulletinComponents = bulletinComponents.map(component => {
+                if (component.kind !== 'nimp') return component;
+                const key = String(component.label || '').trim().toLowerCase();
+                return {
+                    ...component,
+                    maxAmount: ficheAmounts.has(key) ? ficheAmounts.get(key) : Number(component.baseAmount ?? component.gains ?? 0),
+                };
+            });
 
             return {
                 id: emp.id,
@@ -767,8 +860,8 @@ export const listBulletins = async (req, res) => {
                 standardMonthlyDays: Number(emp.company?.standardMonthlyDays || payslip?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS),
                 standardMonthlyHours: Number(emp.company?.standardMonthlyHours || payslip?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS),
                 maskedForPeriod: emp.bulletinMasks.length > 0,
-                bulletin: payslip ? mapPayslipToViewModel(payslip) : null,
-                bulletinComponents: listBulletinComponents(payslip ? mapPayslipToViewModel(payslip) : null, rubriqueMaps),
+                bulletin: bulletinView,
+                bulletinComponents: editableBulletinComponents,
                 bulletinStatus: status,
                 variablesEntered,
             };
@@ -820,6 +913,7 @@ export const listBulletins = async (req, res) => {
             monthNames: MONTH_NAMES_FR,
             fmt,
             bulkResult,
+            bulletinError,
             closeResult,
             validateResult,
             draftResult,
@@ -1085,7 +1179,6 @@ export const generateBulletin = async (req, res) => {
             ? rawAmounts
             : (rawAmounts !== undefined && rawAmounts !== null && rawAmounts !== '' ? [rawAmounts] : []);
 
-
         const variablePrimes = [];
         const count = Math.min(labelsArray.length, amountsArray.length);
         for (let i = 0; i < count; i++) {
@@ -1181,7 +1274,7 @@ export const generateBulletin = async (req, res) => {
         if (String(req.headers.accept || '').includes('application/json')) {
             return res.json({ ok: true, payslipId: payslip.id });
         }
-        res.redirect(`/bulletins/${empId}?month=${month}&year=${year}`);
+        res.redirect(`/bulletins?month=${month}&year=${year}`);
     } catch (err) {
         console.error("Single generate error:", err);
         if (String(req.headers.accept || '').includes('application/json')) {
@@ -1354,6 +1447,9 @@ export const deleteMonthlyPrime = async (req, res) => {
         const emp = await getActiveEmployee(req, empId, {
             bonuses: { include: { bonus: true } },
         });
+        const empFixedPrimeKeys = new Set((emp.bonuses || [])
+            .filter(b => (b.bonus ? b.bonus.taxable : b.taxable))
+            .map(b => `${String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()}|${Number(b.amount)}`));
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
         if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
@@ -1379,7 +1475,7 @@ export const deleteMonthlyPrime = async (req, res) => {
         variablePrimes.splice(deleteIndex, 1);
 
         const monthlyNimpLines = existing.bonuses
-            .filter(b => !b.taxable)
+            .filter(b => !b.taxable && !String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
             .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
         const monthlyCalc = runEmployeeCalculation(emp, {
             month,
@@ -1519,7 +1615,8 @@ export const updateMonthlyIndemnity = async (req, res) => {
         const oldAmount = Number(req.body.oldAmount);
         const label = String(req.body.label || '').trim();
         const amount = Number(req.body.amount);
-        const saveEmployee = req.body.saveEmployee === true || req.body.saveEmployee === 'true';
+        // Bulletin edits always apply to the current payable amount only.
+        // The employee fiche amount is never changed from this endpoint.
 
         if (!oldLabel || !Number.isFinite(oldAmount) || oldAmount <= 0 || !label || !Number.isFinite(amount) || amount <= 0) {
             return res.status(400).json({ ok: false, error: "L'indemnité à modifier est invalide." });
@@ -1542,60 +1639,47 @@ export const updateMonthlyIndemnity = async (req, res) => {
 
         const fixedNimpBonuses = (emp.bonuses || []).filter(b => !(b.bonus ? b.bonus.taxable : b.taxable));
         const storedBonus = fixedNimpBonuses.find(b =>
-            String(b.bonus ? b.bonus.name : b.name || '').toLowerCase() === oldLabel.toLowerCase()
-            && Number(b.amount) === oldAmount
+            String(b.bonus ? b.bonus.name : b.name || '').trim().toLowerCase() === oldLabel.toLowerCase()
         );
+        const workingTime = resolveWorkingTimeForPayslip(emp, existing);
+        const ficheRatio = Number(workingTime.ratio || 0);
+        const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+        const representationMaximum = representationLabel === oldLabel.toLowerCase()
+            ? Number(existing.baseSalary || emp.baseSalary || 0)
+                * Number(emp.indemniteRepresentationRate || 0) * ficheRatio
+            : 0;
+        const currentLine = (existing.bonuses || []).find(b =>
+            !b.taxable && String(b.name || '').trim().toLowerCase() === oldLabel.toLowerCase()
+        );
+        const ficheBaseAmount = storedBonus
+            ? Number(storedBonus.amount)
+            : representationMaximum > 0
+                ? Number(existing.baseSalary || emp.baseSalary || 0) * Number(emp.indemniteRepresentationRate || 0)
+                : payslipBonusBaseAmount(currentLine);
+        const ficheMaximum = storedBonus
+            ? ficheBaseAmount * ficheRatio
+            : representationMaximum > 0
+                ? representationMaximum
+                : payslipBonusBaseAmount(currentLine);
+        const payableAmount = Math.min(amount, ficheMaximum > 0 ? ficheMaximum : oldAmount);
 
-        // When requested, update the recurring employee indemnity first. The
-        // current bulletin is recalculated below from the updated employee.
-        if (saveEmployee && storedBonus) {
-            const storedBonusDefinition = await prisma.bonus.upsert({
-                where: { companyId_name: { companyId: emp.companyId, name: label } },
-                create: { companyId: emp.companyId, name: label, taxable: false },
-                update: {},
-            });
-            if (storedBonusDefinition.taxable) {
-                return res.status(400).json({ ok: false, error: "Cette indemnité existe déjà comme prime imposable." });
-            }
-            if (storedBonusDefinition.id !== storedBonus.bonusId) {
-                await prisma.employeeBonus.delete({
-                    where: { employeeId_bonusId: { employeeId: emp.id, bonusId: storedBonus.bonusId } },
-                });
-                await prisma.employeeBonus.upsert({
-                    where: { employeeId_bonusId: { employeeId: emp.id, bonusId: storedBonusDefinition.id } },
-                    create: { employeeId: emp.id, bonusId: storedBonusDefinition.id, amount: Number(amount.toFixed(2)) },
-                    update: { amount: Number(amount.toFixed(2)) },
-                });
-            } else {
-                await prisma.employeeBonus.update({
-                    where: { employeeId_bonusId: { employeeId: emp.id, bonusId: storedBonus.bonusId } },
-                    data: { amount: Number(amount.toFixed(2)) },
-                });
-            }
-        }
-
-        const calculationEmployee = saveEmployee && storedBonus
-            ? await getActiveEmployee(req, empId, { bonuses: { include: { bonus: true } } })
-            : storedBonus
-                ? { ...emp, bonuses: (emp.bonuses || []).filter(b => b !== storedBonus) }
-                : emp;
+        // Remove the recurring line from the employee calculation and re-add
+        // it as a bulletin-only line, preserving the fiche amount as its cap.
+        const calculationEmployee = storedBonus
+            ? { ...emp, bonuses: (emp.bonuses || []).filter(b => b !== storedBonus) }
+            : emp;
         const fixedNimpLabels = new Set((calculationEmployee.bonuses || [])
             .filter(b => !(b.bonus ? b.bonus.taxable : b.taxable))
             .map(b => String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()));
         const monthlyNimpLines = existing.bonuses
             .filter(b => !b.taxable
-                && !fixedNimpLabels.has(String(b.name).toLowerCase())
-                && !(saveEmployee && storedBonus
-                    && String(b.name).toLowerCase() === oldLabel.toLowerCase()
-                    && payslipBonusBaseAmount(b) === oldAmount))
+                && !fixedNimpLabels.has(String(b.name).toLowerCase()))
             .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
-        if (!saveEmployee || !storedBonus) {
-            const updateIndex = monthlyNimpLines.findIndex(line =>
-                line.label.toLowerCase() === oldLabel.toLowerCase() && line.baseAmount === oldAmount
-            );
-            if (updateIndex === -1) return res.status(404).json({ ok: false, error: "Cette indemnité n'existe pas sur ce bulletin." });
-            monthlyNimpLines[updateIndex] = { label, amount, baseAmount: amount };
-        }
+        const updateIndex = monthlyNimpLines.findIndex(line =>
+            line.label.toLowerCase() === oldLabel.toLowerCase()
+        );
+        if (updateIndex === -1) return res.status(404).json({ ok: false, error: "Cette indemnité n'existe pas sur ce bulletin." });
+        monthlyNimpLines[updateIndex] = { label, amount: payableAmount, baseAmount: ficheBaseAmount || oldAmount };
 
         const variablePrimes = existing.bonuses
             .filter(b => b.taxable)
@@ -1624,7 +1708,7 @@ export const updateMonthlyIndemnity = async (req, res) => {
             existing.status
         );
         const payslip = await savePayslipWithBonuses(payslipData, existing.id, calc);
-        return res.json({ ok: true, bonus: { label, amount }, payroll: calc, payslipId: payslip.id });
+        return res.json({ ok: true, bonus: { label, amount: payableAmount }, payroll: calc, payslipId: payslip.id });
     } catch (err) {
         console.error("Update monthly indemnity error:", err);
         return res.status(500).json({ ok: false, error: "Impossible de modifier l'indemnité." });
@@ -2310,14 +2394,43 @@ export const showBulletin = async (req, res) => {
                 .filter(bonus => !(bonus.bonus ? bonus.bonus.taxable : bonus.taxable))
                 .map(bonus => String(bonus.bonus ? bonus.bonus.name : bonus.name || '').toLowerCase()));
             const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
+            const workingTime = resolveWorkingTimeForPayslip(emp, bulletin);
+            const ficheRatio = Number(workingTime.ratio || 0);
+            const ficheNimpAmounts = new Map((emp.bonuses || [])
+                .filter(bonus => !(bonus.bonus ? bonus.bonus.taxable : bonus.taxable))
+                .map(bonus => [
+                    String(bonus.bonus ? bonus.bonus.name : bonus.name || '').trim().toLowerCase(),
+                    Number(bonus.amount || 0),
+                ]));
+            const representationMaximum = representationLabel
+                ? Number(bulletin.rawBaseSalary || emp.baseSalary || 0)
+                    * Number(emp.indemniteRepresentationRate || 0) * ficheRatio
+                : 0;
+            const withFicheMaximum = line => {
+                const key = String(line.label || '').trim().toLowerCase();
+                const ficheAmount = ficheNimpAmounts.get(key);
+                return {
+                    ...line,
+                    ficheAmount: ficheAmount !== undefined
+                        ? ficheAmount
+                        : key === representationLabel && ficheRatio > 0
+                            ? representationMaximum / ficheRatio
+                            : null,
+                    maxAmount: ficheAmount !== undefined
+                        ? ficheAmount * ficheRatio
+                        : key === representationLabel
+                            ? representationMaximum
+                            : Number(line.baseAmount || line.amount || 0),
+                };
+            };
             bulletin.fixedNimpLines = bulletin.nimpLines.filter(line => {
                 const label = String(line.label).toLowerCase();
                 return fixedNimpLabels.has(label) || (representationLabel && label === representationLabel);
-            });
+            }).map(withFicheMaximum);
             bulletin.monthlyNimpLines = bulletin.nimpLines.filter(line => {
                 const label = String(line.label).toLowerCase();
                 return !fixedNimpLabels.has(label) && !(representationLabel && label === representationLabel);
-            });
+            }).map(withFicheMaximum);
         }
 
         const employeeAvances = await listEmployeeAvances(emp.id);

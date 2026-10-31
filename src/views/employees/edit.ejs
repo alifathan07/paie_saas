@@ -291,7 +291,7 @@
         </div>
         <div class="table-wrapper" style="margin-top: 20px;">
             <table class="data-table">
-                <thead><tr><th>Code</th><th>Indemnité</th><th>Montant / taux salarié</th><th>Montant / taux par défaut</th></tr></thead>
+                <thead><tr><th>Code</th><th>Indemnité</th><th>Montant attribué</th><th>Montant plafonné</th></tr></thead>
                 <tbody>
                     <% const representationDefinition = (indemnites || []).find(item => item.isRepresentation); %>
                     <% if (employeeRepresentationRate !== '') { %>
@@ -307,7 +307,7 @@
                         <% regularIndemnites.forEach(function (item) { const assigned = (employee.indemnitesNonImposables || []).find(row => row.bonusId === item.id); %>
                             <tr class="employee-prime-row employee-indemnite-row">
                                 <td><%= item.code %></td>
-                                <td><label><input type="checkbox" class="employee-indemnite-toggle" name="bonusIds" value="<%= item.id %>" data-indemnite-id="<%= item.id %>" data-save-url="/employees/<%= employee.id %>/indemnites/toggle" <%= assigned ? 'checked' : '' %>> <strong><%= item.name %></strong></label></td>
+                                <td><label><input type="checkbox" class="employee-indemnite-toggle" name="bonusIds" value="<%= item.id %>" data-indemnite-id="<%= item.id %>" data-default-amount="<%= Number(item.defaultAmount).toFixed(2) %>" data-save-url="/employees/<%= employee.id %>/indemnites/toggle" <%= assigned ? 'checked' : '' %>> <strong><%= item.name %></strong></label></td>
                                 <td><input type="number" name="bonusAmounts" class="form-input" min="0" step="1" value="<%= assigned ? Number(assigned.amount).toFixed(2) : '' %>" <%= assigned ? '' : 'disabled' %>></td>
                                 <td><%= Number(item.defaultAmount).toFixed(2) %> DH</td>
                             </tr>
@@ -425,6 +425,9 @@ document.querySelectorAll('.employee-indemnite-toggle').forEach(checkbox => {
     checkbox.addEventListener('change', async () => {
         const previous = !checkbox.checked;
         syncAmountState();
+        if (checkbox.checked && amountInput && !amountInput.value) {
+            amountInput.value = checkbox.dataset.defaultAmount || '';
+        }
         const amount = amountInput?.value || '';
         checkbox.disabled = true;
         try {

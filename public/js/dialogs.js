@@ -33,9 +33,13 @@
             dialog.classList.toggle('is-danger', Boolean(options.danger));
             let accepted = false;
             let choice = null;
-            const onConfirm = () => { accepted = true; choice = true; dialog.close(); };
-            const onCancel = () => { choice = false; dialog.close(); };
-            const onAbort = () => { choice = null; dialog.close(); };
+            const close = result => {
+                if (result !== undefined) choice = result;
+                if (dialog.open) dialog.close('app-dialog');
+            };
+            const onConfirm = event => { event.preventDefault(); accepted = true; close(true); };
+            const onCancel = event => { event.preventDefault(); close(false); };
+            const onAbort = event => { event.preventDefault(); close(null); };
             const onClose = () => {
                 confirm.removeEventListener('click', onConfirm);
                 cancel.removeEventListener('click', onCancel);
@@ -82,4 +86,6 @@
     });
     const notice = document.querySelector('#bulletin-period-message');
     if (notice) window.AppDialog.alert(notice.textContent.trim(), { title: 'Période de paie bloquée', confirmLabel: 'Revenir au mois actif' });
+    const bulletinError = document.querySelector('#bulletin-error-message');
+    if (bulletinError) window.AppDialog.alert(bulletinError.textContent.trim(), { title: 'Modification impossible', danger: true, confirmLabel: 'Compris' });
 })();

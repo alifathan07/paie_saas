@@ -418,70 +418,70 @@
         }
     });
 
-    lines?.addEventListener('change', async event => {
-        if (!event.target.matches('[name="nimpLabels"], [name="nimpAmounts"]')) return;
-        const row = event.target.closest('.monthly-indemnity-line, .fixed-indemnity-line');
-        if (!row) return;
+    document.querySelectorAll('.nimp-amount-input').forEach(input => {
+        if (input.disabled) return;
+        const row = input.closest('.monthly-indemnity-line, .fixed-indemnity-line');
+        const employeeId = page.dataset.employeeId;
+        if (!row || !employeeId) return;
+        const originalValue = input.value;
+        let committing = false;
 
-        const labelInput = row.querySelector('[name="nimpLabels"]');
-        const amountInput = row.querySelector('[name="nimpAmounts"]');
-        const oldLabel = labelInput?.dataset.originalLabel;
-        const oldAmount = labelInput?.dataset.originalAmount;
-        const label = labelInput?.value.trim();
-        const amount = Number(amountInput?.value);
-        if (!oldLabel || !oldAmount || !label || !Number.isFinite(amount) || amount <= 0) {
-            window.AppDialog.alert("L'indemnité à modifier est invalide.");
-            window.location.reload();
-            return;
-        }
-
-        labelInput.disabled = true;
-        amountInput.disabled = true;
-        try {
-            const response = await fetch(`/bulletins/${page.dataset.employeeId}/indemnities/update`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify({
-                    oldLabel,
-                    oldAmount,
-                    label,
-                    amount,
-                    saveEmployee: false,
-                    month: page.dataset.month,
-                    year: page.dataset.year,
-                }),
-            });
-            const result = await response.json();
-            if (!response.ok || !result.ok) throw new Error(result.error || "Impossible de modifier l'indemnité.");
-
-            if (row.dataset.sticky === 'true') {
-                const saveEmployee = await window.AppDialog.confirm(
-                    "Enregistrer aussi cette modification pour les prochains bulletins de cet employé ?",
-                    { title: "Modifier l’indemnité récurrente", confirmLabel: "Oui, enregistrer" }
-                );
-                if (saveEmployee) {
-                    const employeeResponse = await fetch(`/bulletins/${page.dataset.employeeId}/indemnities/update`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                        body: JSON.stringify({
-                            oldLabel,
-                            oldAmount,
-                            label,
-                            amount,
-                            saveEmployee: true,
-                            month: page.dataset.month,
-                            year: page.dataset.year,
-                        }),
-                    });
-                    const employeeResult = await employeeResponse.json();
-                    if (!employeeResponse.ok || !employeeResult.ok) throw new Error(employeeResult.error || "Impossible d'enregistrer la modification pour l'employé.");
-                }
+        input.addEventListener('keydown', event => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            input.dispatchEvent(new Event('change', { bubbles: false }));
+        });
+        input.addEventListener('change', async () => {
+            if (committing) return;
+            const oldLabel = input.dataset.originalLabel;
+            const oldAmount = Number(input.dataset.originalAmount);
+            let amount = Number(input.value);
+            if (!oldLabel || !Number.isFinite(oldAmount) || oldAmount <= 0 || !Number.isFinite(amount) || amount <= 0) {
+                input.value = originalValue;
+                return;
             }
-            window.location.reload();
-        } catch (errorObject) {
-            window.AppDialog.alert(errorObject.message);
-            window.location.reload();
-        }
+            input.value = amount.toFixed(2);
+            if (amount === Number(originalValue)) return;
+
+            committing = true;
+            input.disabled = true;
+            try {
+                const { month, year } = { month: page.dataset.month, year: page.dataset.year };
+                const response = await fetch(`/bulletins/${employeeId}/indemnities/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({
+                        oldLabel,
+                        oldAmount,
+                        label: oldLabel,
+                        amount,
+                        saveEmployee: false,
+                        month,
+                        year,
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.error || "Impossible de modifier l'indemnité.");
+                window.location.reload();
+            } catch (error) {
+                input.disabled = false;
+                input.value = originalValue;
+                window.AppDialog.alert(error.message || "Impossible de modifier l'indemnité.", {
+                    title: 'Modification impossible',
+                    danger: true,
+                    confirmLabel: 'Compris',
+                });
+            } finally {
+                committing = false;
+            }
+        });
+    });
+
+    lines?.addEventListener('keydown', event => {
+        if (!event.target.matches('[name="nimpLabels"], [name="nimpAmounts"]') || event.key !== 'Enter') return;
+        event.preventDefault();
+        event.target.blur();
     });
 
     lines?.addEventListener('click', async event => {
@@ -592,6 +592,25 @@
             const line = nimpLines.find(item => String(item.label || '').trim().toLowerCase() === label);
             const payable = row.querySelector('[data-nimp-payable]');
             if (payable) payable.textContent = money(line?.amount || 0);
+            const amountInput = row.querySelector('[name="nimpAmounts"]');
+            if (amountInput && line) {
+                const ficheAmount = Number(amountInput.dataset.ficheAmount);
+                const ratio = result.workingTimeMode === 'HOURS'
+                    ? Number(result.workedHours || 0) / Number(result.standardMonthlyHours || 1)
+                    : Number(result.workedDays || 0) / Number(result.standardMonthlyDays || 1);
+                const maximum = Number.isFinite(ficheAmount) && ficheAmount > 0
+                    ? Number((ficheAmount * ratio).toFixed(2))
+                    : Number(amountInput.dataset.maxAmount || line.amount || 0);
+                amountInput.dataset.maxAmount = maximum.toFixed(2);
+                amountInput.max = maximum.toFixed(2);
+                // Keep the payable amount entered for this bulletin. Recalculation
+                // may change the ceiling, but must not replace a bulletin-only
+                // override with the employee fiche amount.
+                const currentValue = Number(amountInput.value);
+                if (Number.isFinite(currentValue) && currentValue > maximum) {
+                    amountInput.value = maximum.toFixed(2);
+                }
+            }
         });
         document.querySelectorAll('[data-result="workedDays"]').forEach(node => { node.textContent = timeValue(result.workedDays); });
         document.querySelectorAll('[data-result="workedHours"]').forEach(node => { node.textContent = timeValue(result.workedHours); });
@@ -744,6 +763,10 @@
     });
 
     form.addEventListener('input', event => {
+        // Non-taxable indemnities have their own save-on-change flow. A generic
+        // preview request here would immediately overwrite what the user is
+        // typing with the old persisted payable amount.
+        if (event.target.matches('[name="nimpLabels"], [name="nimpAmounts"]')) return;
         if (event.target === workingTimeInput && page.dataset.saved === 'true') {
             clearTimeout(workingTimeTimer);
             clearTimeout(timer);
@@ -758,6 +781,7 @@
         }
     });
     form.addEventListener('change', event => {
+        if (event.target.matches('[name="nimpLabels"], [name="nimpAmounts"]')) return;
         if (event.target === workingTimeInput && page.dataset.saved === 'true') return;
         calculate();
     });
