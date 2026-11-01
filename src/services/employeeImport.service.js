@@ -1,6 +1,7 @@
 import XLSX from "xlsx";
 import prisma from "../../db.ts";
 import { getOrCreateEmployeeCategoryByName, getOrCreateEmployeeFunction } from "./employeeService.js";
+import { getRepresentationRate } from "./indemniteService.js";
 
 function responseHeader(response, name) {
     return typeof response?.headers?.get === "function"
@@ -10,6 +11,26 @@ function responseHeader(response, name) {
 
 function safePreview(value, limit = 3000) {
     return String(value ?? "").slice(0, limit);
+}
+
+function normalizeImportText(value) {
+    return String(value ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
+}
+
+function parseImportBoolean(value) {
+    if (typeof value === "boolean") return value;
+    const normalized = normalizeImportText(value);
+    if (["yes", "oui", "o", "y", "true", "1", "x"].includes(normalized)) return true;
+    if (["no", "non", "n", "false", "0"].includes(normalized)) return false;
+    return null;
+}
+
+function isRepresentationName(value) {
+    return normalizeImportText(value) === "indemnite de representation";
 }
 
 /**
@@ -118,6 +139,7 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         rib: "string or null",
         baseSalary: "number, required",
         cimrRate: "number between 0 and 1 or null",
+        indemniteRepresentation: "boolean; true when representation indemnity is yes/oui, false when no/non",
         indemnites: "array of non-taxable indemnities; [] when none. Each item: {name: string, amount: number}"
     };
     const ai = resolveAIProvider();
@@ -233,12 +255,31 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
             ? Number(employee.nbPersonacharge)
             : employee.nbEnfantCharge + 1;
         employee.baseSalary = Number(employee.baseSalary);
+        const representationHeader = Object.keys(rows[index].values).find(header => {
+            const normalizedHeader = normalizeImportText(header);
+            return normalizedHeader.includes("representation")
+                && (normalizedHeader.includes("indemnite") || normalizedHeader.includes("indemnity"));
+        });
+        const representationFromSheet = representationHeader
+            ? parseImportBoolean(rows[index].values[representationHeader])
+            : null;
+        employee.indemniteRepresentation = representationFromSheet
+            ?? parseImportBoolean(employee.indemniteRepresentation)
+            ?? parseImportBoolean(employee.representation)
+            ?? false;
         const rawIndemnites = Array.isArray(employee.indemnites)
             ? employee.indemnites
             : (Array.isArray(employee.indemnities) ? employee.indemnities : []);
         const indemnityMap = new Map();
         rawIndemnites.forEach((rawIndemnite, indemnityIndex) => {
             const name = String(rawIndemnite?.name || rawIndemnite?.label || '').trim().slice(0, 191);
+            if (isRepresentationName(name)) {
+                const representationValue = parseImportBoolean(rawIndemnite?.amount)
+                    ?? parseImportBoolean(rawIndemnite?.value)
+                    ?? (Number(rawIndemnite?.amount) > 0 ? true : null);
+                if (representationValue !== null) employee.indemniteRepresentation = representationValue;
+                return;
+            }
             const amount = Number(rawIndemnite?.amount);
             if (!name && rawIndemnite?.amount !== undefined && rawIndemnite?.amount !== '') {
                 errors.push(`Ligne ${sourceRow}: indemnité ${indemnityIndex + 1} sans libellé.`);
@@ -302,6 +343,7 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         }
     }
     const indemnityIds = new Map();
+    const representationRate = await getRepresentationRate(targetCompanyId);
     const catalogueIndemnities = clean.some(employee => (employee.indemnites || []).length)
         ? await prisma.bonus.findMany({
             where: { companyId: targetCompanyId, taxable: false },
@@ -378,6 +420,8 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         rib: employee.rib || null,
         baseSalary: employee.baseSalary,
         cimrRate: employee.cimrRate === null || employee.cimrRate === undefined || employee.cimrRate === "" ? null : Number(employee.cimrRate),
+        indemniteRepresentationName: employee.indemniteRepresentation ? "Indemnité de représentation" : null,
+        indemniteRepresentationRate: employee.indemniteRepresentation ? representationRate : null,
         companyId: targetCompanyId,
         bonuses: employee.indemnites?.length
             ? {
