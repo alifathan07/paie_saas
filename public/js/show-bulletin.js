@@ -450,7 +450,7 @@
                 return;
             }
             const maximum = Number(input.dataset.maxAmount);
-            if (Number.isFinite(maximum) && amount > maximum) {
+            if (Number.isFinite(maximum) && maximum > 0 && amount > maximum) {
                 showCapAlert();
                 amount = maximum;
                 input.value = maximum.toFixed(2);
@@ -614,14 +614,15 @@
                     : Number(result.workedDays || 0) / Number(result.standardMonthlyDays || 1);
                 const maximum = Number.isFinite(ficheAmount) && ficheAmount > 0
                     ? Number((ficheAmount * ratio).toFixed(2))
-                    : Number(amountInput.dataset.maxAmount || line.amount || 0);
-                amountInput.dataset.maxAmount = maximum.toFixed(2);
-                amountInput.max = maximum.toFixed(2);
+                    : Number(amountInput.dataset.maxAmount || 0);
+                amountInput.dataset.maxAmount = maximum > 0 ? maximum.toFixed(2) : '';
+                if (maximum > 0) amountInput.max = maximum.toFixed(2);
+                else amountInput.removeAttribute('max');
                 // Keep the payable amount entered for this bulletin. Recalculation
                 // may change the ceiling, but must not replace a bulletin-only
                 // override with the employee fiche amount.
                 const currentValue = Number(amountInput.value);
-                if (Number.isFinite(currentValue) && currentValue > maximum) {
+                if (maximum > 0 && Number.isFinite(currentValue) && currentValue > maximum) {
                     amountInput.value = maximum.toFixed(2);
                 }
             }

@@ -1540,8 +1540,9 @@ export const addMonthlyIndemnity = async (req, res) => {
             select: { defaultAmount: true },
         });
         const catalogueAmount = Number(catalogueIndemnity?.defaultAmount);
-        const payableAmount = Number.isFinite(catalogueAmount) ? Math.min(amount, catalogueAmount) : amount;
-        monthlyNimpLines.push({ code, label, amount: payableAmount, maxAmount: catalogueAmount });
+        const hasCatalogueCeiling = Number.isFinite(catalogueAmount) && catalogueAmount > 0;
+        const payableAmount = hasCatalogueCeiling ? Math.min(amount, catalogueAmount) : amount;
+        monthlyNimpLines.push({ code, label, amount: payableAmount, maxAmount: hasCatalogueCeiling ? catalogueAmount : null });
         const variablePrimes = (existing?.bonuses || []).filter(b => b.taxable).map(b => ({ label: b.name, amount: Number(b.amount) }));
         const monthlyCalc = runEmployeeCalculation(emp, {
             month, year,
@@ -1665,12 +1666,12 @@ export const updateMonthlyIndemnity = async (req, res) => {
         const catalogueAmount = storedBonus?.bonus
             ? Number(storedBonus.bonus.defaultAmount)
             : NaN;
-        const ficheMaximum = storedBonus && Number.isFinite(catalogueAmount)
-            ? catalogueAmount * ficheRatio
+        const ficheMaximum = storedBonus
+            ? (Number.isFinite(catalogueAmount) && catalogueAmount > 0 ? catalogueAmount * ficheRatio : 0)
             : representationMaximum > 0
                 ? representationMaximum
                 : payslipBonusBaseAmount(currentLine);
-        const payableAmount = Math.min(amount, ficheMaximum > 0 ? ficheMaximum : oldAmount);
+        const payableAmount = Math.min(amount, ficheMaximum > 0 ? ficheMaximum : amount);
 
         // Remove the recurring line from the employee calculation and re-add
         // it as a bulletin-only line, preserving the fiche amount as its cap.
@@ -1704,7 +1705,7 @@ export const updateMonthlyIndemnity = async (req, res) => {
             label,
             amount: payableAmount,
             baseAmount: ficheBaseAmount || oldAmount,
-            maxAmount: ficheMaximum,
+            maxAmount: ficheMaximum > 0 ? ficheMaximum : null,
         };
 
         const variablePrimes = existing.bonuses
@@ -2438,7 +2439,8 @@ export const showBulletin = async (req, res) => {
                 const catalogueAmount = (emp.bonuses || []).find(bonus =>
                     String(bonus.bonus ? bonus.bonus.name : bonus.name || '').trim().toLowerCase() === key
                 )?.bonus?.defaultAmount;
-                const catalogueMaximum = Number.isFinite(Number(catalogueAmount))
+                const hasCatalogueDefinition = Number.isFinite(Number(catalogueAmount));
+                const catalogueMaximum = hasCatalogueDefinition && Number(catalogueAmount) > 0
                     ? Number(catalogueAmount) * ficheRatio
                     : null;
                 return {
@@ -2448,9 +2450,9 @@ export const showBulletin = async (req, res) => {
                         : key === representationLabel && ficheRatio > 0
                             ? representationMaximum / ficheRatio
                             : null,
-                    maxAmount: catalogueMaximum !== null
+                    maxAmount: hasCatalogueDefinition
                         ? catalogueMaximum
-                        : ficheAmount !== undefined
+                        : ficheAmount !== undefined && ficheAmount > 0
                             ? ficheAmount * ficheRatio
                         : key === representationLabel
                             ? representationMaximum

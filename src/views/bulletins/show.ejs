@@ -1363,7 +1363,7 @@
                     <td class="num">—</td>
                 </tr>
 
-                <% nimpLines.forEach(line => { const payableAmount = Number(line.amount ?? 0); const maxAmount = Number(line.maxAmount ?? line.baseAmount ?? line.amount); %>
+                <% nimpLines.forEach(line => { const payableAmount = Number(line.amount ?? 0); const maxAmount = Number(line.maxAmount) > 0 ? Number(line.maxAmount) : null; %>
                     <tr class="fixed-indemnity-line monthly-indemnity-line" data-sticky="true">
                         <td class="rubrique-code"><%= line.code || '' %></td><td class="description">
                             <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité" readonly title="Le libellé d'une indemnité récurrente se modifie depuis la fiche employé.">
@@ -1377,7 +1377,7 @@
                         </td>
                     </tr>
                 <% }); %>
-                <% monthlyNimpLines.forEach(line => { const payableAmount = Number(line.amount ?? 0); const maxAmount = Number(line.maxAmount ?? line.baseAmount ?? line.amount); %>
+                <% monthlyNimpLines.forEach(line => { const payableAmount = Number(line.amount ?? 0); const maxAmount = Number(line.maxAmount) > 0 ? Number(line.maxAmount) : null; %>
                     <tr class="monthly-indemnity-row prime-row monthly-indemnity-line">
                         <td class="rubrique-code"><%= line.code || '' %></td><td class="description">
                             <input class="live-input" name="nimpLabels" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" value="<%= line.label %>" placeholder="Libellé de l'indemnité">

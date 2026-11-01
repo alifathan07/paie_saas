@@ -353,26 +353,21 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         : [];
     const lastNumericCode = catalogueIndemnities
         .map(item => Number.parseInt(String(item.code || '').trim(), 10))
-        .find(code => Number.isInteger(code));
-    let nextIndemnityCode = Number.isInteger(lastNumericCode) ? lastNumericCode + 1 : 1;
+        .filter(code => Number.isInteger(code))
+        .reduce((maximum, code) => Math.max(maximum, code), 0);
+    let nextIndemnityCode = lastNumericCode + 1;
     for (const employee of clean) {
         for (const indemnity of employee.indemnites || []) {
             const key = indemnity.name.toLocaleLowerCase('fr-MA');
             if (indemnityIds.has(key)) continue;
-            const existingIndemnity = await prisma.bonus.findFirst({
+            const existingIndemnity = catalogueIndemnities.find(item =>
+                item.name.toLocaleLowerCase('fr-MA') === key
+            ) || await prisma.bonus.findFirst({
                 where: { companyId: targetCompanyId, name: indemnity.name, taxable: false },
                 select: { id: true, defaultAmount: true },
             });
             if (existingIndemnity) {
                 indemnityIds.set(key, existingIndemnity.id);
-                // A legacy catalogue row may have no ceiling. Seed it from the
-                // import without overwriting an existing configured ceiling.
-                if (Number(existingIndemnity.defaultAmount) <= 0 && indemnity.amount > 0) {
-                    await prisma.bonus.update({
-                        where: { id: existingIndemnity.id },
-                        data: { defaultAmount: indemnity.amount },
-                    });
-                }
                 continue;
             }
             const generatedCode = String(nextIndemnityCode++);
@@ -381,9 +376,9 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
                     companyId: targetCompanyId,
                     code: generatedCode,
                     name: indemnity.name,
-                    // The import supplies only the employee amount. For a new
-                    // catalogue row, use it as the initial plafond as well.
-                    defaultAmount: indemnity.amount,
+                    // Imported amounts belong to the employee assignment, not
+                    // to the shared catalogue ceiling. Zero means uncapped.
+                    defaultAmount: 0,
                     taxable: false,
                 },
                 select: { id: true },

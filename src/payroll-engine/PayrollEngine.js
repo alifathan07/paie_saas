@@ -14,7 +14,9 @@ const prorateAmount = (amount, ratio) => Number((Math.max(0, Number(amount) || 0
 const capAmount = (amount, ceiling) => {
   const value = Math.max(0, Number(amount) || 0);
   const limit = Number(ceiling);
-  return Number((Number.isFinite(limit) && limit >= 0 ? Math.min(value, limit) : value).toFixed(2));
+  // A zero indemnity ceiling means that the indemnity is uncapped. Positive
+  // catalogue defaults remain hard ceilings.
+  return Number((Number.isFinite(limit) && limit > 0 ? Math.min(value, limit) : value).toFixed(2));
 };
 
 export const normalizeWorkedDays = (value) => {

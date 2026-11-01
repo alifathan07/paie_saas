@@ -140,9 +140,9 @@
         };
 
         input.addEventListener('input', () => {
-            const maximum = Number(input.dataset.maxAmount || input.dataset.oldAmount);
+            const maximum = Number(input.dataset.maxAmount);
             const value = Number(input.value);
-            if (Number.isFinite(maximum) && Number.isFinite(value) && value > maximum) {
+            if (Number.isFinite(maximum) && maximum > 0 && Number.isFinite(value) && value > maximum) {
                 showCapAlert();
                 input.value = maximum.toFixed(2);
             }
@@ -154,13 +154,13 @@
         });
         input.addEventListener('change', async () => {
             if (committing) return;
-            const maximum = Number(input.dataset.maxAmount || input.dataset.oldAmount);
+            const maximum = Number(input.dataset.maxAmount);
             let amount = Number(input.value);
             if (!Number.isFinite(amount) || amount <= 0) {
                 input.value = originalValue;
                 return;
             }
-            if (Number.isFinite(maximum) && amount > maximum) amount = maximum;
+            if (Number.isFinite(maximum) && maximum > 0 && amount > maximum) amount = maximum;
             input.value = amount.toFixed(2);
             if (amount === Number(originalValue)) return;
 
