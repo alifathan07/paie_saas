@@ -117,7 +117,8 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         agence: "string or null",
         rib: "string or null",
         baseSalary: "number, required",
-        cimrRate: "number between 0 and 1 or null"
+        cimrRate: "number between 0 and 1 or null",
+        indemnites: "array of non-taxable indemnities; [] when none. Each item: {name: string, amount: number}"
     };
     const ai = resolveAIProvider();
     if (!ai) throw new Error("DEEPSEEK_NOT_CONFIGURED");
@@ -135,7 +136,7 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
             messages: [
                 {
                     role: "system",
-                    content: `You normalize employee spreadsheet rows into JSON. Respond with JSON only: no Markdown, no triple-backtick json fences, no explanations before or after the JSON. The exact root shape is {"employees":[...]}; do not return any other root shape. Map any language, spelling, abbreviations, column order, and French date/number formats to the allowed fields. Never invent a value that is not present except defaults explicitly requested. Preserve CIN, matricule, bank numbers, and names as strings. Use null for missing optional fields. Required fields must be null when absent so the application can report them. If the spreadsheet does not contain a value for nbPersonacharge, return null; the application will calculate it as nbEnfantCharge + 1. Every output object must include sourceRow from the input. Allowed fields and formats: ${JSON.stringify(fields)}. Defaults: category=Employé, natureEmploi=PERMANENT, situationFam=CELIBATAIRE, nbEnfantCharge=0, modePaiement=VIREMENT. For date-only values return YYYY-MM-DD. Convert decimal commas to numbers.`
+                    content: `You normalize employee spreadsheet rows into JSON. Respond with JSON only: no Markdown, no triple-backtick json fences, no explanations before or after the JSON. The exact root shape is {"employees":[...]}; do not return any other root shape. Map any language, spelling, abbreviations, column order, and French date/number formats to the allowed fields. Never invent a value that is not present except defaults explicitly requested. Preserve CIN, matricule, bank numbers, and names as strings. Use null for missing optional fields. Required fields must be null when absent so the application can report them. If the spreadsheet does not contain a value for nbPersonacharge, return null; the application will calculate it as nbEnfantCharge + 1. Every output object must include sourceRow from the input. Detect every employee indemnity/allowance in the spreadsheet, including French labels such as indemnité, allocation, transport, repas, logement, déplacement, panier, représentation, and similar columns. Put them in indemnites as an array for that employee; use [] when none. For each indemnity, extract only its name and the amount assigned to that employee. Do not return a code or a defaultAmount/plafond for indemnities; the application generates the catalogue code automatically. Allowed fields and formats: ${JSON.stringify(fields)}. Defaults: category=Employé, natureEmploi=PERMANENT, situationFam=CELIBATAIRE, nbPersonacharge=0, modePaiement=VIREMENT, indemnites=[]. For date-only values return YYYY-MM-DD. Convert decimal commas to numbers.`
                 },
                 { role: "user", content: JSON.stringify({ sheet: sheetName, headers, rows }) }
             ]
@@ -232,6 +233,31 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
             ? Number(employee.nbPersonacharge)
             : employee.nbEnfantCharge + 1;
         employee.baseSalary = Number(employee.baseSalary);
+        const rawIndemnites = Array.isArray(employee.indemnites)
+            ? employee.indemnites
+            : (Array.isArray(employee.indemnities) ? employee.indemnities : []);
+        const indemnityMap = new Map();
+        rawIndemnites.forEach((rawIndemnite, indemnityIndex) => {
+            const name = String(rawIndemnite?.name || rawIndemnite?.label || '').trim().slice(0, 191);
+            const amount = Number(rawIndemnite?.amount);
+            if (!name && rawIndemnite?.amount !== undefined && rawIndemnite?.amount !== '') {
+                errors.push(`Ligne ${sourceRow}: indemnité ${indemnityIndex + 1} sans libellé.`);
+                return;
+            }
+            if (!name) return;
+            if (!Number.isFinite(amount) || amount < 0) {
+                errors.push(`Ligne ${sourceRow}: montant invalide pour l'indemnité « ${name} ».`);
+                return;
+            }
+            const key = name.toLocaleLowerCase('fr-MA');
+            if (!indemnityMap.has(key)) {
+                indemnityMap.set(key, {
+                    name,
+                    amount: Number(amount.toFixed(2)),
+                });
+            }
+        });
+        employee.indemnites = [...indemnityMap.values()];
         if (!employee.dateAnciennete) employee.dateAnciennete = employee.dateEmbauche;
         if (!employee.nomComplet) errors.push(`Ligne ${sourceRow}: nomComplet est obligatoire.`);
         if (!employee.cin) errors.push(`Ligne ${sourceRow}: cin est obligatoire.`);
@@ -275,6 +301,54 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
             functionIds.set(functionName, employeeFunction.id);
         }
     }
+    const indemnityIds = new Map();
+    const catalogueIndemnities = clean.some(employee => (employee.indemnites || []).length)
+        ? await prisma.bonus.findMany({
+            where: { companyId: targetCompanyId, taxable: false },
+            select: { id: true, name: true, code: true, defaultAmount: true },
+            orderBy: { id: 'desc' },
+        })
+        : [];
+    const lastNumericCode = catalogueIndemnities
+        .map(item => Number.parseInt(String(item.code || '').trim(), 10))
+        .find(code => Number.isInteger(code));
+    let nextIndemnityCode = Number.isInteger(lastNumericCode) ? lastNumericCode + 1 : 1;
+    for (const employee of clean) {
+        for (const indemnity of employee.indemnites || []) {
+            const key = indemnity.name.toLocaleLowerCase('fr-MA');
+            if (indemnityIds.has(key)) continue;
+            const existingIndemnity = await prisma.bonus.findFirst({
+                where: { companyId: targetCompanyId, name: indemnity.name, taxable: false },
+                select: { id: true, defaultAmount: true },
+            });
+            if (existingIndemnity) {
+                indemnityIds.set(key, existingIndemnity.id);
+                // A legacy catalogue row may have no ceiling. Seed it from the
+                // import without overwriting an existing configured ceiling.
+                if (Number(existingIndemnity.defaultAmount) <= 0 && indemnity.amount > 0) {
+                    await prisma.bonus.update({
+                        where: { id: existingIndemnity.id },
+                        data: { defaultAmount: indemnity.amount },
+                    });
+                }
+                continue;
+            }
+            const generatedCode = String(nextIndemnityCode++);
+            const createdIndemnity = await prisma.bonus.create({
+                data: {
+                    companyId: targetCompanyId,
+                    code: generatedCode,
+                    name: indemnity.name,
+                    // The import supplies only the employee amount. For a new
+                    // catalogue row, use it as the initial plafond as well.
+                    defaultAmount: indemnity.amount,
+                    taxable: false,
+                },
+                select: { id: true },
+            });
+            indemnityIds.set(key, createdIndemnity.id);
+        }
+    }
     log("info", "database.transaction.started", { employeeCount: clean.length, companyId: targetCompanyId });
     const created = await prisma.$transaction(clean.map((employee) => prisma.employee.create({ data: {
         matricule: employee.matricule,
@@ -304,7 +378,15 @@ export async function importEmployeesFromSpreadsheet({ buffer, companyId }) {
         rib: employee.rib || null,
         baseSalary: employee.baseSalary,
         cimrRate: employee.cimrRate === null || employee.cimrRate === undefined || employee.cimrRate === "" ? null : Number(employee.cimrRate),
-        companyId: targetCompanyId
+        companyId: targetCompanyId,
+        bonuses: employee.indemnites?.length
+            ? {
+                create: employee.indemnites.map(indemnity => ({
+                    bonusId: indemnityIds.get(indemnity.name.toLocaleLowerCase('fr-MA')),
+                    amount: indemnity.amount,
+                })),
+            }
+            : undefined,
     } })));
     log("info", "database.transaction.completed", { createdCount: created.length, companyId: targetCompanyId });
     return { count: created.length, sheetName, rows: clean.map(({ sourceRow, ...employee }) => ({ sourceRow, employee })) };

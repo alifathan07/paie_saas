@@ -122,7 +122,7 @@
     });
     // Non-taxable indemnities can be adjusted from the overview, even on a
     // locked bulletin. Only lines that already exist for the employee are
-    // editable, and the amount can only go down.
+    // editable, and the amount is capped by the catalogue ceiling.
     document.querySelectorAll('.bulletin-row .nimp-amount-input').forEach(input => {
         if (input.disabled) return;
         const row = input.closest('.bulletin-row');
@@ -130,11 +130,20 @@
         if (!employeeId) return;
         const originalValue = input.value;
         let committing = false;
+        let capAlertOpen = false;
+        const showCapAlert = () => {
+            if (capAlertOpen) return;
+            capAlertOpen = true;
+            window.AppDialog.alert('Le montant ne peut pas dépasser le montant plafonné. Pour modifier ce plafond, éditez l’indemnité sur la fiche salarié.', {
+                title: 'Montant plafonné', danger: true, confirmLabel: 'Compris',
+            }).finally(() => { capAlertOpen = false; });
+        };
 
         input.addEventListener('input', () => {
             const maximum = Number(input.dataset.maxAmount || input.dataset.oldAmount);
             const value = Number(input.value);
             if (Number.isFinite(maximum) && Number.isFinite(value) && value > maximum) {
+                showCapAlert();
                 input.value = maximum.toFixed(2);
             }
         });

@@ -425,6 +425,14 @@
         if (!row || !employeeId) return;
         const originalValue = input.value;
         let committing = false;
+        let capAlertOpen = false;
+        const showCapAlert = () => {
+            if (capAlertOpen) return;
+            capAlertOpen = true;
+            window.AppDialog.alert('Le montant ne peut pas dépasser le montant plafonné. Pour modifier ce plafond, éditez l’indemnité sur la fiche salarié.', {
+                title: 'Montant plafonné', danger: true, confirmLabel: 'Compris',
+            }).finally(() => { capAlertOpen = false; });
+        };
 
         input.addEventListener('keydown', event => {
             if (event.key !== 'Enter') return;
@@ -440,6 +448,12 @@
             if (!oldLabel || !Number.isFinite(oldAmount) || oldAmount <= 0 || !Number.isFinite(amount) || amount <= 0) {
                 input.value = originalValue;
                 return;
+            }
+            const maximum = Number(input.dataset.maxAmount);
+            if (Number.isFinite(maximum) && amount > maximum) {
+                showCapAlert();
+                amount = maximum;
+                input.value = maximum.toFixed(2);
             }
             input.value = amount.toFixed(2);
             if (amount === Number(originalValue)) return;

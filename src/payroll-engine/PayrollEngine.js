@@ -11,6 +11,11 @@ import { normalizeWorkingTime, workingTimeConfigFromCompany } from "./utils/work
 export const PAYROLL_WORKED_DAYS = 26;
 
 const prorateAmount = (amount, ratio) => Number((Math.max(0, Number(amount) || 0) * ratio).toFixed(2));
+const capAmount = (amount, ceiling) => {
+  const value = Math.max(0, Number(amount) || 0);
+  const limit = Number(ceiling);
+  return Number((Number.isFinite(limit) && limit >= 0 ? Math.min(value, limit) : value).toFixed(2));
+};
 
 export const normalizeWorkedDays = (value) => {
   if (value === undefined || value === null || value === '') {
@@ -145,11 +150,12 @@ export const calculatePayroll = (employee, overrides = {}) => {
         // Ignore a legacy catalog assignment with the same label so it cannot
         // be added a second time as a fixed amount.
         if (representationName && bonusName.trim().toLowerCase() === representationName.toLowerCase()) return;
+        const cappedAmount = capAmount(amt, eb.bonus ? eb.bonus.defaultAmount : undefined);
         nimpLines.push({
           code: String(eb.bonus ? eb.bonus.code || '' : eb.code || ''),
           label: bonusName,
-          baseAmount: Number(amt.toFixed(2)),
-          amount: prorateAmount(amt, indemnityRatio),
+          baseAmount: cappedAmount,
+          amount: prorateAmount(cappedAmount, indemnityRatio),
         });
         nimpLabels.add(bonusName.toLowerCase());
       } else if (amt > 0 && !variableLabels.has(bonusName.toLowerCase())) {
@@ -191,8 +197,8 @@ export const calculatePayroll = (employee, overrides = {}) => {
   if (Array.isArray(overrides.monthlyNimpLines)) {
     overrides.monthlyNimpLines.forEach(line => {
       const label = String(line.label || line.name || 'Indemnité').trim();
-      const enteredAmount = Math.max(0, Number(line.amount ?? line.baseAmount) || 0);
-      const baseAmount = Math.max(0, Number(line.baseAmount ?? enteredAmount) || 0);
+      const enteredAmount = capAmount(line.amount ?? line.baseAmount, line.maxAmount ?? line.defaultAmount);
+      const baseAmount = capAmount(line.baseAmount ?? enteredAmount, line.maxAmount ?? line.defaultAmount);
       if (label && enteredAmount > 0 && !nimpLabels.has(label.toLowerCase())) {
         nimpLines.push({ code: String(line.code || ''), label, baseAmount: Number(baseAmount.toFixed(2)), amount: Number(enteredAmount.toFixed(2)) });
         nimpLabels.add(label.toLowerCase());

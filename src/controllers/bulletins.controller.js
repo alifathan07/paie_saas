@@ -533,8 +533,8 @@ async function refreshOpenBulletinFromEmployee(emp, payslip) {
         .filter(item => !item.taxable
             && !String(item.name || '').startsWith(EXCLUDED_NIMP_PREFIX)
             && (ficheNimpAmounts.has(String(item.name || '').trim().toLowerCase())
-                ? ficheNimpAmounts.get(String(item.name || '').trim().toLowerCase()) > Number(item.amount || 0) + 0.005
-                : payslipBonusBaseAmount(item) > Number(item.amount || 0) + 0.005))
+                ? Math.abs(ficheNimpAmounts.get(String(item.name || '').trim().toLowerCase()) - Number(item.amount || 0)) > 0.005
+                : Math.abs(payslipBonusBaseAmount(item) - Number(item.amount || 0)) > 0.005))
         .map(item => String(item.name || '').trim().toLowerCase()));
     const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
     const representationOverridden = overriddenNimpLabels.has(representationLabel);
@@ -822,7 +822,7 @@ export const listBulletins = async (req, res) => {
                 .filter(item => !(item.bonus ? item.bonus.taxable : item.taxable))
                 .map(item => [
                     String(item.bonus ? item.bonus.name : item.name || '').trim().toLowerCase(),
-                    Number(item.amount || 0) * ficheRatio,
+                    Number(item.bonus?.defaultAmount ?? item.amount ?? 0) * ficheRatio,
                 ]));
             const representationLabel = String(emp.indemniteRepresentationName || '').trim().toLowerCase();
             if (representationLabel) {
@@ -1535,7 +1535,13 @@ export const addMonthlyIndemnity = async (req, res) => {
         const monthlyNimpLines = (existing?.bonuses || [])
             .filter(b => !b.taxable && !fixedNimpLabels.has(String(b.name).toLowerCase()))
             .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
-        monthlyNimpLines.push({ code, label, amount });
+        const catalogueIndemnity = await prisma.bonus.findFirst({
+            where: { companyId: emp.companyId, taxable: false, OR: [{ code }, { name: label }] },
+            select: { defaultAmount: true },
+        });
+        const catalogueAmount = Number(catalogueIndemnity?.defaultAmount);
+        const payableAmount = Number.isFinite(catalogueAmount) ? Math.min(amount, catalogueAmount) : amount;
+        monthlyNimpLines.push({ code, label, amount: payableAmount, maxAmount: catalogueAmount });
         const variablePrimes = (existing?.bonuses || []).filter(b => b.taxable).map(b => ({ label: b.name, amount: Number(b.amount) }));
         const monthlyCalc = runEmployeeCalculation(emp, {
             month, year,
@@ -1562,7 +1568,7 @@ export const addMonthlyIndemnity = async (req, res) => {
                 : (isClosedBulletin(existing?.status) ? BULLETIN_STATUS.CLOSED : BULLETIN_STATUS.GENERATED)
         );
         const payslip = await savePayslipWithBonuses(payslipData, existing?.id, calc);
-        return res.json({ ok: true, bonus: { code, label, amount }, payroll: calc });
+        return res.json({ ok: true, bonus: { code, label, amount: payableAmount }, payroll: calc });
     } catch (err) {
         console.error("Add monthly indemnity error:", err);
         return res.status(500).json({ ok: false, error: "Impossible d'enregistrer l'indemnité." });
@@ -1656,8 +1662,11 @@ export const updateMonthlyIndemnity = async (req, res) => {
             : representationMaximum > 0
                 ? Number(existing.baseSalary || emp.baseSalary || 0) * Number(emp.indemniteRepresentationRate || 0)
                 : payslipBonusBaseAmount(currentLine);
-        const ficheMaximum = storedBonus
-            ? ficheBaseAmount * ficheRatio
+        const catalogueAmount = storedBonus?.bonus
+            ? Number(storedBonus.bonus.defaultAmount)
+            : NaN;
+        const ficheMaximum = storedBonus && Number.isFinite(catalogueAmount)
+            ? catalogueAmount * ficheRatio
             : representationMaximum > 0
                 ? representationMaximum
                 : payslipBonusBaseAmount(currentLine);
@@ -1679,7 +1688,12 @@ export const updateMonthlyIndemnity = async (req, res) => {
             line.label.toLowerCase() === oldLabel.toLowerCase()
         );
         if (updateIndex === -1) return res.status(404).json({ ok: false, error: "Cette indemnité n'existe pas sur ce bulletin." });
-        monthlyNimpLines[updateIndex] = { label, amount: payableAmount, baseAmount: ficheBaseAmount || oldAmount };
+        monthlyNimpLines[updateIndex] = {
+            label,
+            amount: payableAmount,
+            baseAmount: ficheBaseAmount || oldAmount,
+            maxAmount: ficheMaximum,
+        };
 
         const variablePrimes = existing.bonuses
             .filter(b => b.taxable)
@@ -2409,6 +2423,12 @@ export const showBulletin = async (req, res) => {
             const withFicheMaximum = line => {
                 const key = String(line.label || '').trim().toLowerCase();
                 const ficheAmount = ficheNimpAmounts.get(key);
+                const catalogueAmount = (emp.bonuses || []).find(bonus =>
+                    String(bonus.bonus ? bonus.bonus.name : bonus.name || '').trim().toLowerCase() === key
+                )?.bonus?.defaultAmount;
+                const catalogueMaximum = Number.isFinite(Number(catalogueAmount))
+                    ? Number(catalogueAmount) * ficheRatio
+                    : null;
                 return {
                     ...line,
                     ficheAmount: ficheAmount !== undefined
@@ -2416,8 +2436,10 @@ export const showBulletin = async (req, res) => {
                         : key === representationLabel && ficheRatio > 0
                             ? representationMaximum / ficheRatio
                             : null,
-                    maxAmount: ficheAmount !== undefined
-                        ? ficheAmount * ficheRatio
+                    maxAmount: catalogueMaximum !== null
+                        ? catalogueMaximum
+                        : ficheAmount !== undefined
+                            ? ficheAmount * ficheRatio
                         : key === representationLabel
                             ? representationMaximum
                             : Number(line.baseAmount || line.amount || 0),
