@@ -4090,6 +4090,9 @@ select.form-input {
 .bulletins-scrollbar::-webkit-scrollbar-track { background: transparent; }
 
 #bulletins-table { min-width: 1600px; }
+#bulletins-table th:first-child, #bulletins-table td:first-child { position: sticky; left: 0; z-index: 4; min-width: 190px; background: #fff; box-shadow: 2px 0 0 #aeb9c3; }
+#bulletins-table thead th:first-child { z-index: 6; background: #eef2f5; }
+#bulletins-table tbody tr:hover td:first-child { background: #f7fafc; }
 
 .bulletin-component-button { display: inline-block; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
 .bulletin-components-details { min-width: 160px; }

@@ -13,6 +13,13 @@ export const getAllBonusTypes = async (companyId) => {
 
 const cleanCategoryName = name => String(name || '').trim().slice(0, 191);
 
+const cleanRepresentationRate = rate => {
+    if (rate === undefined || rate === null || rate === '') return null;
+    const value = Number(rate);
+    if (!Number.isInteger(value) || value < 0 || value > 100) throw new Error('INVALID_REPRESENTATION_RATE');
+    return value / 100;
+};
+
 export const getEmployeeCategories = async (companyId) => {
     const cId = Number(companyId);
     if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
@@ -318,9 +325,7 @@ export const createEmployee = async (data) => {
             indemniteRepresentationName: indemniteRepresentationRate !== undefined && indemniteRepresentationRate !== null && indemniteRepresentationRate !== ''
                 ? 'Indemnité de représentation'
                 : null,
-            indemniteRepresentationRate: indemniteRepresentationRate !== undefined && indemniteRepresentationRate !== null && indemniteRepresentationRate !== ''
-                ? Number(indemniteRepresentationRate) / 100
-                : null,
+            indemniteRepresentationRate: cleanRepresentationRate(indemniteRepresentationRate),
             blocageSaisiePaie: Boolean(blocageSaisiePaie),
             companyId: targetCompanyId,
             bonuses: employeeBonusData.length > 0 ? { create: employeeBonusData } : undefined
@@ -427,9 +432,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
                     : 'Indemnité de représentation')
                 : undefined,
             indemniteRepresentationRate: indemniteRepresentationRate !== undefined
-                ? (indemniteRepresentationRate === '' || indemniteRepresentationRate === null
-                    ? null
-                    : Number(indemniteRepresentationRate) / 100)
+                ? cleanRepresentationRate(indemniteRepresentationRate)
                 : undefined,
             blocageSaisiePaie: blocageSaisiePaie !== undefined
                 ? Boolean(blocageSaisiePaie)

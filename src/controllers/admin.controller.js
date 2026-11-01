@@ -197,7 +197,56 @@ export const adminUsage = async (req, res) => {
     return res.render("admin/usage", page(req, { users }));
 };
 
-export const adminSystem = async (req, res) => res.render("admin/system", page(req));
+const GLOBAL_PAYROLL_FIELDS = [
+    "cnssSalarialeRate",
+    "cnssPlafond",
+    "amoSalarialeRate",
+    "fraisProStandardRate",
+    "fraisProHighRate",
+    "fraisProStandardCap",
+    "fraisProHighCap",
+    "chargeFamilleParPersonne",
+    "maxChargesFamilleCount",
+];
+
+function parseGlobalPayrollValue(field, value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) throw new Error("INVALID_PAYROLL_CONFIG");
+    if (field === "maxChargesFamilleCount" && (!Number.isInteger(parsed) || parsed > 100)) {
+        throw new Error("INVALID_PAYROLL_CONFIG");
+    }
+    if (field !== "maxChargesFamilleCount" && parsed > 1000000) throw new Error("INVALID_PAYROLL_CONFIG");
+    return field === "maxChargesFamilleCount" ? parsed : Number(parsed.toFixed(4));
+}
+
+export const adminSystem = async (req, res) => {
+    const config = await prisma.payrollConfig.findFirst({ orderBy: { id: "asc" } });
+    return res.render("admin/system", page(req, {
+        payrollConfig: config,
+        success: req.query.success || null,
+        error: req.query.error || null,
+    }));
+};
+
+export const updateGlobalPayrollConfig = async (req, res) => {
+    try {
+        const data = Object.fromEntries(GLOBAL_PAYROLL_FIELDS.map(field => [field, parseGlobalPayrollValue(field, req.body[field])]));
+        const previous = await prisma.payrollConfig.findFirst({ orderBy: { id: "asc" } });
+        const config = previous
+            ? await prisma.payrollConfig.update({ where: { id: previous.id }, data })
+            : await prisma.payrollConfig.create({ data });
+        await recordAudit(req, {
+            action: "UPDATE_GLOBAL_PAYROLL_CONFIG",
+            targetType: "PAYROLL_CONFIG",
+            targetId: config.id,
+            metadata: { previous, updated: config },
+        });
+        return res.redirect("/admin/system?success=Configuration%20paie%20globale%20mise%20%C3%A0%20jour.");
+    } catch (error) {
+        console.error("Error updating global payroll config:", error);
+        return res.redirect("/admin/system?error=Valeurs%20invalides.%20Veuillez%20v%C3%A9rifier%20les%20param%C3%A8tres.");
+    }
+};
 
 export const updateClientBilling = async (req, res) => {
     const clientId = Number(req.params.id);

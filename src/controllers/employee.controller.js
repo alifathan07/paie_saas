@@ -92,7 +92,7 @@ export const renderCreateForm = async (req, res) => {
             chantiers,
             indemnites,
             representationAvailable: indemnites.some(item => item.isRepresentation),
-            defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
+            defaultRepresentationRate: Number((representationRate * 100).toFixed(0)),
             error: null
         });
     } catch (error) {
@@ -216,7 +216,7 @@ export const handleCreateEmployee = async (req, res) => {
             banques,
             chantiers,
             indemnites: await listIndemnites(companyId),
-            defaultRepresentationRate: Number((await getRepresentationRate(companyId) * 100).toFixed(2)),
+            defaultRepresentationRate: Number((await getRepresentationRate(companyId) * 100).toFixed(0)),
             error: "Erreur lors de la création. CIN ou Matricule déjà utilisés, ou champs invalides."
         });
     }
@@ -285,7 +285,7 @@ export const renderEditForm = async (req, res) => {
             chantiers,
             indemnites,
             representationAvailable: indemnites.some(item => item.isRepresentation),
-            defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
+            defaultRepresentationRate: Number((representationRate * 100).toFixed(0)),
             error: null
         });
     } catch (error) {
@@ -477,7 +477,7 @@ export const handleUpdateEmployee = async (req, res) => {
             chantiers,
             indemnites,
             representationAvailable: indemnites.some(item => item.isRepresentation),
-            defaultRepresentationRate: Number((representationRate * 100).toFixed(2)),
+            defaultRepresentationRate: Number((representationRate * 100).toFixed(0)),
             error: "Erreur lors de la mise à jour. Vérifiez les informations saisies."
         });
     }

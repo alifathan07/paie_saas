@@ -23,7 +23,7 @@ export async function index(req, res) {
             indemnites,
             representationConfigured: indemnites.some(item => item.isRepresentation),
             representationName: REPRESENTATION_NAME,
-            representationRate: Number((representationRate * 100).toFixed(2)),
+            representationRate: Number((representationRate * 100).toFixed(0)),
             error: null,
             createRows: [],
         });
@@ -67,7 +67,7 @@ export async function create(req, res) {
             indemnites,
             representationConfigured: indemnites.some(item => item.isRepresentation),
             representationName: REPRESENTATION_NAME,
-            representationRate: Number((representationRate * 100).toFixed(2)),
+            representationRate: Number((representationRate * 100).toFixed(0)),
             error: error.code === "P2002" ? "Cette indemnité existe déjà." : "Le nom et le montant par défaut sont obligatoires.",
             createRows: namesAndRows(req.body),
         });

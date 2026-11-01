@@ -27,8 +27,8 @@ function cleanAmount(amount) {
 
 function cleanRate(rate) {
     const value = Number(rate);
-    if (!Number.isFinite(value) || value < 0 || value > 100) throw new Error("INVALID_REPRESENTATION_RATE");
-    return Number((value / 100).toFixed(4));
+    if (!Number.isInteger(value) || value < 0 || value > 100) throw new Error("INVALID_REPRESENTATION_RATE");
+    return value / 100;
 }
 
 export async function getRepresentationRate(companyId) {

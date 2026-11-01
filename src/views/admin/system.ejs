@@ -1,4 +1,21 @@
 <%- include('../partials/header') %>
 <div class="page-header"><div class="header-title-area"><h1 class="page-title">Système</h1><p class="page-subtitle">Structure réservée aux réglages réellement supportés.</p></div><div class="header-actions"><a href="/admin" class="btn-secondary">Dashboard</a></div></div>
-<section class="admin-section-card"><h2>Réglages système</h2><p class="muted">Aucun réglage applicatif, IA ou contrôle d'urgence n'est actuellement exposé par le backend. Cette page reste volontairement informative afin de ne pas créer de faux contrôles.</p></section>
+<% if (success) { %><div class="alert alert-success"><%= success %></div><% } %>
+<% if (error) { %><div class="alert alert-danger"><%= error %></div><% } %>
+<section class="admin-section-card">
+    <h2>Paramètres légaux de paie</h2>
+    <p class="muted">Ces paramètres sont nationaux et s'appliquent à toutes les sociétés clientes. Modifiez-les uniquement après une évolution officielle des obligations gouvernementales.</p>
+    <form method="POST" action="/admin/system/payroll-config" class="admin-form-grid">
+        <label>Taux CNSS salarié<input type="number" step="0.0001" min="0" name="cnssSalarialeRate" value="<%= payrollConfig?.cnssSalarialeRate ?? 0.0448 %>" required></label>
+        <label>Plafond CNSS (DH)<input type="number" step="0.01" min="0" name="cnssPlafond" value="<%= payrollConfig?.cnssPlafond ?? 6000 %>" required></label>
+        <label>Taux AMO salarié<input type="number" step="0.0001" min="0" name="amoSalarialeRate" value="<%= payrollConfig?.amoSalarialeRate ?? 0.0226 %>" required></label>
+        <label>Frais professionnels standard<input type="number" step="0.0001" min="0" name="fraisProStandardRate" value="<%= payrollConfig?.fraisProStandardRate ?? 0.35 %>" required></label>
+        <label>Plafond frais standard (DH)<input type="number" step="0.01" min="0" name="fraisProStandardCap" value="<%= payrollConfig?.fraisProStandardCap ?? 2500 %>" required></label>
+        <label>Frais professionnels élevés<input type="number" step="0.0001" min="0" name="fraisProHighRate" value="<%= payrollConfig?.fraisProHighRate ?? 0.25 %>" required></label>
+        <label>Plafond frais élevés (DH)<input type="number" step="0.01" min="0" name="fraisProHighCap" value="<%= payrollConfig?.fraisProHighCap ?? 2916.67 %>" required></label>
+        <label>Charge familiale par personne (DH)<input type="number" step="0.01" min="0" name="chargeFamilleParPersonne" value="<%= payrollConfig?.chargeFamilleParPersonne ?? 50 %>" required></label>
+        <label>Nombre maximal de personnes à charge<input type="number" step="1" min="0" max="100" name="maxChargesFamilleCount" value="<%= payrollConfig?.maxChargesFamilleCount ?? 6 %>" required></label>
+        <div class="admin-form-actions"><button type="submit" class="btn-primary">Enregistrer pour tous les clients</button></div>
+    </form>
+</section>
 <%- include('../partials/footer') %>

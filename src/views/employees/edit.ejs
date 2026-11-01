@@ -266,7 +266,7 @@
     </div>
 
     <div class="form-section employee-tab-panel" data-panel="indemnites">
-        <% const employeeRepresentationRate = employee.indemniteRepresentationRate === null || employee.indemniteRepresentationRate === undefined ? '' : (Number(employee.indemniteRepresentationRate) * 100).toFixed(2); %>
+        <% const employeeRepresentationRate = employee.indemniteRepresentationRate === null || employee.indemniteRepresentationRate === undefined ? '' : (Number(employee.indemniteRepresentationRate) * 100).toFixed(0); %>
         <div class="representation-employee-card">
             <div>
                 <strong>Indemnité de représentation</strong>
@@ -278,7 +278,7 @@
             </label>
             <label class="representation-rate-control">
                 <span>Taux</span>
-                <input type="number" name="indemniteRepresentationRate" value="<%= employeeRepresentationRate %>" data-default-rate="<%= defaultRepresentationRate ?? 10 %>" placeholder="<%= defaultRepresentationRate ?? 10 %>" min="0" max="100" step="0.01" <%= employeeRepresentationRate === '' ? 'disabled' : '' %>>
+                <input type="number" name="indemniteRepresentationRate" value="<%= employeeRepresentationRate %>" data-default-rate="<%= defaultRepresentationRate ?? 10 %>" placeholder="<%= defaultRepresentationRate ?? 10 %>" min="0" max="100" step="1" inputmode="numeric" <%= employeeRepresentationRate === '' ? 'disabled' : '' %>>
                 <strong>%</strong>
             </label>
         </div>
@@ -299,7 +299,7 @@
                             <td><%= representationDefinition?.code || '1003' %></td>
                             <td><strong>Indemnité de représentation</strong><small class="table-cell-note">Taux appliqué au salaire de base</small></td>
                             <td><strong><%= employeeRepresentationRate %> %</strong></td>
-                            <td><%= Number(defaultRepresentationRate ?? 10).toFixed(2) %> %</td>
+                            <td><%= Number(defaultRepresentationRate ?? 10).toFixed(0) %> %</td>
                         </tr>
                     <% } %>
                     <% const regularIndemnites = (indemnites || []).filter(item => !item.isRepresentation); %>

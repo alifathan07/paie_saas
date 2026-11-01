@@ -775,7 +775,7 @@ export const listBulletins = async (req, res) => {
         // Keep inactive employees visible so their payroll state is explicit in the list.
         const dbEmployees = await prisma.employee.findMany({
             where: { companyId, bulletinMasque: false },
-            orderBy: [{ nomComplet: 'asc' }, { id: 'asc' }],
+            orderBy: [{ matricule: 'asc' }, { nomComplet: 'asc' }, { id: 'asc' }],
             include: {
                 company: true,
                 category: true,
@@ -1674,16 +1674,28 @@ export const updateMonthlyIndemnity = async (req, res) => {
 
         // Remove the recurring line from the employee calculation and re-add
         // it as a bulletin-only line, preserving the fiche amount as its cap.
-        const calculationEmployee = storedBonus
-            ? { ...emp, bonuses: (emp.bonuses || []).filter(b => b !== storedBonus) }
-            : emp;
+        // When the edited line is the employee-specific representation
+        // indemnity, disable its automatic percentage calculation for this
+        // rebuild. The edited monthly line below is the single source of
+        // truth for this bulletin; keeping both creates duplicate columns in
+        // the payroll list because their rubric codes differ.
+        const isRepresentationEdit = representationLabel === oldLabel.toLowerCase();
+        const calculationEmployee = isRepresentationEdit
+            ? { ...emp, indemniteRepresentationName: null, indemniteRepresentationRate: null }
+            : storedBonus
+                ? { ...emp, bonuses: (emp.bonuses || []).filter(b => b !== storedBonus) }
+                : emp;
         const fixedNimpLabels = new Set((calculationEmployee.bonuses || [])
             .filter(b => !(b.bonus ? b.bonus.taxable : b.taxable))
             .map(b => String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()));
-        const monthlyNimpLines = existing.bonuses
+        const monthlyNimpLines = [...new Map(existing.bonuses
             .filter(b => !b.taxable
                 && !fixedNimpLabels.has(String(b.name).toLowerCase()))
-            .map(b => ({ label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
+            .map(b => [String(b.name).trim().toLowerCase(), {
+                label: b.name,
+                amount: Number(b.amount),
+                baseAmount: payslipBonusBaseAmount(b),
+            }])).values()];
         const updateIndex = monthlyNimpLines.findIndex(line =>
             line.label.toLowerCase() === oldLabel.toLowerCase()
         );
