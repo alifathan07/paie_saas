@@ -26,11 +26,17 @@ const reports = {
 
 editions.get("/", (req, res) => {
     const selectedReport = reports[req.query.report] || null;
+    const requestedMonth = Number(req.query.month);
+    const requestedYear = Number(req.query.year);
+    const hasPeriod = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12
+        && Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2040;
     res.render("editions/index", {
         title: "Éditions",
         currentPage: "editions",
         user: req.session.user,
         selectedReport,
+        month: hasPeriod ? requestedMonth : undefined,
+        year: hasPeriod ? requestedYear : undefined,
     });
 });
 

@@ -15,7 +15,8 @@
 <% } %>
 
 <div class="editions-grid">
-    <a class="edition-card edition-card-primary" href="/editions/bulletins">
+    <% const editionPeriodQuery = typeof month !== 'undefined' && typeof year !== 'undefined' ? `?month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}` : ''; %>
+    <a class="edition-card edition-card-primary" href="/editions/bulletins<%= editionPeriodQuery %>">
         <span class="edition-card-icon" aria-hidden="true">▤</span>
         <span class="edition-card-body">
             <strong>Bulletins</strong>
@@ -24,7 +25,7 @@
         <span class="edition-card-arrow" aria-hidden="true">→</span>
     </a>
 
-    <a class="edition-card" href="/editions/cnss">
+    <a class="edition-card" href="/editions/cnss<%= editionPeriodQuery %>">
         <span class="edition-card-icon" aria-hidden="true">▥</span>
         <span class="edition-card-body">
             <strong>État CNSS</strong>
@@ -33,7 +34,7 @@
         <span class="edition-card-arrow" aria-hidden="true">→</span>
     </a>
 
-    <a class="edition-card" href="/editions/amo">
+    <a class="edition-card" href="/editions/amo<%= editionPeriodQuery %>">
         <span class="edition-card-icon" aria-hidden="true">♥</span>
         <span class="edition-card-body">
             <strong>État AMO</strong>
@@ -42,7 +43,7 @@
         <span class="edition-card-arrow" aria-hidden="true">→</span>
     </a>
 
-    <a class="edition-card" href="/editions/journal">
+    <a class="edition-card" href="/editions/journal<%= editionPeriodQuery %>">
         <span class="edition-card-icon" aria-hidden="true">≡</span>
         <span class="edition-card-body">
             <strong>Journal de paie</strong>
@@ -51,7 +52,7 @@
         <span class="edition-card-arrow" aria-hidden="true">→</span>
     </a>
 
-    <a class="edition-card" href="/editions?report=livre">
+    <a class="edition-card" href="/editions?report=livre<%= typeof month !== 'undefined' && typeof year !== 'undefined' ? `&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}` : '' %>">
         <span class="edition-card-icon" aria-hidden="true">▤</span>
         <span class="edition-card-body">
             <strong>Livre de paie</strong>
@@ -60,7 +61,7 @@
         <span class="edition-card-arrow" aria-hidden="true">→</span>
     </a>
 
-    <a class="edition-card" href="/editions?report=ir">
+    <a class="edition-card" href="/editions?report=ir<%= typeof month !== 'undefined' && typeof year !== 'undefined' ? `&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}` : '' %>">
         <span class="edition-card-icon" aria-hidden="true">%</span>
         <span class="edition-card-body">
             <strong>État IR</strong>
