@@ -88,4 +88,32 @@
     if (notice) window.AppDialog.alert(notice.textContent.trim(), { title: 'Période de paie bloquée', confirmLabel: 'Revenir au mois actif' });
     const bulletinError = document.querySelector('#bulletin-error-message');
     if (bulletinError) window.AppDialog.alert(bulletinError.textContent.trim(), { title: 'Modification impossible', danger: true, confirmLabel: 'Compris' });
+    const editionError = document.querySelector('#edition-error-message');
+    if (editionError) window.AppDialog.alert(editionError.textContent.trim(), { title: 'Aucune donnée disponible', danger: true, confirmLabel: 'Compris' });
+    document.querySelectorAll('a[data-pdf-export]').forEach(link => link.addEventListener('click', async event => {
+        event.preventDefault();
+        if (link.dataset.loading === 'true') return;
+        link.dataset.loading = 'true';
+        try {
+            const response = await fetch(link.href, { credentials: 'same-origin' });
+            if (!response.ok) {
+                const message = (await response.text()).trim() || 'Impossible de générer le PDF.';
+                await window.AppDialog.alert(message, { title: 'Aucune donnée disponible', danger: true, confirmLabel: 'Compris' });
+                return;
+            }
+            const blob = await response.blob();
+            const disposition = response.headers.get('content-disposition') || '';
+            const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'export.pdf';
+            const url = URL.createObjectURL(blob);
+            const download = document.createElement('a');
+            download.href = url;
+            download.download = filename;
+            download.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            await window.AppDialog.alert('Impossible de générer le PDF.', { title: 'Erreur', danger: true, confirmLabel: 'Compris' });
+        } finally {
+            delete link.dataset.loading;
+        }
+    }));
 })();

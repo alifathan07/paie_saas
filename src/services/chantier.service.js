@@ -1,6 +1,8 @@
 import prisma from '../../db.ts';
 
 const CHANTIERS_API_URL = 'https://confonda.enmae.com/api/chantiers';
+const CHANTIERS_CACHE_TTL_MS = 60_000;
+let chantiersCache = { expiresAt: 0, rows: null };
 const isExcludedChantier = name => String(name || '').trim().toLocaleLowerCase('fr-FR') === 'aucun';
 
 async function fetchChantiersFromApi() {
@@ -36,11 +38,18 @@ export async function syncChantiers() {
 }
 
 export async function listChantiers() {
+    if (chantiersCache.rows && chantiersCache.expiresAt > Date.now()) {
+        return chantiersCache.rows;
+    }
     try {
-        return await syncChantiers();
+        const rows = await syncChantiers();
+        chantiersCache = { rows, expiresAt: Date.now() + CHANTIERS_CACHE_TTL_MS };
+        return rows;
     } catch (error) {
         console.error('Unable to sync chantiers:', error.message);
         const rows = await prisma.chantier.findMany({ orderBy: { nom: 'asc' } });
-        return rows.filter(item => !isExcludedChantier(item.nom));
+        const filteredRows = rows.filter(item => !isExcludedChantier(item.nom));
+        chantiersCache = { rows: filteredRows, expiresAt: Date.now() + CHANTIERS_CACHE_TTL_MS };
+        return filteredRows;
     }
 }

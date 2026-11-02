@@ -149,7 +149,11 @@ function listBulletinComponents(values, rubriqueMaps, recurringNimpLabels = new 
     ].map(([key, hours, multiplier, fallback]) => {
         const definition = (rubriqueMaps.imposableRows || []).find(item => item.calculationKey === key);
         const amount = Number((Number(hours || 0) * baseSalary / standardHours * multiplier).toFixed(2));
-        return row(definition?.code, definition?.name || fallback, hours || 0, null, amount);
+        return {
+            ...row(definition?.code, definition?.name || fallback, hours || 0, null, amount),
+            // Keep the payroll override field name for the bulletin-list input.
+            key: key.replace('overtime_', 'heuresSup'),
+        };
     });
     const components = [
         row(codes['Salaire de base'], 'Salaire de base', v.workingTimeMode === 'HOURS' ? v.workedHours : v.workedDays, null, v.baseSalary),
@@ -164,7 +168,9 @@ function listBulletinComponents(values, rubriqueMaps, recurringNimpLabels = new 
         row(codes.CNSS, 'CNSS', Math.min(Number(v.sbi || 0), 6000), v.cnssRate, null, v.cnss, v.cnssPatronale),
         row(codes.CIMR, 'CIMR', v.sbi, v.cimrRate, null, v.cimr),
         row(codes['Frais professionnels'], 'Frais professionnels', v.sbi, v.fraisProRate, null, v.fraisPro),
-        row(codes['Salaire net imposable'], 'SNI', v.sni, null, null),
+        // SNI is a calculated amount, so put it in gains for the bulletin
+        // list renderer (the base field is only used for calculation context).
+        row(codes['Salaire net imposable'], 'SNI', null, null, v.sni),
         row(codes['Impôt sur le revenu'], 'IR', v.sni, v.irTaux, null, v.irNet),
         ...(v.retenus || []).map(item => row(item.code, item.label, null, null, null, item.amount)),
         ...(v.nimpLines || []).map(item => {
@@ -606,7 +612,7 @@ function resolveWorkingTimeForPayslip(emp, payslip = null, input = {}) {
 /**
  * Maps a Prisma Payslip DB record to the view model format expected by EJS views.
  */
-export function mapPayslipToViewModel(p) {
+export function mapPayslipToViewModel(p, representationRate = null) {
     if (!p) return null;
     const variablePrimes = (p.bonuses || [])
         .filter(b => b.taxable && !String(b.name || '').startsWith(EXCLUDED_NIMP_PREFIX))
@@ -697,6 +703,12 @@ export function mapPayslipToViewModel(p) {
         rawStatus: p.status,
         baseSalary: effectiveBase,
         rawBaseSalary: storedBaseSalary,
+        // Keep the configured percentage separate from the rounded indemnity
+        // amount. Reconstructing it from amount / base can display 10.01% for
+        // an exact 10% rate when the amount was rounded to cents.
+        indemniteNonImposableRate: representationRate === null || representationRate === undefined
+            ? null
+            : Number(representationRate),
         primeAnciennete: Number(p.primeAnciennete),
         ancienneteRate: effectiveBase > 0 ? Number((Number(p.primeAnciennete) / effectiveBase).toFixed(2)) : 0,
         bonusesIMP: Number(p.bonusesIMP),
@@ -773,21 +785,113 @@ export const listBulletins = async (req, res) => {
         const bulletinError = req.query.bulletinError ? String(req.query.bulletinError) : null;
 
         // Keep inactive employees visible so their payroll state is explicit in the list.
+        // Push list filters into SQL and select only fields used by this page;
+        // loading complete employee/company/payroll graphs made this endpoint
+        // increasingly expensive as the workforce grew.
+        const employeeWhere = {
+            companyId,
+            bulletinMasque: false,
+            bulletinMasks: { none: { month, year } },
+        };
         const dbEmployees = await prisma.employee.findMany({
-            where: { companyId, bulletinMasque: false },
+            where: employeeWhere,
             orderBy: [{ matricule: 'asc' }, { nomComplet: 'asc' }, { id: 'asc' }],
-            include: {
-                company: true,
-                category: true,
-                bonuses: { include: { bonus: true } },
+            select: {
+                id: true,
+                nomComplet: true,
+                matricule: true,
+                categoryId: true,
+                chantierId: true,
+                chantierNom: true,
+                blocageSaisiePaie: true,
+                actif: true,
+                baseSalary: true,
+                indemniteRepresentationName: true,
+                indemniteRepresentationRate: true,
+                company: {
+                    select: {
+                        workingTimeMode: true,
+                        standardMonthlyDays: true,
+                        standardMonthlyHours: true,
+                    },
+                },
+                category: { select: { name: true } },
+                bonuses: {
+                    select: {
+                        amount: true,
+                        bonus: {
+                            select: {
+                                code: true,
+                                name: true,
+                                defaultAmount: true,
+                                taxable: true,
+                            },
+                        },
+                    },
+                },
                 payslips: {
                     where: { month, year },
-                    include: { bonuses: true },
+                    select: {
+                        id: true,
+                        employeeId: true,
+                        month: true,
+                        year: true,
+                        workedDays: true,
+                        workedHours: true,
+                        paidLeaveDays: true,
+                        joursFeries: true,
+                        workingTimeMode: true,
+                        standardMonthlyDays: true,
+                        standardMonthlyHours: true,
+                        status: true,
+                        validatedAt: true,
+                        baseSalary: true,
+                        primeAnciennete: true,
+                        bonusesIMP: true,
+                        bonusesNIMP: true,
+                        baseConge: true,
+                        paidLeaveAmount: true,
+                        baseFerie: true,
+                        joursFeriesAmount: true,
+                        brutGlobal: true,
+                        sbg: true,
+                        sbi: true,
+                        cnss: true,
+                        cnssRate: true,
+                        amo: true,
+                        amoRate: true,
+                        cimr: true,
+                        cimrRate: true,
+                        fraisPro: true,
+                        fraisProRate: true,
+                        sni: true,
+                        moisEcoules: true,
+                        irRate: true,
+                        irNet: true,
+                        irBrut: true,
+                        irTheorique: true,
+                        sommeADeduire: true,
+                        chargesDeFamille: true,
+                        netAPayer: true,
+                        avanceDeduction: true,
+                        avanceDeductionConfigured: true,
+                        heuresSup25: true,
+                        heuresSup50: true,
+                        heuresSup100: true,
+                        createdAt: true,
+                        bonuses: {
+                            select: {
+                                id: true,
+                                rubriqueImposableId: true,
+                                name: true,
+                                code: true,
+                                amount: true,
+                                baseAmount: true,
+                                taxable: true,
+                            },
+                        },
+                    },
                     take: 1
-                },
-                bulletinMasks: {
-                    where: { month, year },
-                    take: 1,
                 }
             }
         });
@@ -814,7 +918,9 @@ export const listBulletins = async (req, res) => {
                 Number(payslip.heuresSup100 || 0) > 0 ||
                 (payslip.bonuses && payslip.bonuses.length > 0)
             ) : false;
-            const bulletinView = payslip ? mapPayslipToViewModel(payslip) : null;
+            const bulletinView = payslip
+                ? mapPayslipToViewModel(payslip, emp.indemniteRepresentationRate)
+                : null;
             const bulletinComponents = listBulletinComponents(bulletinView, rubriqueMaps, recurringNimpLabels);
             const workingTime = payslip ? resolveWorkingTimeForPayslip(emp, payslip) : null;
             const ficheRatio = Number(workingTime?.ratio || 1);
@@ -859,14 +965,13 @@ export const listBulletins = async (req, res) => {
                 workingTimeMode: emp.company?.workingTimeMode || payslip?.workingTimeMode || "DAYS",
                 standardMonthlyDays: Number(emp.company?.standardMonthlyDays || payslip?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS),
                 standardMonthlyHours: Number(emp.company?.standardMonthlyHours || payslip?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS),
-                maskedForPeriod: emp.bulletinMasks.length > 0,
+                maskedForPeriod: false,
                 bulletin: bulletinView,
                 bulletinComponents: editableBulletinComponents,
                 bulletinStatus: status,
                 variablesEntered,
             };
-        }).filter(emp => !emp.maskedForPeriod)
-            .filter(emp => !categoryId || emp.categoryId === categoryId)
+        }).filter(emp => !categoryId || emp.categoryId === categoryId)
             .filter(emp => !chantierId || Number(emp.chantierId) === chantierId)
             .filter(emp => netMin === null || (emp.bulletin && Number(emp.bulletin.netAPayer) >= netMin))
             .filter(emp => netMax === null || (emp.bulletin && Number(emp.bulletin.netAPayer) <= netMax));
@@ -2373,7 +2478,10 @@ export const showBulletin = async (req, res) => {
                 include: { bonuses: true, retenus: true, avanceDeductions: { include: { avance: true } } }
             });
 
-            const history = dbHistory.map(mapPayslipToViewModel);
+            const history = dbHistory.map(payslip => mapPayslipToViewModel(
+                payslip,
+                emp.indemniteRepresentationRate,
+            ));
 
             return res.render("bulletins/show", {
                 title: `${emp.nomComplet} — Bulletins`,
@@ -2414,7 +2522,10 @@ export const showBulletin = async (req, res) => {
         console.info("[bulletin-show] payslip.loaded", { requestId, employeeId: empId, month, year, found: Boolean(dbPayslip) });
 
         const refreshedPayslip = await refreshOpenBulletinFromEmployee(emp, dbPayslip);
-        const bulletin = mapPayslipToViewModel(refreshedPayslip);
+        const bulletin = mapPayslipToViewModel(
+            refreshedPayslip,
+            emp.indemniteRepresentationRate,
+        );
         const addTaxableLines = values => taxableAdditionLines(values || {}, rubriqueMaps.imposableRows);
         if (bulletin) {
             const fixedNimpLabels = new Set((emp.bonuses || [])
@@ -2626,7 +2737,7 @@ export const downloadPdfBulletin = async (req, res) => {
         const variablePrimes = (payslip.bonuses || [])
             .filter(b => b.taxable)
             .map(b => ({ code: b.code || '', label: b.name, amount: Number(b.amount), baseAmount: payslipBonusBaseAmount(b) }));
-        const bulletinData = mapPayslipToViewModel(payslip);
+        const bulletinData = mapPayslipToViewModel(payslip, emp.indemniteRepresentationRate);
         const cumulative = await getBulletinPdfCumulative(empId, year, month, payslip);
 
         const pdfData = {

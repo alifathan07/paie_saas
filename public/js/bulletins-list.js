@@ -120,6 +120,32 @@
         month: document.querySelector('#sel-month')?.value || '',
         year: document.querySelector('#inp-year')?.value || '',
     });
+    // Employees without a bulletin do not have the worked-days form yet, but
+    // their overtime inputs are still rendered. Save those values through the
+    // same generate endpoint used once the bulletin exists.
+    document.querySelectorAll('.bulletin-row').forEach(row => {
+        if (row.querySelector('.worked-days-form')) return;
+        const employeeId = employeeIdForRow(row);
+        row.querySelectorAll('input[name="heuresSup25"], input[name="heuresSup50"], input[name="heuresSup100"]').forEach(input => {
+            input.addEventListener('change', async () => {
+                if (!input.checkValidity()) return;
+                try {
+                    const response = await fetch(`/bulletins/${employeeId}/generate`, {
+                        method: 'POST',
+                        headers: { Accept: 'application/json' },
+                        body: rowParams(row),
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer les heures supplémentaires.');
+                    window.location.reload();
+                } catch (error) {
+                    window.AppDialog.alert(error.message || 'Erreur d’enregistrement.', {
+                        title: 'Modification impossible', danger: true, confirmLabel: 'Compris',
+                    });
+                }
+            });
+        });
+    });
     // Non-taxable indemnities can be adjusted from the overview, even on a
     // locked bulletin. Only lines that already exist for the employee are
     // editable, and the amount is capped by the catalogue ceiling.
@@ -290,6 +316,32 @@
         row.querySelectorAll('input[name]:not([name="workedDays"]):not([name="workedHours"]):not([name="month"]):not([name="year"]):not([name="nimpAmounts"])').forEach(field => {
             if (field.type === 'hidden') return;
             let previewTimer;
+            let savingField = false;
+            const isOvertimeField = ['heuresSup25', 'heuresSup50', 'heuresSup100'].includes(field.name);
+            const saveOvertime = async () => {
+                if (!isOvertimeField || savingField || !field.checkValidity()) return;
+                savingField = true;
+                message.textContent = 'Enregistrement…';
+                try {
+                    const employeeId = form.action.split('/bulletins/')[1].split('/')[0];
+                    const response = await fetch(`/bulletins/${employeeId}/generate`, {
+                        method: 'POST',
+                        headers: { Accept: 'application/json' },
+                        body: rowParams(row),
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer les heures supplémentaires.');
+                    updatePayrollPreview(row, result.payroll || result);
+                    message.textContent = 'Enregistré';
+                } catch (error) {
+                    window.AppDialog.alert(error.message || 'Erreur d’enregistrement.', {
+                        title: 'Modification impossible', danger: true, confirmLabel: 'Compris',
+                    });
+                    message.textContent = error.message || 'Erreur d’enregistrement.';
+                } finally {
+                    savingField = false;
+                }
+            };
             field.addEventListener('input', () => {
                 clearTimeout(previewTimer);
                 previewTimer = setTimeout(async () => {
@@ -304,6 +356,7 @@
                     }
                 }, 300);
             });
+            field.addEventListener('change', saveOvertime);
             field.addEventListener('keydown', async event => {
                 if (event.key !== 'Enter') return;
                 event.preventDefault();
