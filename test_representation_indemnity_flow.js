@@ -2,7 +2,7 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { prisma } from "./src/lib/db.js";
 import { createEmployee, updateEmployee } from "./src/services/employeeService.js";
-import { saveEmployeeIndemnites, createIndemnite } from "./src/services/indemniteService.js";
+import { saveEmployeeIndemnites, createIndemnite, removeEmployeeIndemnite } from "./src/services/indemniteService.js";
 import { generateBulletin } from "./src/controllers/bulletins.controller.js";
 
 const month = 10;
@@ -107,6 +107,18 @@ try {
     assert.equal(Number(refreshedPayslip.bonusesNIMP), 350);
     assert.equal(Number(refreshedPayslip.sbg), 5350);
     assert.equal(Number(refreshedPayslip.sbi), 5000);
+
+    console.log("Removing the representation indemnity from the employee fiche...");
+    await removeEmployeeIndemnite(employee.id, representation.id, company.id);
+    const removedEmployee = await prisma.employee.findUnique({ where: { id: employee.id } });
+    assert.equal(removedEmployee.indemniteRepresentationName, null);
+    assert.equal(removedEmployee.indemniteRepresentationRate, null);
+    const removedPayslip = await prisma.payslip.findUnique({
+        where: { id: payslip.id },
+        include: { bonuses: true },
+    });
+    assert.equal(removedPayslip.bonuses.some(line => line.name.toLowerCase() === "indemnité de représentation"), false);
+    assert.equal(Number(removedPayslip.bonusesNIMP), 0);
 
     console.log("PASS: employee assignment is calculated and saved in the bulletin.");
 } finally {

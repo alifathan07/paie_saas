@@ -182,20 +182,20 @@ export async function saveEmployeeIndemnites(employeeId, companyId, rows = []) {
     if (!employee) throw new Error("EMPLOYEE_NOT_FOUND");
     const existingAssignments = await prisma.employeeBonus.findMany({
         where: { employeeId: empId, bonus: { taxable: false } },
-        select: { bonusId: true },
+        select: { bonusId: true, bonus: { select: { name: true } } },
     });
     const normalized = [];
     const seen = new Set();
     let representationSelected = false;
-    let representationDefinition = null;
+    let representationTouched = false;
     for (const row of Array.isArray(rows) ? rows : []) {
         const bonusId = Number(row.bonusId);
         if (!Number.isInteger(bonusId) || seen.has(bonusId)) continue;
         const definition = await prisma.bonus.findFirst({ where: { id: bonusId, companyId: cId, taxable: false } });
         if (!definition) continue;
         if (isRepresentationName(definition.name)) {
+            representationTouched = true;
             representationSelected = true;
-            representationDefinition = definition;
             normalized.push({
                 bonusId,
                 amount: cleanAmount(definition.defaultAmount || 0.01),
@@ -211,9 +211,33 @@ export async function saveEmployeeIndemnites(employeeId, companyId, rows = []) {
         seen.add(bonusId);
     }
     return prisma.$transaction(async tx => {
+        const retainedBonusIds = new Set(normalized.map(row => row.bonusId));
+        const removedLabels = existingAssignments
+            .filter(row => !retainedBonusIds.has(row.bonusId))
+            .map(row => String(row.bonus.name || '').trim())
+            .filter(Boolean);
+        if (representationTouched && !representationSelected) removedLabels.push(REPRESENTATION_NAME);
+        if (removedLabels.length) {
+            const openPayslips = await tx.payslip.findMany({
+                where: { employeeId: empId, status: { in: ['DRAFT', 'GENERATED'] } },
+                select: { id: true },
+            });
+            if (openPayslips.length) {
+                await tx.payslipBonus.deleteMany({
+                    where: {
+                        payslipId: { in: openPayslips.map(row => row.id) },
+                        name: { in: removedLabels },
+                    },
+                });
+            }
+        }
         await tx.employeeBonus.deleteMany({ where: { employeeId: empId, bonus: { taxable: false } } });
         if (normalized.length) await tx.employeeBonus.createMany({ data: normalized.map(row => ({ employeeId: empId, ...row })) });
-        if (representationDefinition) {
+        // The representation allowance is calculated from employee metadata,
+        // not EmployeeBonus. Only change it when this payload explicitly
+        // contains the representation catalogue row; regular indemnity saves
+        // must not switch representation off accidentally.
+        if (representationTouched) {
             const company = await tx.company.findUnique({
                 where: { id: cId },
                 select: { indemniteRepresentationRate: true },
@@ -277,10 +301,32 @@ export async function removeEmployeeIndemnite(employeeId, bonusId, companyId) {
     const cId = companyKey(companyId);
     const employee = await prisma.employee.findFirst({ where: { id: empId, companyId: cId }, select: { id: true } });
     if (!employee) throw new Error("EMPLOYEE_NOT_FOUND");
-    const definition = await prisma.bonus.findFirst({ where: { id: bId, companyId: cId, taxable: false }, select: { id: true } });
+    const definition = await prisma.bonus.findFirst({ where: { id: bId, companyId: cId, taxable: false }, select: { id: true, name: true } });
     if (!definition) throw new Error("INDEMNITE_NOT_FOUND");
     await prisma.$transaction(async tx => {
-        await tx.employeeBonus.delete({ where: { employeeId_bonusId: { employeeId: empId, bonusId: bId } } });
+        // Representation is intentionally not stored in EmployeeBonus.  The
+        // old delete path therefore failed silently and left its employee
+        // metadata behind.
+        if (isRepresentationName(definition.name)) {
+            await tx.employee.update({
+                where: { id: empId },
+                data: { indemniteRepresentationName: null, indemniteRepresentationRate: null },
+            });
+        } else {
+            await tx.employeeBonus.deleteMany({ where: { employeeId: empId, bonusId: bId } });
+        }
+        const openPayslips = await tx.payslip.findMany({
+            where: { employeeId: empId, status: { in: ['DRAFT', 'GENERATED'] } },
+            select: { id: true },
+        });
+        if (openPayslips.length) {
+            await tx.payslipBonus.deleteMany({
+                where: {
+                    payslipId: { in: openPayslips.map(row => row.id) },
+                    name: definition.name,
+                },
+            });
+        }
         const updatedEmployee = await tx.employee.findUnique({
             where: { id: empId },
             include: { company: true, bonuses: { include: { bonus: true } } },

@@ -985,7 +985,11 @@
             return values.indemniteNonImposableRate;
         }
         const base = Number(values.baseSalary || 0);
-        return base > 0 ? Number(line.amount || 0) / base : null;
+        // Legacy bulletins may not carry the configured rate.  Rates are
+        // integer percentages, so round the reconstructed value before
+        // converting it back to a fraction; otherwise a rounded 500.50 DH
+        // line displays as 10.01% instead of the configured 10%.
+        return base > 0 ? Number((Math.round((Number(line.amount || 0) / base) * 100) / 100).toFixed(2)) : null;
     };
     const primes = values.variablePrimes || [];
     const taxableAdditions = (values.taxableAdditions || []).filter(line => !String(line.calculationKey || '').startsWith('overtime_'));
