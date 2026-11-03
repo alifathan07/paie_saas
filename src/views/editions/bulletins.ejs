@@ -21,6 +21,8 @@
     </div>
 
     <form method="POST" action="/editions/bulletins/pdf" class="bulletin-export-form">
+        <input type="hidden" name="month" value="<%= month %>">
+        <input type="hidden" name="year" value="<%= year %>">
         <div class="bulletin-export-grid">
             <label>
                 <span>Matricule de</span>
@@ -31,18 +33,6 @@
                 <span>Matricule à</span>
                 <input class="form-input" type="search" name="to" list="matricules-options" autocomplete="off" placeholder="Rechercher un matricule" required value="<%= typeof to !== 'undefined' ? to : '' %>">
                 <small>Dernier matricule inclus</small>
-            </label>
-            <label>
-                <span>Mois</span>
-                <select class="form-input" name="month" required>
-                    <% for (let m = 1; m <= 12; m++) { %>
-                        <option value="<%= m %>" <%= m === month ? 'selected' : '' %>><%= ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][m] %></option>
-                    <% } %>
-                </select>
-            </label>
-            <label>
-                <span>Année</span>
-                <input class="form-input" type="number" name="year" min="2020" max="2040" required value="<%= year %>">
             </label>
         </div>
         <datalist id="matricules-options">

@@ -6,6 +6,10 @@
     <div role="alert" id="bulletin-error-message" hidden><%= bulletinError %></div>
 <% } %>
 
+<form id="period-form" method="POST" action="/bulletins/close-bulk" hidden>
+    <input type="hidden" name="month" value="<%= month %>">
+    <input type="hidden" name="year" value="<%= year %>">
+</form>
 
 <div class="page-header">
     <div class="header-title-area">
@@ -14,7 +18,14 @@
     </div>
     <div class="header-actions">
             <% if (employees.some(emp => emp.bulletin && emp.bulletin.status !== 'closed')) { %>
-            <button type="submit" class="btn-primary close-action" form="period-form" formmethod="POST" formaction="/bulletins/close-bulk" data-confirm="Êtes-vous sûr de vouloir clôturer tous les bulletins de <%= monthName %> <%= year %> ?" data-confirm-title="Clôturer le mois" data-confirm-label="Oui, clôturer" data-confirm-danger="true">Clôturer le mois</button>
+            <button type="submit" class="btn-primary close-action" form="period-form" formmethod="POST" formaction="/bulletins/close-bulk" data-confirm="Êtes-vous sûr de vouloir clôturer tous les bulletins de <%= monthName %> <%= year %> ?" data-confirm-title="Clôturer le mois" data-confirm-label="Oui, clôturer" data-confirm-danger="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                Clôturer le mois
+            </button>
             <% } %>
     </div>
 </div>
@@ -70,58 +81,139 @@
 </div>
 <% } %>
 
-<!-- Period selector -->
-<div class="card" style="margin-bottom: 20px; padding: 16px 24px;">
-    <form method="GET" action="/bulletins" id="period-form">
-        <div class="period-selector">
-            <span class="period-label">Période :</span>
-            <select name="month" id="sel-month" class="form-input" onchange="this.form.submit()">
-                <% for (let m = 1; m <= 12; m++) { %>
-                    <option value="<%= m %>" <%= m === month ? 'selected' : '' %>><%= monthNames[m] %></option>
-                <% } %>
-            </select>
-            <input type="number" name="year" id="inp-year" class="form-input"
-                value="<%= year %>" min="2020" max="2040" style="width: 90px;"
-                onchange="this.form.submit()">
-            <select name="categoryId" class="form-input" aria-label="Filtrer par catégorie">
-                <option value="">Toutes les catégories</option>
-                <% (categories || []).forEach(category => { %>
-                    <option value="<%= category.id %>" <%= String(filters?.categoryId || '') === String(category.id) ? 'selected' : '' %>><%= category.name %></option>
-                <% }); %>
-            </select>
-            <select name="chantierId" class="form-input" aria-label="Filtrer par chantier">
-                <option value="">Tous les chantiers</option>
-                <% (chantiers || []).forEach(item => { %>
-                    <option value="<%= item.id %>" <%= String(filters?.chantierId || '') === String(item.id) ? 'selected' : '' %>><%= item.nom %></option>
-                <% }); %>
-            </select>
-            <input type="number" name="netMin" class="form-input" value="<%= filters?.netMin ?? '' %>" min="0" step="0.01" placeholder="Net de">
-            <input type="number" name="netMax" class="form-input" value="<%= filters?.netMax ?? '' %>" min="0" step="0.01" placeholder="Net à">
-            <button type="submit" class="btn-secondary">Filtrer</button>
-            <% if (filters?.categoryId || filters?.chantierId || filters?.netMin !== '' || filters?.netMax !== '') { %>
-                <a href="/bulletins?month=<%= month %>&year=<%= year %>" class="btn-secondary">Réinitialiser</a>
-            <% } %>
-            <% if (employees.some(emp => !emp.bulletin)) { %>
-            <button type="submit" id="btn-bulk-generate" class="btn-primary" formmethod="POST" formaction="/bulletins/generate-bulk" data-confirm="Générer les bulletins pour tous les employés actifs qui n’en ont pas encore pour <%= monthName %> <%= year %> ?" data-confirm-title="Générer les bulletins" data-confirm-label="Générer">
+<!-- Period filters and bulk actions -->
+<div class="card bulletin-filters">
+    <section class="bulletin-filter-section" aria-labelledby="bulletin-filters-heading">
+        <div class="bulletin-filter-heading">
+            <span class="bulletin-filter-heading-icon" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+            </span>
+            <div class="bulletin-filter-heading-copy">
+                <h2 id="bulletin-filters-heading">Filtres</h2>
+                <p>Affinez la liste par catégorie, chantier ou net à payer.</p>
+            </div>
+        </div>
+        <form method="GET" action="/bulletins" id="bulletins-filter-form" class="bulletin-filter-controls">
+            <input type="hidden" name="month" value="<%= month %>">
+            <input type="hidden" name="year" value="<%= year %>">
+            <label class="bulletin-filter-field">
+                <span class="bulletin-filter-label">Catégorie</span>
+                <select name="categoryId" class="form-input">
+                    <option value="">Toutes les catégories</option>
+                    <% (categories || []).forEach(category => { %>
+                        <option value="<%= category.id %>" <%= String(filters?.categoryId || '') === String(category.id) ? 'selected' : '' %>><%= category.name %></option>
+                    <% }); %>
+                </select>
+            </label>
+            <label class="bulletin-filter-field">
+                <span class="bulletin-filter-label">Chantier</span>
+                <select name="chantierId" class="form-input">
+                    <option value="">Tous les chantiers</option>
+                    <% (chantiers || []).forEach(item => { %>
+                        <option value="<%= item.id %>" <%= String(filters?.chantierId || '') === String(item.id) ? 'selected' : '' %>><%= item.nom %></option>
+                    <% }); %>
+                </select>
+            </label>
+            <label class="bulletin-filter-field">
+                <span class="bulletin-filter-label">Net minimum</span>
+                <span class="bulletin-money-input">
+                    <input type="number" name="netMin" class="form-input" value="<%= filters?.netMin ?? '' %>" min="0" step="0.01" placeholder="0,00" inputmode="decimal">
+                    <span class="bulletin-money-suffix" aria-hidden="true">DH</span>
+                </span>
+            </label>
+            <label class="bulletin-filter-field">
+                <span class="bulletin-filter-label">Net maximum</span>
+                <span class="bulletin-money-input">
+                    <input type="number" name="netMax" class="form-input" value="<%= filters?.netMax ?? '' %>" min="0" step="0.01" placeholder="0,00" inputmode="decimal">
+                    <span class="bulletin-money-suffix" aria-hidden="true">DH</span>
+                </span>
+            </label>
+            <div class="bulletin-filter-actions">
+                <button type="submit" class="btn-primary bulletin-filter-submit">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                    </svg>
+                    Filtrer
+                </button>
+                <% if (filters?.categoryId || filters?.chantierId || filters?.netMin !== '' || filters?.netMax !== '') { %>
+                    <a href="/bulletins?month=<%= month %>&year=<%= year %>" class="bulletin-filter-reset">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="1 4 1 10 7 10"/>
+                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                        </svg>
+                        Réinitialiser
+                    </a>
+                <% } %>
+            </div>
+        </form>
+    </section>
+
+    <section class="bulletin-filter-section bulletin-actions-section" aria-labelledby="bulletin-actions-heading">
+        <div class="bulletin-filter-heading">
+            <span class="bulletin-filter-heading-icon bulletin-filter-heading-icon--actions" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+            </span>
+            <div class="bulletin-filter-heading-copy">
+                <h2 id="bulletin-actions-heading">Actions de traitement</h2>
+                <p>Appliquez une action groupée aux bulletins de la période.</p>
+            </div>
+        </div>
+        <div class="bulletin-filter-controls bulletin-action-controls">
+            <% if (employees.some(emp => !emp.bulletin)) { %>
+            <form method="POST" action="/bulletins/generate-bulk">
+                <input type="hidden" name="month" value="<%= month %>">
+                <input type="hidden" name="year" value="<%= year %>">
+                <button type="submit" id="btn-bulk-generate" class="btn-primary bulletin-bulk-action" data-confirm="Générer les bulletins pour tous les employés actifs qui n’en ont pas encore pour <%= monthName %> <%= year %> ?" data-confirm-title="Générer les bulletins" data-confirm-label="Générer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
                     <polyline points="13 2 13 9 20 9"/>
                     <line x1="9" y1="13" x2="15" y2="13"/>
                     <line x1="9" y1="17" x2="15" y2="17"/>
                 </svg>
                 Traitement par liste
-            </button>
+                </button>
+            </form>
             <% } %>
             <% if (employees.some(emp => ['draft', 'generated'].includes(emp.bulletin?.status))) { %>
-            <button type="submit" class="btn-primary validate-action" formmethod="POST" formaction="/bulletins/validate-bulk" data-confirm="Valider les bulletins en brouillon ou générés des employés actifs pour <%= monthName %> <%= year %> ? Les bulletins validés seront verrouillés." data-confirm-title="Valider par liste" data-confirm-label="Valider">Valider par liste</button>
+            <form method="POST" action="/bulletins/validate-bulk">
+                <input type="hidden" name="month" value="<%= month %>">
+                <input type="hidden" name="year" value="<%= year %>">
+                <button type="submit" class="btn-primary validate-action bulletin-bulk-action" data-confirm="Valider les bulletins en brouillon ou générés des employés actifs pour <%= monthName %> <%= year %> ? Les bulletins validés seront verrouillés." data-confirm-title="Valider par liste" data-confirm-label="Valider">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    Valider par liste
+                </button>
+            </form>
             <% } %>
             <% if (employees.some(emp => emp.bulletin?.status === 'validated')) { %>
-            <button type="submit" class="btn-primary draft-action" formmethod="POST" formaction="/bulletins/draft-bulk" data-confirm="Retourner tous les bulletins validés de <%= monthName %> <%= year %> en brouillon ? Ils pourront à nouveau être modifiés." data-confirm-title="Retourner en brouillon en masse" data-confirm-label="Retourner en brouillon">Retourner en brouillon en masse</button>
+            <form method="POST" action="/bulletins/draft-bulk">
+                <input type="hidden" name="month" value="<%= month %>">
+                <input type="hidden" name="year" value="<%= year %>">
+                <button type="submit" class="btn-primary draft-action bulletin-bulk-action" data-confirm="Retourner tous les bulletins validés de <%= monthName %> <%= year %> en brouillon ? Ils pourront à nouveau être modifiés." data-confirm-title="Retourner en brouillon en masse" data-confirm-label="Retourner en brouillon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="1 4 1 10 7 10"/>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                    </svg>
+                    Retourner en brouillon en masse
+                </button>
+            </form>
             <% } %>
-
         </div>
-    </form>
+    </section>
 </div>
 
 <!-- Employees payroll table -->

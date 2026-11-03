@@ -6,14 +6,9 @@
     </div>
 </div>
 <% if (error) { %><div class="bulk-summary editions-error" role="alert" id="edition-error-message"><%= error %></div><% } %>
-<section class="edition-form-card">
-    <form method="GET" action="/editions/journal" class="bulletin-export-form">
-        <div class="bulletin-export-grid">
-            <label><span>Mois</span><select class="form-input" name="month"><% for (let m = 1; m <= 12; m++) { %><option value="<%= m %>" <%= m === month ? 'selected' : '' %>><%= monthNames[m] %></option><% } %></select></label>
-            <label><span>Année</span><input class="form-input" type="number" name="year" min="2020" max="2040" value="<%= year %>"></label>
-        </div>
-        <div class="edition-form-actions"><button class="btn-primary" type="submit">Afficher</button><a class="button secondary" data-pdf-export href="/editions/journal/pdf?month=<%= month %>&year=<%= year %>">Télécharger le journal PDF</a></div>
-    </form>
+<section class="edition-form-card edition-period-note">
+    <span>Période active : <strong><%= monthName %> <%= year %></strong></span>
+    <a class="button secondary" data-pdf-export href="/editions/journal/pdf?month=<%= month %>&year=<%= year %>">Télécharger le journal PDF</a>
 </section>
 <% if (journal.rows.length) { %>
 <section class="contribution-report">

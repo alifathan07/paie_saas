@@ -5,6 +5,17 @@
     if (tableWrapper && topScrollbar && bulletinTable) {
         const scrollbarContent = topScrollbar.firstElementChild;
         const syncWidth = () => { scrollbarContent.style.width = `${bulletinTable.scrollWidth}px`; };
+        // Keep the sticky right-hand columns aligned with their real widths.
+        const syncStickyOffsets = () => {
+            const actionsColumn = bulletinTable.querySelector('thead .actions-column');
+            const statusColumn = bulletinTable.querySelector('thead .status-column');
+            if (!actionsColumn || !statusColumn) return;
+            const actionsWidth = actionsColumn.getBoundingClientRect().width;
+            const statusWidth = statusColumn.getBoundingClientRect().width;
+            if (!actionsWidth || !statusWidth) return;
+            bulletinTable.style.setProperty('--sticky-status-offset', `${actionsWidth}px`);
+            bulletinTable.style.setProperty('--sticky-net-offset', `${actionsWidth + statusWidth}px`);
+        };
         let syncing = false;
         topScrollbar.addEventListener('scroll', () => {
             if (syncing) return;
@@ -18,9 +29,23 @@
             topScrollbar.scrollLeft = tableWrapper.scrollLeft;
             syncing = false;
         });
-        new ResizeObserver(syncWidth).observe(bulletinTable);
+        new ResizeObserver(() => {
+            syncWidth();
+            syncStickyOffsets();
+        }).observe(bulletinTable);
+        window.addEventListener('resize', syncStickyOffsets);
+        document.fonts?.ready.then(syncStickyOffsets).catch(() => {});
         syncWidth();
+        syncStickyOffsets();
+        requestAnimationFrame(syncStickyOffsets);
     }
+    const currentPeriod = () => {
+        const periodForm = document.querySelector('#period-form');
+        return {
+            month: periodForm?.querySelector('input[name="month"]')?.value || '',
+            year: periodForm?.querySelector('input[name="year"]')?.value || '',
+        };
+    };
     const maskDialog = document.querySelector('#mask-dialog');
     const maskForm = document.querySelector('#mask-dialog-form');
     const maskMessage = document.querySelector('#mask-dialog-message');
@@ -39,7 +64,8 @@
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = maskForm.action;
-        [['month', document.querySelector('#sel-month').value], ['year', document.querySelector('#inp-year').value], ['scope', submitter.value]]
+        const { month, year } = currentPeriod();
+        [['month', month], ['year', year], ['scope', submitter.value]]
             .forEach(([name, value]) => { const input = document.createElement('input'); input.type = 'hidden'; input.name = name; input.value = value; form.append(input); });
         document.body.append(form);
         form.submit();
@@ -51,10 +77,8 @@
         return sbiColumn >= 0 ? row.cells[sbiColumn] : null;
     };
     const rowParams = row => {
-        const params = new URLSearchParams({
-            month: document.querySelector('#sel-month')?.value || '',
-            year: document.querySelector('#inp-year')?.value || '',
-        });
+        const { month, year } = currentPeriod();
+        const params = new URLSearchParams({ month, year });
         row.querySelectorAll('input[name]').forEach(input => {
             if (input.name === 'month' || input.name === 'year') return;
             params.append(input.name, input.value);
@@ -116,10 +140,7 @@
         const match = String(row.dataset.href || '').match(/\/bulletins\/(\d+)/);
         return match ? match[1] : '';
     };
-    const selectedPeriod = () => ({
-        month: document.querySelector('#sel-month')?.value || '',
-        year: document.querySelector('#inp-year')?.value || '',
-    });
+    const selectedPeriod = () => currentPeriod();
     // Employees without a bulletin do not have the worked-days form yet, but
     // their overtime inputs are still rendered. Save those values through the
     // same generate endpoint used once the bulletin exists.

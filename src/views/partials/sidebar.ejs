@@ -7,7 +7,7 @@
                 <div class="brand-sub">Gestion RH & Paie</div>
             </div>
         </div>
-        <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="app-sidebar" aria-expanded="true" aria-label="Réduire le menu">‹</button>
+        <button type="button" class="sidebar-toggle" id="sidebar-toggle" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Réduire le menu">‹</button>
     </div>
     <nav class="sidebar-nav">
         <% if (isAdmin && !clientMode) { %>
@@ -72,7 +72,7 @@
                 <a href="/primes" class="sidebar-sub-link <%= typeof currentPage !== 'undefined' && currentPage === 'primes' ? 'active' : '' %>"><svg class="sidebar-sub-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.3 5.1L20 10l-4.2 3.7L17 19l-5-2.8L7 19l1.2-5.3L4 10l5.7-1.9L12 3Z"/></svg>Primes imposables</a>
             </div>
         </details>
-        <a href="/bulletins"
+        <a href="/bulletins?month=<%= encodeURIComponent(periodMonth) %>&year=<%= encodeURIComponent(periodYear) %>"
             class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'bulletins' ? 'active' : '' %>">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -84,7 +84,7 @@
             </svg>
             <span>Traitement de paie</span>
         </a>
-        <a href="/editions<%= typeof month !== 'undefined' && typeof year !== 'undefined' ? `?month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}` : '' %>"
+        <a href="/editions?month=<%= encodeURIComponent(periodMonth) %>&year=<%= encodeURIComponent(periodYear) %>"
             class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'editions' ? 'active' : '' %>">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

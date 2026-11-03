@@ -86,6 +86,8 @@
     });
     const notice = document.querySelector('#bulletin-period-message');
     if (notice) window.AppDialog.alert(notice.textContent.trim(), { title: 'Période de paie bloquée', confirmLabel: 'Revenir au mois actif' });
+    const periodChangeNotice = document.querySelector('#period-change-message');
+    if (periodChangeNotice) window.AppDialog.alert(periodChangeNotice.textContent.trim(), { title: 'Période de paie bloquée', confirmLabel: 'Revenir au mois actif' });
     const bulletinError = document.querySelector('#bulletin-error-message');
     if (bulletinError) window.AppDialog.alert(bulletinError.textContent.trim(), { title: 'Modification impossible', danger: true, confirmLabel: 'Compris' });
     const editionError = document.querySelector('#edition-error-message');

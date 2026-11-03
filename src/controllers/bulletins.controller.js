@@ -1173,6 +1173,12 @@ export const closeBulkBulletins = async (req, res) => {
             data: { status: BULLETIN_STATUS.CLOSED },
         });
         req.session.closeBulletinsResult = { count: result.count, month, year };
+        if (result.count > 0 && !(month === 12 && year === 2040)) {
+            const nextMonth = month === 12 ? 1 : month + 1;
+            const nextYear = month === 12 ? year + 1 : year;
+            req.session.selectedPeriod = { month: nextMonth, year: nextYear };
+            return res.redirect(`/bulletins?month=${nextMonth}&year=${nextYear}`);
+        }
         return res.redirect(`/bulletins?month=${month}&year=${year}`);
     } catch (err) {
         console.error("Bulk close bulletins error:", err);

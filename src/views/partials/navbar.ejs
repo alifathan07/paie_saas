@@ -1,50 +1,73 @@
 <header class="app-header">
-    <% if (clientMode) { %><div style="position:absolute;left:24px;top:12px;background:#fff3cd;color:#664d03;border:1px solid #ffecb5;border-radius:6px;padding:6px 10px;font-size:12px">Mode client : <strong><%= clientMode.userName %></strong> · <%= clientMode.companyName %> <form method="POST" action="/admin/exit-mode" style="display:inline;margin-left:8px"><button type="submit" class="btn-secondary" style="padding:3px 7px">Quitter</button></form></div><% } %>
-    <div class="app-header-nav-actions">
-        <% if (typeof currentPage === 'undefined' || currentPage !== 'bulletins') { %>
-        <a href="/bulletins" class="btn-primary navbar-payroll-link" title="Accéder au traitement de paie">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="8" y1="13" x2="16" y2="13" />
-                <line x1="8" y1="17" x2="13" y2="17" />
-            </svg>
-            Traitement de paie
-        </a>
-        <% } %>
-        <% if (typeof currentPage === 'undefined' || currentPage !== 'editions') { %>
-        <a href="/editions<%= typeof month !== 'undefined' && typeof year !== 'undefined' ? `?month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}` : '' %>" class="btn-secondary navbar-editions-link" title="Accéder aux éditions">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
-            Éditions
-        </a>
-        <% } %>
-    </div>
-    <div class="app-header-actions">
-        <span class="badge badge-actif">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="6" />
-                <circle cx="12" cy="12" r="2" />
-            </svg>
-            ACTIF
-        </span>
-        <div class="user-chip">
-            <% 
-                const userName = (typeof user !== 'undefined' && user && user.name) ? user.name : 'Utilisateur RH';
-                const initials = userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'RH';
-            %>
-            <div class="user-avatar"><%= initials %></div>
-            <span><%= userName %></span>
+    <% if (clientMode) { %>
+        <div class="navbar-client-mode">
+            Mode client : <strong><%= clientMode.userName %></strong> · <%= clientMode.companyName %>
+            <form method="POST" action="/admin/exit-mode"><button type="submit" class="btn-secondary">Quitter</button></form>
         </div>
-        <% if (typeof user !== 'undefined' && user) { %><a href="/profile" class="user-chip" title="Modifier mon profil">Mon profil</a><% } %>
-        <% if (typeof user !== 'undefined' && user && user.activeCompanyId) { %>
-            <a href="/auth/select-company" class="user-chip" title="Changer d'entreprise">Changer d'entreprise</a>
-        <% } %>
+    <% } %>
+
+    <div class="navbar-left">
+        <button type="button" class="navbar-menu-toggle" data-sidebar-toggle aria-label="Ouvrir le menu" title="Menu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <% const pageNames = { dashboard: 'Accueil', bulletins: 'Traitement de paie', editions: 'Éditions', employees: 'Salariés', companies: 'Sociétés', parametrage: 'Paramétrage', rubriques: 'Rubriques', avances: 'Avances', indemnites: 'Indemnités', primes: 'Primes', profile: 'Mon profil', admin: 'Administration' }; %>
+        <span class="navbar-page-name"><%= pageNames[currentPage] || 'Accueil' %></span>
+        <label class="navbar-search" aria-label="Rechercher">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+            <input type="search" placeholder="Rechercher" autocomplete="off">
+        </label>
     </div>
+
+    <div class="navbar-right">
+        <div class="navbar-company" title="Société active">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V5.5L12 3l7 2.5V21M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01" /></svg>
+            <span><%= activeCompanyName || 'Société active' %></span>
+        </div>
+        <button type="button" class="navbar-period-trigger" id="open-period-dialog" aria-haspopup="dialog" aria-controls="period-dialog">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+            <span>Année <%= periodYear %></span>
+        </button>
+        <div class="navbar-shortcuts">
+            <a href="/bulletins?month=<%= encodeURIComponent(periodMonth) %>&year=<%= encodeURIComponent(periodYear) %>"
+                class="navbar-icon-link navbar-payroll-action <%= typeof currentPage !== 'undefined' && currentPage === 'bulletins' ? 'is-active' : '' %>"
+                title="Traitement de paie — saisir, calculer et valider les bulletins"
+                aria-label="Traitement de paie"
+                <% if (typeof currentPage !== 'undefined' && currentPage === 'bulletins') { %>aria-current="page"<% } %>>
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M8 6h8" /><path d="M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01" /><path d="M8 18h8" /></svg>
+                <span class="navbar-action-label"><span class="navbar-action-label-full">Traitement de paie</span><span class="navbar-action-label-short">Paie</span></span>
+            </a>
+            <a href="/editions?month=<%= encodeURIComponent(periodMonth) %>&year=<%= encodeURIComponent(periodYear) %>"
+                class="navbar-icon-link navbar-editions-action <%= typeof currentPage !== 'undefined' && currentPage === 'editions' ? 'is-active' : '' %>"
+                title="Éditions — états CNSS, AMO, IR, journal et livre de paie"
+                aria-label="Éditions"
+                <% if (typeof currentPage !== 'undefined' && currentPage === 'editions') { %>aria-current="page"<% } %>>
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+                <span class="navbar-editions-label">Éditions</span>
+            </a>
+            <button type="button" class="navbar-icon-link" title="Notifications" aria-label="Notifications"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></button>
+        </div>
+        <button type="button" class="navbar-icon-link navbar-theme-toggle" data-theme-toggle title="Changer de thème" aria-label="Changer de thème" aria-pressed="false"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></svg></button>
+        <div class="navbar-user-menu">
+            <% const userName = (typeof user !== 'undefined' && user && user.name) ? user.name : 'Utilisateur RH'; %>
+            <div class="user-avatar"><%= userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'RH' %></div>
+            <span class="navbar-user-name"><%= userName %></span>
+            <% if (typeof user !== 'undefined' && user) { %><a href="/profile" class="navbar-user-link" title="Modifier mon profil">Mon profil</a><% } %>
+            <% if (typeof user !== 'undefined' && user && user.activeCompanyId) { %><a href="/auth/select-company" class="navbar-user-link navbar-user-company-link" title="Changer d'entreprise">Changer d'entreprise</a><% } %>
+        </div>
+    </div>
+
+    <dialog class="period-dialog" id="period-dialog" aria-labelledby="period-dialog-title">
+        <form method="GET" action="/period" class="period-dialog-form" id="period-dialog-form">
+            <div class="period-dialog-header"><div class="period-dialog-title-wrap"><span class="period-dialog-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg></span><h2 id="period-dialog-title">Changer de période</h2></div><button type="button" class="period-dialog-close" id="close-period-dialog" aria-label="Fermer">×</button></div>
+            <div class="period-dialog-fields">
+                <label for="period-dialog-year">Exercice (Année)</label>
+                <select name="year" id="period-dialog-year" class="form-input"><% for (let selectedYear = 2020; selectedYear <= 2040; selectedYear++) { %><option value="<%= selectedYear %>" <%= selectedYear === periodYear ? 'selected' : '' %>><%= selectedYear %></option><% } %></select>
+                <label for="period-dialog-month">Période</label>
+                <select name="month" id="period-dialog-month" class="form-input"><% periodMonthNames.forEach((name, index) => { if (index > 0) { %><option value="<%= index %>" <%= index === periodMonth ? 'selected' : '' %>><%= name %></option><% } }); %></select>
+                <input type="hidden" name="returnTo" value="<%= periodReturnTo %>">
+            </div>
+            <div class="period-dialog-footer"><button type="button" class="button secondary" id="cancel-period-dialog">Annuler</button><button type="submit" class="btn-primary" id="confirm-period-dialog" disabled>Changer</button></div>
+        </form>
+    </dialog>
+    <% if (periodChangeMessage) { %><div id="period-change-message" hidden><%= periodChangeMessage %></div><% } %>
 </header>
