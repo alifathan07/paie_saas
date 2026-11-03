@@ -1,0 +1,58 @@
+<%- include('../partials/header') %>
+<div class="page-header editions-header">
+    <div class="header-title-area">
+        <h1 class="page-title">État mensuel IR</h1>
+        <p class="page-subtitle"><%= report.company.name %> · bulletins de <%= monthName %> <%= year %></p>
+    </div>
+</div>
+<% if (error) { %><div class="bulk-summary editions-error" role="alert" id="edition-error-message"><%= error %></div><% } %>
+<section class="edition-form-card edition-period-note">
+    <span>Période active : <strong><%= monthName %> <%= year %></strong></span>
+    <a class="button secondary" data-pdf-export href="/editions/ir/pdf?month=<%= month %>&year=<%= year %>">Télécharger l'État IR PDF</a>
+</section>
+<% if (report.rows.length) { %>
+<section class="contribution-report">
+    <h2>ETAT I.R. MENSUEL <%= String(month).padStart(2, '0') %>/<%= String(year).slice(-2) %></h2>
+    <p>Total effectif : <strong><%= report.totals.effectif %></strong></p>
+    <div class="contribution-table-wrap"><table class="contribution-table">
+        <thead>
+            <tr>
+                <th>MLE</th>
+                <th>NOM &amp; PRENOM</th>
+                <th>E</th>
+                <th>NB JR</th>
+                <th>BRUT+IND.</th>
+                <th>INDEMNITES</th>
+                <th>SAL. BRUT</th>
+                <th>BASE I.R.</th>
+                <th>I.R.</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% report.rows.forEach(row => { %>
+            <tr>
+                <td><%= row.matricule %></td>
+                <td><%= row.nomPrenom %></td>
+                <td style="text-align: center;"><%= row.enfants %></td>
+                <td style="text-align: right;"><%= Number(row.jours).toFixed(1) %></td>
+                <td style="text-align: right;"><%= fmt(row.brutInd) %></td>
+                <td style="text-align: right;"><%= Number(row.indemnites || 0) > 0 ? fmt(row.indemnites) : '' %></td>
+                <td style="text-align: right;"><%= fmt(row.salBrut) %></td>
+                <td style="text-align: right;"><%= fmt(row.baseIr) %></td>
+                <td style="text-align: right;"><%= Number(row.ir || 0) > 0 ? fmt(row.ir) : '' %></td>
+            </tr>
+            <% }); %>
+            <tr class="contribution-total">
+                <th colspan="3" style="text-align: center;">TOTAL</th>
+                <th style="text-align: right;"><%= Number(report.totals.jours).toFixed(1) %></th>
+                <th style="text-align: right;"><%= fmt(report.totals.brutInd) %></th>
+                <th style="text-align: right;"><%= fmt(report.totals.indemnites) %></th>
+                <th style="text-align: right;"><%= fmt(report.totals.salBrut) %></th>
+                <th style="text-align: right;"><%= fmt(report.totals.baseIr) %></th>
+                <th style="text-align: right;"><%= fmt(report.totals.ir) %></th>
+            </tr>
+        </tbody>
+    </table></div>
+</section>
+<% } %>
+<%- include('../partials/footer') %>

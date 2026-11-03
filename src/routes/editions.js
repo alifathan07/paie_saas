@@ -7,7 +7,9 @@ import { mapPayslipToViewModel, getBulletinPdfCumulative } from "../controllers/
 import { getRubriqueMaps } from "../services/rubrique.service.js";
 import { getMonthlyContributionReports } from "../services/monthlyContributionReports.service.js";
 import { getMonthlyPayrollJournal } from "../services/monthlyPayrollJournal.service.js";
+import { getMonthlyIrReport } from "../services/monthlyIrReport.service.js";
 import { generateAmoReportPdf, generateContributionReportsPdf, generatePayrollJournalPdf } from "../pdf/contributionReportsPdf.js";
+import { generateIrReportPdf } from "../pdf/irReportPdf.js";
 
 export const editions = express.Router();
 
@@ -25,11 +27,15 @@ const reports = {
 };
 
 editions.get("/", (req, res) => {
-    const selectedReport = reports[req.query.report] || null;
     const requestedMonth = Number(req.query.month);
     const requestedYear = Number(req.query.year);
     const hasPeriod = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12
         && Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2040;
+    if (req.query.report === "ir") {
+        const query = hasPeriod ? `?month=${requestedMonth}&year=${requestedYear}` : "";
+        return res.redirect(`/editions/ir${query}`);
+    }
+    const selectedReport = reports[req.query.report] || null;
     res.render("editions/index", {
         title: "Éditions",
         currentPage: "editions",
@@ -38,6 +44,36 @@ editions.get("/", (req, res) => {
         month: hasPeriod ? requestedMonth : undefined,
         year: hasPeriod ? requestedYear : undefined,
     });
+});
+
+const irError = error => ({
+    NO_MONTHLY_PAYROLL: "Aucun bulletin généré, validé ou clôturé pour cette période.",
+}[error.message] || "Impossible de générer l'état IR.");
+
+async function renderIrReportPage(req, res) {
+    const month = Number(req.query.month) || new Date().getMonth() + 1;
+    const year = Number(req.query.year) || new Date().getFullYear();
+    const fmt = value => Number(value || 0).toLocaleString("fr-MA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    try {
+        const report = await getMonthlyIrReport(await resolveCompanyId(req), month, year);
+        return res.render("editions/ir", { title: "État IR", currentPage: "editions", user: req.session.user, report, month, year, monthName: MONTH_NAMES_FR[month], monthNames: MONTH_NAMES_FR, fmt, error: null });
+    } catch (error) {
+        const company = await prisma.company.findUnique({ where: { id: await resolveCompanyId(req) } });
+        return res.render("editions/ir", { title: "État IR", currentPage: "editions", user: req.session.user, report: { company: company || { name: "Entreprise" }, rows: [], totals: {} }, month, year, monthName: MONTH_NAMES_FR[month], monthNames: MONTH_NAMES_FR, fmt, error: irError(error) });
+    }
+}
+
+editions.get("/ir", renderIrReportPage);
+
+editions.get("/ir/pdf", async (req, res) => {
+    try {
+        const report = await getMonthlyIrReport(await resolveCompanyId(req), Number(req.query.month), Number(req.query.year));
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="ETAT_IR_${report.month}-${report.year}.pdf"`);
+        return generateIrReportPdf(report, res);
+    } catch (error) {
+        res.status(error.message === "NO_MONTHLY_PAYROLL" ? 404 : 400).send(irError(error));
+    }
 });
 
 const contributionError = error => ({

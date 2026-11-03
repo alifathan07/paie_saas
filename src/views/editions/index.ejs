@@ -61,7 +61,7 @@
         <span class="edition-card-arrow" aria-hidden="true">→</span>
     </a>
 
-    <a class="edition-card" href="/editions?report=ir<%= typeof month !== 'undefined' && typeof year !== 'undefined' ? `&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}` : '' %>">
+    <a class="edition-card" href="/editions/ir<%= editionPeriodQuery %>">
         <span class="edition-card-icon" aria-hidden="true">%</span>
         <span class="edition-card-body">
             <strong>État IR</strong>
