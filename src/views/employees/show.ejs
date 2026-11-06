@@ -46,10 +46,12 @@
                             <%= employee.employeeFunction ? employee.employeeFunction.name : 'Non défini' %>
                         </strong>
                     </div>
-                    <div>
-                        <span style="color: var(--color-text-subtle); display: block;">Chantier:</span>
-                        <strong><%= employee.chantier ? `${employee.chantier.code} — ${employee.chantier.nom}` : (employee.chantierNom || 'Non défini') %></strong>
-                    </div>
+                    <% if (chantiersEnabled !== false) { %>
+                        <div>
+                            <span style="color: var(--color-text-subtle); display: block;">Chantier:</span>
+                            <strong><%= employee.chantier ? `${employee.chantier.code} — ${employee.chantier.nom}` : (employee.chantierNom || 'Non défini') %></strong>
+                        </div>
+                    <% } %>
                     <div>
                         <span style="color: var(--color-text-subtle); display: block;">Date d'embauche:</span>
                         <strong>

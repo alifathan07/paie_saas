@@ -10,6 +10,13 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:indemnity-override": "node test_indemnity_bulletin_override.js",
     "test:representation": "node test_representation_indemnity_flow.js",
+    "test:overtime-feature": "node test_overtime_feature_gate.js",
+    "test:rubrique-visibility": "node test_rubrique_visibility.js",
+    "test:chantiers-feature": "node test_chantiers_feature_gate.js",
+    "test:birth-leave": "node test_birth_leave_compensation.js",
+    "test:taxable-prime-zero": "node test_taxable_prime_zero.js",
+    "test:overtime-sbi-base": "node test_overtime_sbi_base.js",
+    "test:prime-rendement": "node test_prime_rendement.js",
     "seed:rubriques": "tsx prisma/seed-rubriques.ts",
     "seed:employees": "tsx prisma/seed-employees.ts",
     "postinstall": "prisma generate && (prisma skills sync || true)"

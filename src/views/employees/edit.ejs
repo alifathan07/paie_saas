@@ -130,17 +130,19 @@
                 <div id="function-modal" class="app-modal" hidden><div class="app-modal-backdrop" data-close-function></div><div class="app-modal-card category-modal-card" role="dialog" aria-modal="true" aria-labelledby="function-modal-title"><div class="app-modal-header"><div><h2 id="function-modal-title">Ajouter une fonction</h2><p>Créez une fonction disponible pour les employés.</p></div><button type="button" class="modal-close" data-close-function>×</button></div><div class="category-modal-field"><label for="new-function-name">Nom de la fonction</label><input id="new-function-name" type="text" class="form-input" data-function-input maxlength="191" placeholder="Ex. Comptable Senior"></div><div class="app-modal-actions"><button type="button" class="btn-secondary" data-close-function>Annuler</button><button type="button" class="btn-primary" data-function-save>Ajouter</button></div></div></div>
             </div>
         </div>
-        <div class="form-grid-3">
-            <div class="form-group">
-                <label for="chantierId">Chantier</label>
-                <select id="chantierId" name="chantierId" class="form-input">
-                    <option value="">Sélectionner un chantier</option>
-                    <% if (employee.chantierId && !(chantiers || []).some(item => Number(item.id) === Number(employee.chantierId))) { %><option value="<%= employee.chantierId %>" data-chantier-name="<%= employee.chantierNom || employee.chantierId %>" selected><%= employee.chantierNom || employee.chantierId %></option><% } %>
-                    <% (chantiers || []).forEach(function(item) { %><option value="<%= item.id %>" data-chantier-name="<%= item.nom %>" <%= Number(employee.chantierId) === Number(item.id) ? 'selected' : '' %>><%= item.code %> — <%= item.nom %></option><% }); %>
-                </select>
-                <input type="hidden" name="chantierNom" id="chantierNom" value="<%= employee.chantierNom || '' %>">
+        <% if (chantiersEnabled !== false) { %>
+            <div class="form-grid-3">
+                <div class="form-group">
+                    <label for="chantierId">Chantier</label>
+                    <select id="chantierId" name="chantierId" class="form-input">
+                        <option value="">Sélectionner un chantier</option>
+                        <% if (employee.chantierId && !(chantiers || []).some(item => Number(item.id) === Number(employee.chantierId))) { %><option value="<%= employee.chantierId %>" data-chantier-name="<%= employee.chantierNom || employee.chantierId %>" selected><%= employee.chantierNom || employee.chantierId %></option><% } %>
+                        <% (chantiers || []).forEach(function(item) { %><option value="<%= item.id %>" data-chantier-name="<%= item.nom %>" <%= Number(employee.chantierId) === Number(item.id) ? 'selected' : '' %>><%= item.code %> — <%= item.nom %></option><% }); %>
+                    </select>
+                    <input type="hidden" name="chantierNom" id="chantierNom" value="<%= employee.chantierNom || '' %>">
+                </div>
             </div>
-        </div>
+        <% } %>
         <div class="form-grid-3">
             <div class="form-group">
                 <label for="dateEmbauche">Date d'embauche <span style="color:red;">*</span></label>

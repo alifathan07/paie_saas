@@ -3,6 +3,12 @@ import { recordAudit } from "../services/audit.service.js";
 import { createUserAccount, setUserPassword, updateUserProfile } from "../services/auth.service.js";
 import { polishBlockReason } from "../services/blockReason.service.js";
 
+const ADMIN_RUBRIQUE_MODELS = Object.freeze({
+    base: "rubriqueBase",
+    retenu: "rubriqueRetenu",
+    imposable: "rubriqueImposable",
+});
+
 const safeUserSelect = {
     id: true,
     name: true,
@@ -171,13 +177,135 @@ export const adminCompanies = async (req, res) => {
 
 export const adminCompanyDetails = async (req, res) => {
     const companyId = Number(req.params.id);
-    const company = await prisma.company.findUnique({ where: { id: companyId }, include: { userCompanies: { include: { user: { select: { id: true, name: true, email: true, isAdmin: true, isBlocked: true } } } }, employees: { orderBy: { createdAt: "desc" }, take: 30, select: { id: true, nomComplet: true, matricule: true, actif: true, createdAt: true } }, _count: { select: { employees: true } } } });
+    const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        include: {
+            userCompanies: { include: { user: { select: { id: true, name: true, email: true, isAdmin: true, isBlocked: true } } } },
+            employees: { orderBy: { createdAt: "desc" }, take: 30, select: { id: true, nomComplet: true, matricule: true, actif: true, createdAt: true } },
+            rubriqueBases: { orderBy: [{ key: "asc" }, { id: "asc" }] },
+            rubriqueRetenus: { orderBy: [{ key: "asc" }, { id: "asc" }] },
+            rubriquesImposables: { orderBy: [{ name: "asc" }, { id: "asc" }] },
+            _count: { select: { employees: true } },
+        },
+    });
     if (!company) return res.status(404).send("Société introuvable.");
     const [payslipCount, recentPayslips] = await Promise.all([
         prisma.payslip.count({ where: { employee: { companyId } } }),
         prisma.payslip.findMany({ where: { employee: { companyId } }, orderBy: { id: "desc" }, take: 10, select: { id: true, month: true, year: true, status: true, employee: { select: { nomComplet: true } } } }),
     ]);
     return res.render("admin/company-details", page(req, { company, payslipCount, recentPayslips }));
+};
+
+export const updateCompanyOvertimeFeature = async (req, res) => {
+    const companyId = Number(req.params.id);
+    const enabledValue = req.body.enabled;
+    if (!Number.isInteger(companyId) || companyId <= 0 || !["true", "false", true, false].includes(enabledValue)) {
+        return res.status(400).send("Valeur de configuration des heures supplémentaires invalide.");
+    }
+
+    const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, overtimeEnabled: true },
+    });
+    if (!company) return res.status(404).send("Société introuvable.");
+
+    const enabled = enabledValue === true || enabledValue === "true";
+    await prisma.company.update({ where: { id: companyId }, data: { overtimeEnabled: enabled } });
+    await recordAudit(req, {
+        action: "UPDATE_COMPANY_OVERTIME_FEATURE",
+        targetType: "COMPANY",
+        targetId: companyId,
+        companyId,
+        metadata: { from: company.overtimeEnabled, to: enabled },
+    });
+    return res.redirect(`/admin/companies/${companyId}`);
+};
+
+export const updateCompanyPrimeRendementFeature = async (req, res) => {
+    const companyId = Number(req.params.id);
+    const enabledValue = req.body.enabled;
+    if (!Number.isInteger(companyId) || companyId <= 0 || !["true", "false", true, false].includes(enabledValue)) {
+        return res.status(400).send("Valeur de configuration de la prime rendement invalide.");
+    }
+
+    const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, primeRendementEnabled: true },
+    });
+    if (!company) return res.status(404).send("Société introuvable.");
+
+    const enabled = enabledValue === true || enabledValue === "true";
+    await prisma.company.update({ where: { id: companyId }, data: { primeRendementEnabled: enabled } });
+    await recordAudit(req, {
+        action: "UPDATE_COMPANY_PRIME_RENDEMENT_FEATURE",
+        targetType: "COMPANY",
+        targetId: companyId,
+        companyId,
+        metadata: { from: company.primeRendementEnabled, to: enabled },
+    });
+    return res.redirect(`/admin/companies/${companyId}`);
+};
+
+export const updateCompanyChantiersFeature = async (req, res) => {
+    const companyId = Number(req.params.id);
+    const enabledValue = req.body.enabled;
+    if (!Number.isInteger(companyId) || companyId <= 0 || !["true", "false", true, false].includes(enabledValue)) {
+        return res.status(400).send("Valeur de configuration des chantiers invalide.");
+    }
+
+    const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, chantiersEnabled: true },
+    });
+    if (!company) return res.status(404).send("Société introuvable.");
+
+    const enabled = enabledValue === true || enabledValue === "true";
+    await prisma.company.update({ where: { id: companyId }, data: { chantiersEnabled: enabled } });
+    await recordAudit(req, {
+        action: "UPDATE_COMPANY_CHANTIERS_FEATURE",
+        targetType: "COMPANY",
+        targetId: companyId,
+        companyId,
+        metadata: { from: company.chantiersEnabled, to: enabled },
+    });
+    return res.redirect(`/admin/companies/${companyId}`);
+};
+
+export const updateCompanyRubriqueVisibility = async (req, res) => {
+    const companyId = Number(req.params.id);
+    const rubriqueId = Number(req.params.rubriqueId);
+    const category = req.params.category;
+    const model = Object.hasOwn(ADMIN_RUBRIQUE_MODELS, category)
+        ? ADMIN_RUBRIQUE_MODELS[category]
+        : null;
+    const visibleValue = req.body.visible;
+    if (!Number.isInteger(companyId) || companyId <= 0
+        || !Number.isInteger(rubriqueId) || rubriqueId <= 0
+        || !model
+        || !["true", "false", true, false].includes(visibleValue)) {
+        return res.status(400).send("Valeur de visibilité de rubrique invalide.");
+    }
+
+    const rubrique = await prisma[model].findFirst({ where: { id: rubriqueId, companyId } });
+    if (!rubrique) return res.status(404).send("Rubrique introuvable dans cette société.");
+
+    const visible = visibleValue === true || visibleValue === "true";
+    await prisma[model].update({ where: { id: rubrique.id }, data: { visible } });
+    await recordAudit(req, {
+        action: "UPDATE_COMPANY_RUBRIQUE_VISIBILITY",
+        targetType: "RUBRIQUE",
+        targetId: rubrique.id,
+        companyId,
+        metadata: {
+            category,
+            key: rubrique.key || rubrique.calculationKey || null,
+            code: rubrique.code,
+            name: rubrique.name,
+            from: rubrique.visible,
+            to: visible,
+        },
+    });
+    return res.redirect(`/admin/companies/${companyId}`);
 };
 
 export const adminAuditLogs = async (req, res) => {

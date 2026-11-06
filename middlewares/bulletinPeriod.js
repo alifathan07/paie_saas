@@ -26,6 +26,11 @@ export async function enforceBulletinPeriod(req, res, next) {
             return res.status(400).send('Période invalide.');
         }
         if (isAfterActivePeriod({ month, year }, active)) {
+            const saved = req.session.selectedPeriod;
+            if (req.method === 'GET' && Number(saved?.month) === month && Number(saved?.year) === year) {
+                req.session.selectedPeriod = active;
+                return res.redirect(activeUrl);
+            }
             const message = `Veuillez clôturer le mois ${active.month}/${active.year} avant de passer au mois ${month}/${year}.`;
             if (req.get('Accept')?.includes('application/json')) {
                 return res.status(409).json({ ok: false, error: message, activePeriod: active });

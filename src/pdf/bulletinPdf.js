@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { isImposableRubriqueVisible, isRubriqueVisible } from '../lib/rubriqueVisibility.js';
 
 const PAGE_WIDTH = 595.28;
 const LEFT = 30;
@@ -77,37 +78,51 @@ function drawPayrollTable(doc, data, startY) {
     y += 22;
 
     const lines = [];
-    const push = (code, label, employer, base, rate, gains, deductions) => lines.push([
-        code, label, employer ? money(employer) : '', base || '', rate || '', gains ? money(gains) : '', deductions ? money(deductions) : '',
-    ]);
+    const push = (code, label, employer, base, rate, gains, deductions, category = null, key = null) => {
+        if (category && !isRubriqueVisible(data.rubriqueVisibility, category, key)) return;
+        lines.push([
+            code, label, employer ? money(employer) : '', base || '', rate || '', gains ? money(gains) : '', deductions ? money(deductions) : '',
+        ]);
+    };
     const workedDays = amount(data.workedDays);
     const workedHours = amount(data.workedHours);
     const baseSalary = amount(data.rawBaseSalary ?? data.baseSalary);
     const seniority = amount(data.primeAnciennete);
     const rubriqueCodes = data.rubriqueCodes || {};
 
-    push(rubriqueCodes['Salaire de base'] || '', 'SALAIRE DE BASE EN NBR J / H TRAV.', '', `${workedDays.toFixed(2)} J / ${workedHours.toFixed(2)} H`, '', data.effectiveBaseSalary ?? data.baseSalary, 0);
-    if (seniority > 0) push(rubriqueCodes["Prime d'ancienneté"] || '', 'ANCIENNETÉ LÉGALE', '', money(baseSalary), percent(data.ancienneteRate), seniority, 0);
-    (data.variablePrimes || []).forEach(prime => push(prime.code || '', prime.label, '', '', '', prime.amount, 0));
-    (data.taxableAdditions || []).forEach(line => push(line.code || '', line.label, '', '', '', line.amount, 0));
-    push(rubriqueCodes['Salaire brut imposable'] || '', 'SALAIRE BRUT IMPOSABLE', '', money(data.sbi), '', 0, 0);
+    push(rubriqueCodes['Salaire de base'] || '', 'SALAIRE DE BASE EN NBR J / H TRAV.', '', `${workedDays.toFixed(2)} J / ${workedHours.toFixed(2)} H`, '', data.effectiveBaseSalary ?? data.baseSalary, 0, 'base', 'base_salary');
+    if (seniority > 0) push(rubriqueCodes["Prime d'ancienneté"] || '', 'ANCIENNETÉ LÉGALE', '', money(baseSalary), percent(data.ancienneteRate), seniority, 0, 'base', 'seniority_bonus');
+    (data.variablePrimes || [])
+        .filter(prime => isImposableRubriqueVisible(data.rubriqueVisibility, prime))
+        .forEach(prime => push(prime.code || '', prime.label, '', '', '', prime.amount, 0));
+    (data.taxableAdditions || [])
+        .filter(line => (data.overtimeEnabled !== false || !String(line.calculationKey || '').startsWith('overtime_'))
+            && isImposableRubriqueVisible(data.rubriqueVisibility, line))
+        .forEach(line => push(line.code || '', line.label, '', line.base ?? '', '', line.amount, 0));
+    push(rubriqueCodes['Salaire brut imposable'] || '', 'SALAIRE BRUT IMPOSABLE', '', money(data.sbi), '', 0, 0, 'base', 'taxable_gross_salary');
     if (amount(data.paidLeaveDays) > 0 || amount(data.paidLeaveAmount) > 0) {
-        push('', 'CONGÉ PAYÉ', '', `${amount(data.paidLeaveDays).toFixed(2)} J / ${money(data.baseConge)}`, '', data.paidLeaveAmount, 0);
+        push('', 'CONGÉ PAYÉ', '', `${amount(data.paidLeaveDays).toFixed(2)} J / ${money(data.baseConge)}`, '', data.paidLeaveAmount, 0, 'base', 'paid_leave_days');
+    }
+    if (amount(data.congeNaissanceDays) > 0 || amount(data.congeNaissanceAmount) > 0) {
+        push(rubriqueCodes['Nombre jours congé de naissance'] || '', 'CONGÉ DE NAISSANCE', '', `${amount(data.congeNaissanceDays).toFixed(2)} J / ${money(data.baseCongeNaissance)}`, '', data.congeNaissanceAmount, 0, 'base', 'birth_leave_days');
     }
     if (amount(data.joursFeries) > 0 || amount(data.joursFeriesAmount) > 0) {
-        push(rubriqueCodes['Nombre jours fériés'] || '', 'JOURS FÉRIÉS', '', `${amount(data.joursFeries).toFixed(2)} J / ${money(data.baseFerie)}`, '', data.joursFeriesAmount, 0);
+        push(rubriqueCodes['Nombre jours fériés'] || '', 'JOURS FÉRIÉS', '', `${amount(data.joursFeries).toFixed(2)} J / ${money(data.baseFerie)}`, '', data.joursFeriesAmount, 0, 'base', 'public_holiday_days');
     }
     (data.nimpLines || []).forEach(line => push(line.code || '', line.label, '', '', '', line.amount, 0));
-    if (amount(data.amo) > 0) push(rubriqueCodes.AMO || '', 'RETENUE AMO', amount(data.amoPatronale), money(data.sbi), percent(data.amoRate), 0, data.amo);
-    if (amount(data.cnss) > 0) push(rubriqueCodes.CNSS || '', 'RETENUE CNSS', amount(data.cnssPatronale), money(Math.min(amount(data.sbi), 6000)), percent(data.cnssRate), 0, data.cnss);
-    if (amount(data.cimr) > 0) push(rubriqueCodes.CIMR || '', 'RETENUE CIMR', '', money(data.sbi), percent(data.cimrRate), 0, data.cimr);
-    if (amount(data.irNet) > 0) push(rubriqueCodes['Impôt sur le revenu'] || '', 'RETENUE IR', '', money(data.sni), percent(data.irTaux), 0, data.irNet);
-    (data.retenus || []).forEach(line => push(line.code || '', line.label, '', '', '', 0, line.amount));
+    if (amount(data.amo) > 0) push(rubriqueCodes.AMO || '', 'RETENUE AMO', amount(data.amoPatronale), money(data.sbi), percent(data.amoRate), 0, data.amo, 'retenu', 'amo');
+    if (amount(data.cnss) > 0) push(rubriqueCodes.CNSS || '', 'RETENUE CNSS', amount(data.cnssPatronale), money(Math.min(amount(data.sbi), 6000)), percent(data.cnssRate), 0, data.cnss, 'retenu', 'cnss');
+    if (amount(data.cimr) > 0) push(rubriqueCodes.CIMR || '', 'RETENUE CIMR', '', money(data.sbi), percent(data.cimrRate), 0, data.cimr, 'retenu', 'cimr');
+    if (amount(data.irNet) > 0) push(rubriqueCodes['Impôt sur le revenu'] || '', 'RETENUE IR', '', money(data.sni), percent(data.irTaux), 0, data.irNet, 'retenu', 'income_tax');
+    (data.retenus || [])
+        .filter(line => line.rubriqueRetenuId === null || line.rubriqueRetenuId === undefined
+            || isRubriqueVisible(data.rubriqueVisibility, 'retenu', `id:${line.rubriqueRetenuId}`))
+        .forEach(line => push(line.code || '', line.label, '', '', '', 0, line.amount));
     if (amount(data.avanceDeduction) > 0) {
         push(rubriqueCodes['Avance sur salaire'] || 'AV', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avanceDeduction);
     }
-    if (amount(data.arrondi) > 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', data.arrondi, 0);
-    if (amount(data.arrondi) < 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', 0, Math.abs(data.arrondi));
+    if (amount(data.arrondi) > 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', data.arrondi, 0, 'retenu', 'rounding');
+    if (amount(data.arrondi) < 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', 0, Math.abs(data.arrondi), 'retenu', 'rounding');
 
     let totalGains = 0;
     let totalDeductions = 0;

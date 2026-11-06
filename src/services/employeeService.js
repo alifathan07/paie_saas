@@ -1,4 +1,6 @@
 import prisma from "../../db.ts";
+import { employeeChantierWriteFields } from "../lib/chantiersFeature.js";
+import { getCompanyChantiersEnabled } from "./chantier.service.js";
 import { refreshDraftPayslips } from "./employeePayrollRefresh.service.js";
 
 // Get all reusable Non-Taxable Bonus definitions for a company
@@ -280,6 +282,7 @@ export const createEmployee = async (data) => {
 
     const targetCompanyId = Number(companyId);
     if (!Number.isInteger(targetCompanyId) || targetCompanyId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    const chantiersEnabled = await getCompanyChantiersEnabled(targetCompanyId);
     const category = await getOrCreateEmployeeCategory(targetCompanyId, categoryId);
     const employeeFunction = await getOrCreateEmployeeFunction(targetCompanyId, functionId, fonction);
 
@@ -299,8 +302,7 @@ export const createEmployee = async (data) => {
             dateSortie: dateSortie ? new Date(dateSortie) : null,
             motifSortie: String(motifSortie || '').trim() || null,
             functionId: employeeFunction?.id || null,
-            chantierId: chantierId ? Number(chantierId) : null,
-            chantierNom: String(chantierNom || '').trim() || null,
+            ...employeeChantierWriteFields(chantiersEnabled, { chantierId, chantierNom }, true),
             contratDateDebut: contratDateDebut ? new Date(contratDateDebut) : null,
             contratDateFin: contratDateFin ? new Date(contratDateFin) : null,
             categoryId: category.id,
@@ -368,6 +370,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         select: { companyId: true }
     });
     if (!existing) throw new Error('EMPLOYEE_NOT_FOUND');
+    const chantiersEnabled = await getCompanyChantiersEnabled(targetCompanyId);
 
     // Only replace bonus assignments when the edit form explicitly submitted them.
     const shouldReplaceBonuses = bonusList !== undefined;
@@ -401,8 +404,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
             dateSortie: dateSortie ? new Date(dateSortie) : null,
             motifSortie: String(motifSortie || '').trim() || null,
             functionId: employeeFunction === undefined ? undefined : (employeeFunction?.id || null),
-            chantierId: chantierId === undefined ? undefined : (chantierId === '' || chantierId === null ? null : Number(chantierId)),
-            chantierNom: chantierNom === undefined ? undefined : (String(chantierNom || '').trim() || null),
+            ...employeeChantierWriteFields(chantiersEnabled, { chantierId, chantierNom }),
             contratDateDebut: contratDateDebut ? new Date(contratDateDebut) : null,
             contratDateFin: contratDateFin ? new Date(contratDateFin) : null,
             categoryId: category ? category.id : undefined,
@@ -455,7 +457,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
     });
 };
 
-export const setEmployeeTaxablePrime = async (employeeId, bonusId, amount, companyId, enabled, implementerEnConge, implementerEnJourFerie) => {
+export const setEmployeeTaxablePrime = async (employeeId, bonusId, amount, companyId, enabled, implementerEnConge, implementerEnJourFerie, implementerEnCongeNaissance) => {
     const employee = await prisma.employee.findFirst({
         where: { id: Number(employeeId), companyId: Number(companyId) },
         select: { id: true },
@@ -473,11 +475,12 @@ export const setEmployeeTaxablePrime = async (employeeId, bonusId, amount, compa
         if (!Number.isFinite(value) || value <= 0) throw new Error('INVALID_TAXABLE_PRIME_AMOUNT');
         await prisma.employeeBonus.upsert({
             where: { employeeId_bonusId: { employeeId: employee.id, bonusId: bonus.id } },
-            create: { employeeId: employee.id, bonusId: bonus.id, amount: Number(value.toFixed(2)), implementerEnConge: Boolean(implementerEnConge), implementerEnJourFerie: Boolean(implementerEnJourFerie) },
+            create: { employeeId: employee.id, bonusId: bonus.id, amount: Number(value.toFixed(2)), implementerEnConge: Boolean(implementerEnConge), implementerEnJourFerie: Boolean(implementerEnJourFerie), implementerEnCongeNaissance: Boolean(implementerEnCongeNaissance) },
             update: {
                 amount: Number(value.toFixed(2)),
                 ...(implementerEnConge === undefined ? {} : { implementerEnConge: Boolean(implementerEnConge) }),
                 ...(implementerEnJourFerie === undefined ? {} : { implementerEnJourFerie: Boolean(implementerEnJourFerie) }),
+                ...(implementerEnCongeNaissance === undefined ? {} : { implementerEnCongeNaissance: Boolean(implementerEnCongeNaissance) }),
             },
         });
     }

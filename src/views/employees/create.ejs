@@ -81,16 +81,18 @@
                         </div>
                         </div>
                     </div>
-                    <div class="form-grid-3">
-                        <div class="form-group">
-                            <label for="chantierId">Chantier</label>
-                            <select id="chantierId" name="chantierId" class="form-input">
-                                <option value="">Sélectionner un chantier</option>
-                                <% (chantiers || []).forEach(function(item) { %><option value="<%= item.id %>" data-chantier-name="<%= item.nom %>"><%= item.code %> — <%= item.nom %></option><% }); %>
-                            </select>
-                            <input type="hidden" name="chantierNom" id="chantierNom">
+                    <% if (chantiersEnabled !== false) { %>
+                        <div class="form-grid-3">
+                            <div class="form-group">
+                                <label for="chantierId">Chantier</label>
+                                <select id="chantierId" name="chantierId" class="form-input">
+                                    <option value="">Sélectionner un chantier</option>
+                                    <% (chantiers || []).forEach(function(item) { %><option value="<%= item.id %>" data-chantier-name="<%= item.nom %>"><%= item.code %> — <%= item.nom %></option><% }); %>
+                                </select>
+                                <input type="hidden" name="chantierNom" id="chantierNom">
+                            </div>
                         </div>
-                    </div>
+                    <% } %>
 
                 <!-- Section 2: Poste & Contrat -->
                 <div class="form-section">

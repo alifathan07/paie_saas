@@ -26,6 +26,9 @@ model Company {
   numeroAffiliationCnss       String?
   smig                        Decimal?        @db.Decimal(12, 2)
   numeroAssurance             String?
+  overtimeEnabled             Boolean         @default(true)
+  primeRendementEnabled       Boolean         @default(true)
+  chantiersEnabled            Boolean         @default(true)
   workingTimeMode             WorkingTimeMode @default(DAYS)
   standardMonthlyDays         Decimal         @default(26) @db.Decimal(8, 2)
   standardMonthlyHours        Decimal         @default(191) @db.Decimal(8, 2)
@@ -288,11 +291,14 @@ model Bonus {
 }
 
 model EmployeeBonus {
-  employeeId             Int
-  bonusId                Int
-  amount                 Decimal @db.Decimal(12, 2)
-  implementerEnConge     Boolean @default(false) // Include this employee benefit in the paid-leave base when enabled
-  implementerEnJourFerie Boolean @default(false) // Include taxable primes in the public-holiday base when enabled
+
+
+  employeeId                      Int
+  bonusId                         Int
+  amount                          Decimal @db.Decimal(12, 2)
+  implementerEnConge              Boolean @default(false) // Include this employee benefit in the paid-leave base when enabled
+  implementerEnJourFerie          Boolean @default(false) // Include taxable primes in the public-holiday base when enabled
+  implementerEnCongeNaissance     Boolean @default(false) // Include taxable primes in the birth-leave base when enabled
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   bonus    Bonus    @relation(fields: [bonusId], references: [id], onDelete: Cascade)
@@ -344,6 +350,7 @@ model Payslip {
   workedDays           Decimal          @default(26) @db.Decimal(8, 2) // Historical day-equivalent
   workedHours          Decimal?         @db.Decimal(8, 2)
   paidLeaveDays        Decimal          @default(0) @db.Decimal(8, 2)
+  congeNaissanceDays   Decimal          @default(0) @db.Decimal(8, 2)
   joursFeries          Decimal          @default(0) @db.Decimal(8, 2)
   workingTimeMode      WorkingTimeMode?
   standardMonthlyDays  Decimal?         @db.Decimal(8, 2)
@@ -359,6 +366,8 @@ model Payslip {
   bonusesNIMP               Decimal @default(0.00) @db.Decimal(12, 2)
   baseConge                 Decimal @default(0.00) @db.Decimal(12, 2)
   paidLeaveAmount           Decimal @default(0.00) @db.Decimal(12, 2)
+  baseCongeNaissance        Decimal @default(0.00) @db.Decimal(12, 2)
+  congeNaissanceAmount      Decimal @default(0.00) @db.Decimal(12, 2)
   baseFerie                 Decimal @default(0.00) @db.Decimal(12, 2)
   joursFeriesAmount         Decimal @default(0.00) @db.Decimal(12, 2)
   brutGlobal                Decimal @default(0.00) @db.Decimal(12, 2) // SBI + indemnités non imposables
@@ -389,6 +398,8 @@ model Payslip {
   heuresSup25      Decimal @default(0.00) @db.Decimal(8, 2)
   heuresSup50      Decimal @default(0.00) @db.Decimal(8, 2)
   heuresSup100     Decimal @default(0.00) @db.Decimal(8, 2)
+  primeRendementInput  Decimal @default(0.00) @db.Decimal(8, 2)
+  primeRendementAmount Decimal @default(0.00) @db.Decimal(12, 2)
 
   // Rates / Percentages: Decimal(6, 4)
   cnssRate     Decimal? @db.Decimal(6, 4) // e.g. 0.0448
@@ -476,6 +487,7 @@ model RubriqueBase {
   name      String   @db.VarChar(191)
   code      String   @db.VarChar(64)
   active    Boolean  @default(true)
+  visible   Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -495,6 +507,7 @@ model RubriqueRetenu {
   code      String   @db.VarChar(64)
   entryType String   @default("SYSTEM") @db.VarChar(16)
   active    Boolean  @default(true)
+  visible   Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -532,6 +545,7 @@ model RubriqueImposable {
   entryType      String   @default("MANUAL_AMOUNT") @db.VarChar(32)
   calculationKey String?  @db.VarChar(64)
   active         Boolean  @default(true)
+  visible        Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

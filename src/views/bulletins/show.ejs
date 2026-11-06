@@ -2,6 +2,15 @@
 <% if (typeof bulletinPeriodMessage !== 'undefined' && bulletinPeriodMessage) { %>
     <div role="alert" id="bulletin-period-message" class="bulk-summary"><%= bulletinPeriodMessage %></div>
 <% } %>
+<%
+    const isRubriqueVisible = (category, key) => rubriqueVisibility?.[category]?.[String(key)] !== false;
+    const isImposableRubriqueVisible = line => {
+        if (line?.rubriqueImposableId !== null && line?.rubriqueImposableId !== undefined
+            && !isRubriqueVisible('imposable', `id:${line.rubriqueImposableId}`)) return false;
+        if (line?.calculationKey && !isRubriqueVisible('imposable', `key:${line.calculationKey}`)) return false;
+        return true;
+    };
+%>
 
 <link rel="stylesheet" href="/css/bulletin-print.css">
 <style>.employee-edit{width:70px;border:0;border-bottom:1px solid #777;background:transparent;font:inherit;color:inherit}.employee-edit:focus{outline:0;border-bottom-color:#111}.salary-edit{display:block;width:110px;margin-top:5px;padding:4px 6px;border:1px solid #999;border-radius:4px;background:#fff;text-align:right;font:inherit}.salary-edit:focus{outline:2px solid #555}.pay-table input[type=number]{max-width:120px;text-align:right}.pay-table .prime-row input,.pay-table .prime-line input{min-height:32px;padding:6px 8px;border:1px solid #999;border-radius:4px;background:#fff;font:inherit}.pay-table .prime-row input[name="primesLabels"],.pay-table .prime-line input[name="primesLabels"]{width:100%;min-width:190px;text-align:left}.pay-table .prime-row input[name="primesAmounts"],.pay-table .prime-line input[name="primesAmounts"]{width:120px;text-align:right}.pay-table .prime-row input:focus,.pay-table .prime-line input:focus{outline:2px solid #555;outline-offset:1px}.pay-table .prime-row input::placeholder,.pay-table .prime-line input::placeholder{color:#777;opacity:1}.pay-table .prime-line .remove-prime{margin-left:6px}.prime-dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;width:min(420px,calc(100% - 32px));border:0;border-radius:8px;padding:0;box-shadow:0 18px 55px rgba(0,0,0,.25)}.prime-dialog::backdrop{background:rgba(0,0,0,.45)}.prime-dialog-content{padding:22px;background:#fff}.prime-dialog h2{margin:0 0 5px;font-size:18px}.prime-dialog p{margin:0 0 18px;color:#666;font-size:13px}.prime-dialog-fields{display:grid;gap:12px}.prime-dialog-fields label{display:grid;gap:5px;color:#444;font-size:12px;font-weight:700}.prime-dialog-fields input{width:100%;box-sizing:border-box;border:1px solid #999;border-radius:4px;padding:10px;font:inherit}.prime-dialog-fields input:focus{outline:2px solid #555}.prime-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.prime-dialog-actions button{border:1px solid #555;background:#fff;padding:9px 13px;cursor:pointer;font:600 12px Arial,sans-serif}.prime-dialog-actions .confirm{background:#222;color:#fff}
@@ -17,6 +26,7 @@
 #overtime-dialog .prime-dialog-actions button{min-width:92px;border-radius:8px;padding:10px 14px;font:600 13px inherit}
 #overtime-dialog .prime-dialog-actions .confirm{border-color:#176b5b;background:#176b5b}
 .paid-leave-row .paid-leave-base,
+.birth-leave-row .paid-leave-base,
 .public-holiday-row .paid-leave-base{display:block;margin-top:5px;text-align:right;white-space:nowrap;font-size:11px;color:#66727e}
 .avance-box{margin:0 0 18px;padding:16px;border:1px solid #d8dee5;border-radius:8px;background:#f8fafb}.avance-box h3{margin:0 0 6px;font-size:16px}.avance-box p{margin:0 0 12px;color:#66727e;font-size:13px}.avance-form{display:flex;align-items:end;flex-wrap:wrap;gap:10px}.avance-form label{display:grid;gap:5px;color:#34414b;font-size:12px;font-weight:700}.avance-form select,.avance-form input{min-height:36px;border:1px solid #c4ced6;border-radius:6px;background:#fff;padding:7px 9px;font:inherit}.avance-form button{min-height:36px;border:0;border-radius:6px;background:#176b5b;color:#fff;padding:0 14px;font-weight:700;cursor:pointer}.avance-deduction-note{color:#176b5b;font-weight:700}
 </style>
@@ -991,14 +1001,22 @@
         // line displays as 10.01% instead of the configured 10%.
         return base > 0 ? Number((Math.round((Number(line.amount || 0) / base) * 100) / 100).toFixed(2)) : null;
     };
-    const primes = values.variablePrimes || [];
-    const taxableAdditions = (values.taxableAdditions || []).filter(line => !String(line.calculationKey || '').startsWith('overtime_'));
+    const primes = (values.variablePrimes || []).filter(line =>
+        line.rubriqueImposableId === null || line.rubriqueImposableId === undefined || isImposableRubriqueVisible(line));
+    const taxableAdditions = (values.taxableAdditions || []).filter(line =>
+        !String(line.calculationKey || '').startsWith('overtime_')
+            && line.calculationKey !== 'prime_rendement'
+            && isImposableRubriqueVisible(line));
     const fixedPrimeKeys = new Set((emp.bonuses || [])
         .filter(item => item.bonus ? item.bonus.taxable : item.taxable)
         .map(item => `${String(item.bonus ? item.bonus.name : item.name || '').toLowerCase()}|${Number(item.amount)}`));
     const nimpLines = bulletin ? (bulletin.fixedNimpLines || []) : (values.nimpLines || []);
     const monthlyNimpLines = bulletin ? (bulletin.monthlyNimpLines || []) : [];
-    const manualRetenus = bulletin ? (bulletin.retenus || []) : [];
+    const manualRetenus = bulletin ? (bulletin.retenus || []).filter(line =>
+        line.rubriqueRetenuId !== null && line.rubriqueRetenuId !== undefined
+            ? isRubriqueVisible('retenu', `id:${line.rubriqueRetenuId}`)
+            : !line.code || isRubriqueVisible('retenu', `code:${line.code}`)
+    ) : [];
     const excludedNimpLines = bulletin ? (bulletin.excludedNimpLines || []) : [];
     const annual = annualCumulative || values.annualCumulative || {};
     const isPaidLeaveRubrique = row => {
@@ -1006,7 +1024,10 @@
         const name = String(row?.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
         return key === 'paid_leave' || key === 'paid_leave_days' || name.includes('conge');
     };
-    const catalogueRubriques = (taxableRubriques || []).filter(row => row.active !== false && !isPaidLeaveRubrique(row) && !String(row.calculationKey || '').startsWith('overtime_'));
+    const catalogueRubriques = (taxableRubriques || []).filter(row => row.active !== false
+        && !isPaidLeaveRubrique(row)
+        && !String(row.calculationKey || '').startsWith('overtime_')
+        && isImposableRubriqueVisible({ rubriqueImposableId: row.id, calculationKey: row.calculationKey, code: row.code }));
     const cataloguePrimeLines = catalogueRubriques.map(definition => {
         const existing = primes.find(prime => Number(prime.rubriqueImposableId) === Number(definition.id)
             || String(prime.label || '').trim().toLowerCase() === String(definition.name || '').trim().toLowerCase());
@@ -1014,18 +1035,22 @@
     });
     const cataloguePrimeLabels = new Set(cataloguePrimeLines.map(line => line.definition.name.trim().toLowerCase()));
     const manualPrimes = primes.filter(prime => !cataloguePrimeLabels.has(String(prime.label || '').trim().toLowerCase()));
-    const overtimeRows = [
+    const overtimeRows = overtimeEnabled !== false ? [
         ['heuresSup25', 'overtime_25', 'Heures supplémentaires 25%', 1.25],
         ['heuresSup50', 'overtime_50', 'Heures supplémentaires 50%', 1.5],
         ['heuresSup100', 'overtime_100', 'Heures supplémentaires 100%', 2],
-    ].map(([field, key, fallbackName, multiplier]) => ({
-        field,
-        definition: (taxableRubriques || []).find(row => row.calculationKey === key),
-        fallbackName,
-        amount: Number((Number(values[field] || 0) * Number(values.baseSalary || emp.baseSalary || 0) / standardMonthlyHours * multiplier).toFixed(2)),
-    }));
-    const taxablePaidLeaveDefinition = (taxableRubriques || []).find(row => row.active !== false && isPaidLeaveRubrique(row));
+    ].filter(([, key]) => isImposableRubriqueVisible({ calculationKey: key }))
+        .map(([field, key, fallbackName, multiplier]) => ({
+            field,
+            definition: (taxableRubriques || []).find(row => row.calculationKey === key),
+            fallbackName,
+            amount: Number((Number(values[field] || 0) * Number(values.baseSalary || emp.baseSalary || 0) / standardMonthlyHours * multiplier).toFixed(2)),
+        })) : [];
+    const taxablePaidLeaveDefinition = (taxableRubriques || []).find(row => row.active !== false
+        && isPaidLeaveRubrique(row)
+        && isImposableRubriqueVisible({ rubriqueImposableId: row.id, calculationKey: row.calculationKey }));
     const paidLeaveDefinition = taxablePaidLeaveDefinition || (typeof paidLeaveRubrique !== 'undefined' ? paidLeaveRubrique : null);
+    const birthLeaveDefinition = typeof birthLeaveRubrique !== 'undefined' ? birthLeaveRubrique : null;
     const publicHolidayDefinition = typeof publicHolidayRubrique !== 'undefined' ? publicHolidayRubrique : null;
     const arrondi = Number(values.arrondi || 0);
     const totalGains = Number(values.sbg || 0) + Math.max(0, arrondi);
@@ -1095,13 +1120,20 @@
         <input type="hidden" name="month" value="<%= month || '' %>">
         <input type="hidden" name="year" value="<%= year || '' %>">
         <input type="hidden" name="paidLeaveDays" value="<%= values.paidLeaveDays ?? 0 %>" id="paid-leave-days-value">
+        <input type="hidden" name="congeNaissanceDays" value="<%= values.congeNaissanceDays ?? 0 %>" id="birth-leave-days-value">
         <input type="hidden" name="joursFeries" value="<%= values.joursFeries ?? 0 %>" id="jours-feries-value">
+        <% (rubriqueVisibilityInputs || []).forEach(input => { %>
+            <input type="hidden" name="<%= input.name %>" value="<%= input.value %>">
+        <% }); %>
 
         <span id="primes"></span>
         <div class="print-actions">
             <a class="print-button return-action" href="/bulletins">Retour</a>
             <% if (bulletin) { %>
                 <a class="print-button bulletin-action primary" href="/bulletins/<%= emp.id %>/pdf?month=<%= month %>&year=<%= year %>">Télécharger le PDF</a>
+            <% } %>
+            <% if (!locked) { %>
+                <button class="print-button bulletin-action" id="save-payroll-changes" type="button">Enregistrer les modifications</button>
             <% } %>
             <% if (bulletin && !payrollBlocked && ['draft', 'generated'].includes(bulletinStatus)) { %>
                 <button class="print-button bulletin-action primary" type="submit" formaction="/bulletins/<%= emp.id %>/validate">Valider</button>
@@ -1197,14 +1229,15 @@
                 </tr>
             </thead>
             <tbody id="prime-lines">
+                <% if (isRubriqueVisible('base', 'base_salary')) { %>
                 <tr>
                         <td class="rubrique-code"><%= rubriqueCodes['Salaire de base'] || '' %></td><td class="description">Salaire de base</td>
                         <td class="num">
                         <% if (workingTimeMode === 'HOURS') { %>
-                            <input class="employee-edit live-input working-time-primary" name="workedHours" aria-label="Nombre d'heures travaillées" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyHours %>" step="1" required value="<%= values.workedHours ?? standardMonthlyHours %>" <%= locked ? 'disabled' : '' %>>
+                            <input class="employee-edit live-input working-time-primary" name="workedHours" aria-label="Nombre d'heures travaillées" title="Modifiez cette valeur puis enregistrez le bulletin" type="number" min="0" max="<%= standardMonthlyHours %>" step="1" required value="<%= values.workedHours ?? standardMonthlyHours %>" <%= locked ? 'disabled' : '' %>>
                             <small class="working-time-unit">h</small>
                         <% } else { %>
-                            <input class="employee-edit live-input working-time-primary" name="workedDays" aria-label="Nombre de jours travaillés" title="Tab ou Entrée pour enregistrer" type="number" min="0" max="<%= standardMonthlyDays %>" step="1" required value="<%= values.workedDays ?? standardMonthlyDays %>" <%= locked ? 'disabled' : '' %>>
+                            <input class="employee-edit live-input working-time-primary" name="workedDays" aria-label="Nombre de jours travaillés" title="Modifiez cette valeur puis enregistrez le bulletin" type="number" min="0" max="<%= standardMonthlyDays %>" step="1" required value="<%= values.workedDays ?? standardMonthlyDays %>" <%= locked ? 'disabled' : '' %>>
                             <small class="working-time-unit">j</small>
                         <% } %>
                     </td>
@@ -1215,6 +1248,8 @@
                     <td class="num">—</td>
                     <td class="num">—</td>
                 </tr>
+                <% } %>
+                <% if (isRubriqueVisible('base', 'seniority_bonus')) { %>
                 <tr class="seniority-row">
                     <td class="rubrique-code"><%= rubriqueCodes["Prime d'ancienneté"] || '' %></td><td class="description">Prime d'ancienneté</td>
                     <td class="num" data-result="baseSalary"><%= fmt(values.baseSalary ?? emp.baseSalary) %></td>
@@ -1223,6 +1258,7 @@
                     <td class="num">—</td>
                     <td class="num">—</td>
                 </tr>
+                <% } %>
                 <% cataloguePrimeLines.forEach(line => { %>
                     <tr class="prime-row taxable-prime-line catalogue-rubrique-line" data-rubrique-imposable-id="<%= line.definition.id %>">
                         <td class="rubrique-code"><%= line.definition.code || '' %></td>
@@ -1262,7 +1298,23 @@
                         <td class="num"><%= fmt(line.amount) %></td><td class="num">—</td><td class="num">—</td>
                     </tr>
                 <% }); %>
-                <tr class="prime-row paid-leave-row">
+                <% if (primeRendementEnabled !== false) { %>
+                    <tr class="prime-row prime-rendement-row">
+                        <td class="rubrique-code"></td>
+                        <td class="description">Prime rendement</td>
+                        <td class="num">
+                            <label class="sr-only" for="prime-rendement-input">Saisie de la prime rendement</label>
+                            <input id="prime-rendement-input" class="live-input" name="primeRendementInput" type="number" min="0" max="999999.99" step="0.01" required value="<%= Number(values.primeRendementInput ?? 0).toFixed(2) %>" <%= locked ? 'disabled' : '' %>>
+                            <% if (bulletin && !locked) { %><button class="print-button" type="button" id="save-prime-rendement">Enregistrer</button><% } %>
+                            <small id="prime-rendement-status" role="status" aria-live="polite"></small>
+                        </td>
+                        <td class="num">—</td>
+                        <td class="num"><output data-result="primeRendementAmount"><%= fmt(values.primeRendementAmount ?? 0) %></output></td>
+                        <td class="num">—</td>
+                        <td class="num">—</td>
+                    </tr>
+                <% } %>
+                <% if (isRubriqueVisible('base', 'paid_leave_days')) { %><tr class="prime-row paid-leave-row">
                     <td class="rubrique-code"><%= paidLeaveDefinition?.code || '' %></td>
                     <td class="description">Congé payé</td>
                     <td class="num"><input class="live-input paid-leave-row-input" type="number" min="0" max="26" step="1" value="<%= values.paidLeaveDays ?? 0 %>" aria-label="Nombre entier de jours de congé payé" <%= locked ? 'disabled' : '' %>><small class="paid-leave-base">Base congé : <output data-result="baseConge"><%= fmt(values.baseConge ?? 0) %></output></small></td>
@@ -1270,8 +1322,17 @@
                     <td class="num"><output data-result="paidLeaveAmount"><%= fmt(values.paidLeaveAmount ?? 0) %></output></td>
                     <td class="num">—</td>
                     <td class="num">—</td>
-                </tr>
-                <tr class="prime-row public-holiday-row">
+                </tr><% } %>
+                <% if (isRubriqueVisible('base', 'birth_leave_days')) { %><tr class="prime-row birth-leave-row">
+                    <td class="rubrique-code"><%= birthLeaveDefinition?.code || rubriqueCodes['Nombre jours congé de naissance'] || '' %></td>
+                    <td class="description">Congé de naissance</td>
+                    <td class="num"><input class="live-input birth-leave-row-input" type="number" min="0" max="26" step="1" value="<%= values.congeNaissanceDays ?? 0 %>" aria-label="Nombre entier de jours de congé de naissance" <%= locked ? 'disabled' : '' %>><small class="paid-leave-base">Base congé : <output data-result="baseCongeNaissance"><%= fmt(values.baseCongeNaissance ?? 0) %></output></small></td>
+                    <td class="num">—</td>
+                    <td class="num"><output data-result="congeNaissanceAmount"><%= fmt(values.congeNaissanceAmount ?? 0) %></output></td>
+                    <td class="num">—</td>
+                    <td class="num">—</td>
+                </tr><% } %>
+                <% if (isRubriqueVisible('base', 'public_holiday_days')) { %><tr class="prime-row public-holiday-row">
                     <td class="rubrique-code"><%= publicHolidayDefinition?.code || rubriqueCodes['Nombre jours fériés'] || '' %></td>
                     <td class="description">Jours fériés</td>
                     <td class="num"><input class="live-input public-holiday-row-input" type="number" min="0" max="26" step="1" value="<%= values.joursFeries ?? 0 %>" aria-label="Nombre entier de jours fériés" <%= locked ? 'disabled' : '' %>><small class="paid-leave-base">Base férié : <output data-result="baseFerie"><%= fmt(values.baseFerie ?? 0) %></output></small></td>
@@ -1279,7 +1340,7 @@
                     <td class="num"><output data-result="joursFeriesAmount"><%= fmt(values.joursFeriesAmount ?? 0) %></output></td>
                     <td class="num">—</td>
                     <td class="num">—</td>
-                </tr>
+                </tr><% } %>
                 <% overtimeRows.forEach(row => { %>
                     <tr class="prime-row overtime-row">
                         <td class="rubrique-code"><%= row.definition?.code || '' %></td>
@@ -1291,13 +1352,14 @@
                         <td class="num">—</td>
                     </tr>
                 <% }); %>
-                <tr class="gross" id="taxable-gross-row">
+                <% if (isRubriqueVisible('base', 'taxable_gross_salary')) { %><tr class="gross" id="taxable-gross-row">
                     <td class="rubrique-code"><%= rubriqueCodes['Salaire brut imposable'] || '' %></td><td colspan="3" class="description">SALAIRE BRUT IMPOSABLE <br></td>
                     <td class="num"><span data-result="sbi"><%= fmt(values.sbi) %></span></td>
                     <td class="num">—</td>
                     <td class="num">—</td>
-                </tr>
+                </tr><% } %>
 
+                <% if (isRubriqueVisible('retenu', 'cnss')) { %>
                 <tr>
                     <td class="rubrique-code"><%= rubriqueCodes.CNSS || '' %></td><td class="description">CNSS </td>
                     <td class="num" data-result="cnssBase"><%= fmt(Math.min(values.sbi, 6000)) %></td>
@@ -1306,6 +1368,8 @@
                     <td class="num"><span data-result="cnss"><%= fmt(values.cnss) %></span></td>
                     <td class="num" data-result="cnssPatronale"><%= fmt(values.cnssPatronale) %></td>
                 </tr>
+                <% } %>
+                <% if (isRubriqueVisible('retenu', 'amo')) { %>
                 <tr>
                     <td class="rubrique-code"><%= rubriqueCodes.AMO || '' %></td><td class="description">AMO </td>
                     <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
@@ -1314,6 +1378,8 @@
                     <td class="num"><span data-result="amo"><%= fmt(values.amo) %></span></td>
                     <td class="num" data-result="amoPatronale"><%= fmt(values.amoPatronale) %></td>
                 </tr>
+                <% } %>
+                <% if (isRubriqueVisible('retenu', 'cimr')) { %>
                 <tr>
                     <td class="rubrique-code"><%= rubriqueCodes.CIMR || '' %></td><td class="description">CIMR </td>
                     <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
@@ -1322,6 +1388,7 @@
                     <td class="num"><span data-result="cimr"><%= fmt(values.cimr) %></span></td>
                     <td class="num">—</td>
                 </tr>
+                <% } %>
                 <% manualRetenus.forEach(row => { %>
                     <tr class="manual-retenu-row">
                         <td class="rubrique-code"><%= row.code %></td><td class="description"><%= row.label %></td>
@@ -1329,23 +1396,25 @@
                         <td class="num"><%= fmt(row.amount) %></td><td class="num"><form method="POST" action="/bulletins/<%= emp.id %>/retenus/delete" class="inline-delete-form"><input type="hidden" name="retenuId" value="<%= row.id %>"><input type="hidden" name="month" value="<%= month %>"><input type="hidden" name="year" value="<%= year %>"><button class="remove-prime" type="submit" aria-label="Supprimer la retenue">×</button></form></td>
                     </tr>
                 <% }); %>
-                <tr>
+                <% if (isRubriqueVisible('retenu', 'professional_expenses')) { %><tr>
                     <td class="rubrique-code"><%= rubriqueCodes['Frais professionnels'] || '' %></td><td class="description" title="Déduction utilisée pour calculer le revenu imposable.">Frais professionnels</td>
                     <td class="num" data-result="sbi"><%= fmt(values.sbi) %></td>
                     <td class="num" data-result="fraisProRate"><%= percent(values.fraisProRate) %></td>
                     <td class="num">—</td>
                     <td class="num" data-result="fraisPro"><%= fmt(values.fraisPro) %></td>
                     <td class="num">—</td>
-                </tr>
+                </tr><% } %>
 
+                <% if (isRubriqueVisible('base', 'taxable_net_salary')) { %>
                 <tr class="gross">
                     <td class="rubrique-code"><%= rubriqueCodes['Salaire net imposable'] || '' %></td><td class="description">SNI</td>
                     <td class="num"><span data-result="sni"><%= fmt(values.sni) %></span></td>
-                    <td class="num" data-result="irTaux"><%= percent(values.irTaux) %></td>
+                    <td class="num"><% if (isRubriqueVisible('retenu', 'income_tax')) { %><span data-result="irTaux"><%= percent(values.irTaux) %></span><% } else { %>—<% } %></td>
                     <td class="num">—</td>
-                    <td class="num"><span data-result="irNet"><%= fmt(values.irNet) %></span></td>
+                    <td class="num"><% if (isRubriqueVisible('retenu', 'income_tax')) { %><span data-result="irNet"><%= fmt(values.irNet) %></span><% } else { %>—<% } %></td>
                     <td class="num">—</td>
                 </tr>
+                <% } %>
         <% if (totalAvanceSolde > 0 || Number(values.avanceDeduction || 0) > 0) { %>
                 <tr class="manual-retenu-row avance-deduction-row">
                     <td class="rubrique-code">AV</td><td class="description">Avance sur salaire</td>
@@ -1358,14 +1427,14 @@
                     <td class="num">—</td>
                 </tr>
                 <% } %>
-                <tr>
+                <% if (isRubriqueVisible('retenu', 'rounding')) { %><tr>
                     <td class="rubrique-code"><%= rubriqueCodes.Arrondi || '' %></td><td class="description">ARRONDI</td>
                     <td class="num">—</td>
                     <td class="num">—</td>
                     <td class="num"><span data-result="arrondiGains"><%= arrondi > 0 ? fmt(arrondi) : '—' %></span></td>
                     <td class="num"><span data-result="arrondiRetenues"><%= arrondi < 0 ? fmt(Math.abs(arrondi)) : '—' %></span></td>
                     <td class="num">—</td>
-                </tr>
+                </tr><% } %>
 
                 <% nimpLines.forEach(line => { const payableAmount = Number(line.amount ?? 0); const maxAmount = Number(line.maxAmount) > 0 ? Number(line.maxAmount) : null; %>
                     <tr class="fixed-indemnity-line monthly-indemnity-line" data-sticky="true">
@@ -1374,7 +1443,7 @@
                         </td>
                         <td class="num">—</td>
                         <td class="num"><%= percent(representationRate(line)) %></td>
-                        <td class="num"><input class="live-input nimp-amount-input" name="nimpAmounts" aria-label="Montant payable de <%= line.label %>" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" data-max-amount="<%= maxAmount %>" data-fiche-amount="<%= line.ficheAmount ?? '' %>" type="number" min="0.01" step="0.01" value="<%= payableAmount %>" placeholder="Montant payable DH"></td>
+                        <td class="num"><input class="live-input nimp-amount-input" name="nimpAmounts" aria-label="Montant payable de <%= line.label %>" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" data-max-amount="<%= maxAmount %>" data-fiche-amount="<%= line.baseAmount ?? line.ficheAmount ?? '' %>" type="number" min="0.01" step="0.01" value="<%= payableAmount %>" placeholder="Montant payable DH"></td>
                         <td class="num">—</td>
                         <td class="num">
                             <% if (canManageIndemnity) { %><button type="button" class="remove-prime" aria-label="Supprimer l'indemnité">×</button><% } else { %>—<% } %>
@@ -1389,7 +1458,7 @@
                         <td class="num">—</td>
                         <td class="num">—</td>
                         <td class="num">
-                            <input class="live-input nimp-amount-input" name="nimpAmounts" aria-label="Montant payable de <%= line.label %>" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" data-max-amount="<%= maxAmount %>" data-fiche-amount="<%= line.ficheAmount ?? '' %>" type="number" min="0.01" step="0.01" value="<%= payableAmount %>" placeholder="Montant payable DH">
+                            <input class="live-input nimp-amount-input" name="nimpAmounts" aria-label="Montant payable de <%= line.label %>" data-original-label="<%= line.label %>" data-original-amount="<%= payableAmount %>" data-max-amount="<%= maxAmount %>" data-fiche-amount="<%= line.baseAmount ?? line.ficheAmount ?? '' %>" type="number" min="0.01" step="0.01" value="<%= payableAmount %>" placeholder="Montant payable DH">
                         </td>
                         <td class="num">—</td>
                         <td class="num">
@@ -1507,6 +1576,7 @@
             </form>
             </dialog>
 
+            <% if (overtimeEnabled !== false && overtimeRows.length) { %>
             <dialog class="prime-dialog" id="overtime-dialog">
                 <form method="dialog" id="overtime-dialog-form" class="prime-dialog-content">
                     <h2 id="overtime-dialog-title">Ajouter des heures supplémentaires</h2>
@@ -1515,9 +1585,9 @@
                         <label>
                             Type d’heures supplémentaires
                             <select id="overtime-type-select" class="form-input" required>
-                                <option value="heuresSup25">Heures supplémentaires 25%</option>
-                                <option value="heuresSup50">Heures supplémentaires 50%</option>
-                                <option value="heuresSup100">Heures supplémentaires 100%</option>
+                                <% if (isImposableRubriqueVisible({ calculationKey: 'overtime_25' })) { %><option value="heuresSup25">Heures supplémentaires 25%</option><% } %>
+                                <% if (isImposableRubriqueVisible({ calculationKey: 'overtime_50' })) { %><option value="heuresSup50">Heures supplémentaires 50%</option><% } %>
+                                <% if (isImposableRubriqueVisible({ calculationKey: 'overtime_100' })) { %><option value="heuresSup100">Heures supplémentaires 100%</option><% } %>
                             </select>
                         </label>
                         <label>
@@ -1531,6 +1601,7 @@
                     </div>
                 </form>
             </dialog>
+            <% } %>
 
         <% } %>
 
@@ -1581,6 +1652,6 @@
     <% } %>
 </div>
 <% } %></div>
-<script src="/js/show-bulletin.js?v=indemnity-edit-4"></script>
+<script src="/js/show-bulletin.js?v=live-preview-6"></script>
 <%- include('../partials/footer') %>
                 

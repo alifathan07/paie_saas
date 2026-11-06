@@ -1,4 +1,5 @@
 import prisma from '../../db.ts';
+import { isChantiersEnabled } from '../lib/chantiersFeature.js';
 
 const CHANTIERS_API_URL = 'https://confonda.enmae.com/api/chantiers';
 const CHANTIERS_CACHE_TTL_MS = 60_000;
@@ -52,4 +53,23 @@ export async function listChantiers() {
         chantiersCache = { rows: filteredRows, expiresAt: Date.now() + CHANTIERS_CACHE_TTL_MS };
         return filteredRows;
     }
+}
+
+export async function getCompanyChantiersEnabled(companyId) {
+    const id = Number(companyId);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    const company = await prisma.company.findUnique({
+        where: { id },
+        select: { chantiersEnabled: true },
+    });
+    if (!company) throw new Error('COMPANY_NOT_FOUND');
+    return isChantiersEnabled(company);
+}
+
+export async function getCompanyChantiers(companyId) {
+    const enabled = await getCompanyChantiersEnabled(companyId);
+    return {
+        chantiersEnabled: enabled,
+        chantiers: enabled ? await listChantiers() : [],
+    };
 }

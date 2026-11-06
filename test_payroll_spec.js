@@ -163,7 +163,7 @@ async function runPayrollSpecs() {
         heuresSup100: 2   // 2h @ 100%
     });
 
-    const hourlyRate = 5000 / (26 * 8); // ~24.0385 DH/h
+    const hourlyRate = 5000 / 191; // ~26.1780 DH/h
     const expHs25 = Number((10 * hourlyRate * 1.25).toFixed(2));
     const expHs50 = Number((5 * hourlyRate * 1.50).toFixed(2));
     const expHs100 = Number((2 * hourlyRate * 2.00).toFixed(2));

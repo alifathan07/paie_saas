@@ -1,4 +1,5 @@
 import prisma from "../../db.ts";
+import { buildRubriqueVisibility } from "../lib/rubriqueVisibility.js";
 
 const CATEGORY_CONFIG = Object.freeze({
     base: { model: "rubriqueBase", start: 1001, end: 1999 },
@@ -55,6 +56,7 @@ export async function listRubriques(companyId) {
 
 export async function getRubriqueMaps(companyId) {
     const rows = await listRubriques(companyId);
+    const rubriqueVisibility = buildRubriqueVisibility(rows);
     const base = Object.fromEntries(rows.base.filter(row => row.active).map(row => [row.key, row.code]));
     const retenu = Object.fromEntries(rows.retenu.filter(row => row.active).map(row => [row.key, row.code]));
     const imposable = Object.fromEntries(rows.imposable.filter(row => row.active).map(row => [row.calculationKey || row.code, row.code]));
@@ -66,6 +68,7 @@ export async function getRubriqueMaps(companyId) {
         "Salaire net imposable": base.taxable_net_salary,
         "Salaire net à payer": base.net_salary,
         "Nombre jours congé payé": base.paid_leave_days,
+        "Nombre jours congé de naissance": base.birth_leave_days,
         "Nombre jours fériés": base.public_holiday_days,
         "CNSS": retenu.cnss,
         "AMO": retenu.amo,
@@ -74,7 +77,7 @@ export async function getRubriqueMaps(companyId) {
         "Frais professionnels": retenu.professional_expenses,
         "Arrondi": retenu.rounding,
     };
-    return { ...rows, base, retenu, baseRows: rows.base, retenuRows: rows.retenu, imposable, imposableRows: rows.imposable, codes };
+    return { ...rows, base, retenu, baseRows: rows.base, retenuRows: rows.retenu, imposable, imposableRows: rows.imposable, rubriqueVisibility, codes };
 }
 
 export async function updateFixedRubrique(category, id, companyId, data) {

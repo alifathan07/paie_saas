@@ -1,16 +1,16 @@
 import { OVERTIME_RULES } from "../rules/overtime.rules.js";
 
 /**
- * Calculates overtime compensation based on hourly rate derived from effective base salary
+ * Calculates overtime compensation using the taxable SBI base before overtime
  *
- * @param {number} effectiveBase Effective base salary (base minus absence deduction)
+ * @param {number} taxableSbiBeforeOvertime Taxable monthly base before overtime
  * @param {number} hs25 Hours worked with 25% majoration
  * @param {number} hs50 Hours worked with 50% majoration
  * @param {number} hs100 Hours worked with 100% majoration
  * @returns {Object} Overtime breakdown and total compensation amount
  */
-export const calculateOvertime = (effectiveBase, hs25 = 0, hs50 = 0, hs100 = 0, monthlyHours = OVERTIME_RULES.monthlyHours) => {
-  const cleanBase = Math.max(0, Number(effectiveBase) || 0);
+export const calculateOvertime = (taxableSbiBeforeOvertime, hs25 = 0, hs50 = 0, hs100 = 0, monthlyHours = OVERTIME_RULES.monthlyHours) => {
+  const cleanBase = Math.max(0, Number(taxableSbiBeforeOvertime) || 0);
   const clean25 = Math.max(0, Number(hs25) || 0);
   const clean50 = Math.max(0, Number(hs50) || 0);
   const clean100 = Math.max(0, Number(hs100) || 0);

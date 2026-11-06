@@ -1,3 +1,4 @@
+
 # Skill — Moroccan Payroll & Payslip Calculation Engine
 
 ## 1. Purpose

@@ -27,6 +27,10 @@ export const app = express();
 export const PORT = process.env.PORT || 3000;
 const sessionSecret = process.env.SESSION_SECRET || (process.env.NODE_ENV === 'production' ? null : 'development-only-change-me');
 if (!sessionSecret) throw new Error('SESSION_SECRET must be configured in production');
+const PERIOD_MONTH_NAMES = [
+    "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+];
 
 const MySQLStore = expressMySQLSession(session);
 const sessionStore = new MySQLStore({
@@ -65,6 +69,12 @@ app.use(session({
 app.use(async (req, res, next) => {
     res.locals.clientMode = req.session?.adminClientMode || null;
     res.locals.isAdmin = isAdminUser(req);
+    res.locals.activeCompanyName = req.session?.adminClientMode?.companyName || "Société active";
+    res.locals.periodMonth = req.session?.selectedPeriod?.month || new Date().getMonth() + 1;
+    res.locals.periodYear = req.session?.selectedPeriod?.year || new Date().getFullYear();
+    res.locals.periodMonthNames = PERIOD_MONTH_NAMES;
+    res.locals.periodReturnTo = req.path || "/dashboard";
+    res.locals.periodChangeMessage = null;
     next();
 });
 
@@ -77,11 +87,6 @@ app.use('/profile', profile);
 app.use('/admin', admin);
 app.use('/companies', companies);
 app.use(requireActiveCompany);
-
-const PERIOD_MONTH_NAMES = [
-    "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
-];
 
 function validPeriod(month, year) {
     const parsedMonth = Number(month);
@@ -99,7 +104,16 @@ app.use(async (req, res, next) => {
         ? validPeriod(req.query?.month, req.query?.year)
         : null;
     const savedPeriod = validPeriod(req.session.selectedPeriod?.month, req.session.selectedPeriod?.year);
-    const period = requestedPeriod || savedPeriod || { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
+    let period = requestedPeriod || savedPeriod;
+
+    if (!period) {
+        const rows = await prisma.payslip.findMany({
+            where: { employee: { companyId: Number(req.activeCompanyId) } },
+            select: { month: true, year: true, status: true },
+        });
+        period = getActiveBulletinPeriod(rows);
+        req.session.selectedPeriod = period;
+    }
 
     if (requestedPeriod) req.session.selectedPeriod = requestedPeriod;
     if (req.query.month !== String(period.month) || req.query.year !== String(period.year)) {

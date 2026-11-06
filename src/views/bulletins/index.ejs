@@ -1,4 +1,16 @@
 <%- include('../partials/header') %>
+<%
+    const isRubriqueVisible = (category, key) => rubriqueVisibility?.[category]?.[String(key)] !== false;
+    const isRubriqueColumnVisible = column => {
+        if (overtimeEnabled === false && column.kind === 'overtime') return false;
+        if (primeRendementEnabled === false && column.kind === 'primeRendement') return false;
+        if (column.rubriqueVisibilityCategory && column.rubriqueVisibilityKey) {
+            return isRubriqueVisible(column.rubriqueVisibilityCategory, column.rubriqueVisibilityKey);
+        }
+        return true;
+    };
+    const visibleRubriqueColumns = (rubriqueColumns || []).filter(isRubriqueColumnVisible);
+%>
 <% if (typeof bulletinPeriodMessage !== 'undefined' && bulletinPeriodMessage) { %>
     <div role="alert" id="bulletin-period-message" class="bulk-summary"><%= bulletinPeriodMessage %></div>
 <% } %>
@@ -93,12 +105,16 @@
             </span>
             <div class="bulletin-filter-heading-copy">
                 <h2 id="bulletin-filters-heading">Filtres</h2>
-                <p>Affinez la liste par catégorie, chantier ou net à payer.</p>
+                <p>Affinez la liste par catégorie<%= chantiersEnabled !== false ? ', chantier' : '' %> ou net à payer.</p>
             </div>
         </div>
         <form method="GET" action="/bulletins" id="bulletins-filter-form" class="bulletin-filter-controls">
             <input type="hidden" name="month" value="<%= month %>">
             <input type="hidden" name="year" value="<%= year %>">
+            <label class="bulletin-filter-field">
+                <span class="bulletin-filter-label">Matricule</span>
+                <input type="search" name="matricule" class="form-input" value="<%= filters?.matricule ?? '' %>" placeholder="Rechercher un matricule" autocomplete="off">
+            </label>
             <label class="bulletin-filter-field">
                 <span class="bulletin-filter-label">Catégorie</span>
                 <select name="categoryId" class="form-input">
@@ -108,15 +124,17 @@
                     <% }); %>
                 </select>
             </label>
-            <label class="bulletin-filter-field">
-                <span class="bulletin-filter-label">Chantier</span>
-                <select name="chantierId" class="form-input">
-                    <option value="">Tous les chantiers</option>
-                    <% (chantiers || []).forEach(item => { %>
-                        <option value="<%= item.id %>" <%= String(filters?.chantierId || '') === String(item.id) ? 'selected' : '' %>><%= item.nom %></option>
-                    <% }); %>
-                </select>
-            </label>
+            <% if (chantiersEnabled !== false) { %>
+                <label class="bulletin-filter-field">
+                    <span class="bulletin-filter-label">Chantier</span>
+                    <select name="chantierId" class="form-input">
+                        <option value="">Tous les chantiers</option>
+                        <% (chantiers || []).forEach(item => { %>
+                            <option value="<%= item.id %>" <%= String(filters?.chantierId || '') === String(item.id) ? 'selected' : '' %>><%= item.nom %></option>
+                        <% }); %>
+                    </select>
+                </label>
+            <% } %>
             <label class="bulletin-filter-field">
                 <span class="bulletin-filter-label">Net minimum</span>
                 <span class="bulletin-money-input">
@@ -139,7 +157,7 @@
                     </svg>
                     Filtrer
                 </button>
-                <% if (filters?.categoryId || filters?.chantierId || filters?.netMin !== '' || filters?.netMax !== '') { %>
+                <% if (filters?.categoryId || filters?.chantierId || filters?.matricule || filters?.netMin !== '' || filters?.netMax !== '') { %>
                     <a href="/bulletins?month=<%= month %>&year=<%= year %>" class="bulletin-filter-reset">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -222,14 +240,17 @@
     <table class="data-table" id="bulletins-table">
         <thead>
             <tr>
-                <th>Salarié</th>
-                <% (rubriqueColumns || []).forEach(column => { %>
+                <th>Matricule</th>
+                <th class="employee-name-column">Nom et prénom</th>
+                <% visibleRubriqueColumns.forEach(column => { %>
                     <th class="rubrique-column-header"><%= ['CNSS', 'AMO', 'CIMR'].includes(column.label) ? 'Retenue · ' : '' %><%= column.label %></th>
                     <% if (column.label === 'Salaire de base') { %><th>Nbr j/h</th><% } %>
                 <% }); %>
-                <th class="net-column">Net à payer</th>
                 <th class="status-column">Statut bulletin</th>
                 <th class="actions-column">Actions</th>
+                <th class="net-column" style="font-variant-numeric: tabular-nums;">
+                    <strong>Net à payer</strong>
+                </th>
             </tr>
         </thead>
         <tbody>
@@ -237,16 +258,46 @@
                 <tr class="bulletin-row"
                     data-href="/bulletins/<%= emp.id %>?month=<%= month %>&year=<%= year %>">
 
-                    <td>
-                        <span style="font-weight: 600;"><%= emp.nomComplet %></span>
-                        <div style="font-size: 12px; color: var(--color-text-subtle);"><%= emp.matricule %></div>
+                    <td class="matricule-column">
+                        <span style="font-weight: 600;"><%= emp.matricule || '—' %></span>
                         <% if (!emp.actif) { %>
                             <span class="bulletin-inactive-label">Employé inactif</span>
                         <% } %>
+                        <% (emp.rubriqueVisibilityInputs || []).forEach(input => { %>
+                            <input type="hidden" name="<%= input.name %>" value="<%= input.value %>">
+                        <% }); %>
                     </td>
 
-                    <% (rubriqueColumns || []).forEach(column => { const component = (emp.bulletinComponents || []).find(item => `${item.code}|${item.label}` === column.key); %>
-                        <td class="rubrique-column-cell" onclick="event.stopPropagation();"><% if (component?.label === 'ARRONDI') { %><% if (component?.gains !== null) { %><span class="arrondi-gain">Gain <%= fmt(component?.gains) %></span><% } else if (component?.retenues !== null) { %><span class="arrondi-retenue">Retenue <%= fmt(component?.retenues) %></span><% } else { %>—<% } %><% } else if (component?.kind === 'prime') { %><input form="bulletin-form-<%= emp.id %>" class="bulletin-component-input" type="number" name="primesAmounts" value="<%= component?.gains ?? 0 %>" min="0" step="0.01"><input form="bulletin-form-<%= emp.id %>" type="hidden" name="primesLabels" value="<%= component.label %>"><% } else if (component?.kind === 'nimp') { %><% const componentMax = Number(component.maxAmount) > 0 ? Number(component.maxAmount).toFixed(2) : ''; %><input form="bulletin-form-<%= emp.id %>" class="nimp-amount-input bulletin-component-input" type="number" name="nimpAmounts" value="<%= Number(component?.gains ?? 0).toFixed(2) %>" min="0.01" <%= componentMax ? `max="${componentMax}"` : '' %> step="0.01" data-old-label="<%= component.label %>" data-old-amount="<%= Number(component?.gains ?? 0).toFixed(2) %>" data-max-amount="<%= componentMax %>" data-sticky="false"><input form="bulletin-form-<%= emp.id %>" type="hidden" name="nimpLabels" value="<%= component.label %>"><% } else if (component?.label === "Prime d'ancienneté") { %><% if (component.rate !== null) { %><%= (Number(component.rate) * 100).toFixed(2) %> % · <% } %><%= component?.gains !== null ? fmt(component?.gains) + ' DH' : '—' %><% } else if (component?.kind === 'salary') { %><%= component?.gains !== null ? fmt(component?.gains) + ' DH' : '—' %><% } else if (['paidLeave', 'holiday', 'overtime'].includes(component?.kind)) { %><input form="bulletin-form-<%= emp.id %>" class="bulletin-component-input" type="number" name="<%= component.kind === 'paidLeave' ? 'paidLeaveDays' : component.kind === 'holiday' ? 'joursFeries' : component.key %>" value="<%= component.base ?? 0 %>" min="0" <%= component.kind === 'paidLeave' ? `max="${emp.standardMonthlyDays}"` : '' %> step="0.01"><% } else { %><%= component?.gains !== null ? fmt(component?.gains) + ' DH' : component?.retenues !== null ? fmt(component?.retenues) + ' DH' : '—' %><% } %></td>
+                    <td class="employee-name-column">
+                        <span style="font-weight: 600;"><%= emp.nomComplet %></span>
+                    </td>
+
+                    <% visibleRubriqueColumns.forEach(column => {
+                        const component = (emp.bulletinComponents || []).find(item => `${item.code}|${item.label}` === column.key);
+                        const primeRendementEditable = emp.actif && !emp.blocageSaisiePaie
+                            && (!emp.bulletin || ['draft', 'generated'].includes(emp.bulletin.status));
+                    %>
+                        <td class="rubrique-column-cell" onclick="event.stopPropagation();">
+                            <% if (component?.label === 'ARRONDI') { %>
+                                <% if (component?.gains !== null) { %><span class="arrondi-gain">Gain <%= fmt(component?.gains) %></span><% } else if (component?.retenues !== null) { %><span class="arrondi-retenue">Retenue <%= fmt(component?.retenues) %></span><% } else { %>—<% } %>
+                            <% } else if (component?.kind === 'primeRendement' && component.key === 'primeRendementInput') { %>
+                                <input class="bulletin-component-input prime-rendement-input" type="number" name="primeRendementInput" value="<%= Number(component.base ?? 0).toFixed(2) %>" min="0" max="999999.99" step="0.01" required aria-label="Saisie de la prime rendement pour <%= emp.nomComplet %>" <%= primeRendementEditable ? '' : 'disabled' %>>
+                                <small>Calculé : <output data-prime-rendement-amount><%= fmt(component.gains ?? 0) %></output> DH</small>
+                            <% } else if (component?.kind === 'prime') { %>
+                                <input form="bulletin-form-<%= emp.id %>" class="bulletin-component-input" type="number" name="primesAmounts" value="<%= component?.gains ?? 0 %>" min="0" step="0.01"><input form="bulletin-form-<%= emp.id %>" type="hidden" name="primesLabels" value="<%= component.label %>">
+                            <% } else if (component?.kind === 'nimp') { %>
+                                <% const componentMax = Number(component.maxAmount) > 0 ? Number(component.maxAmount).toFixed(2) : ''; %>
+                                <input form="bulletin-form-<%= emp.id %>" class="nimp-amount-input bulletin-component-input" type="number" name="nimpAmounts" value="<%= Number(component?.gains ?? 0).toFixed(2) %>" min="0.01" <%= componentMax ? `max="${componentMax}"` : '' %> step="0.01" data-old-label="<%= component.label %>" data-old-amount="<%= Number(component?.gains ?? 0).toFixed(2) %>" data-max-amount="<%= componentMax %>" data-sticky="false"><input form="bulletin-form-<%= emp.id %>" type="hidden" name="nimpLabels" value="<%= component.label %>">
+                            <% } else if (component?.label === "Prime d'ancienneté") { %>
+                                <% if (component.rate !== null) { %><%= (Number(component.rate) * 100).toFixed(2) %> % · <% } %><%= component?.gains !== null ? fmt(component?.gains) + ' DH' : '—' %>
+                            <% } else if (component?.kind === 'salary') { %>
+                                <%= component?.gains !== null ? fmt(component?.gains) + ' DH' : '—' %>
+                            <% } else if (['paidLeave', 'birthLeave', 'holiday', 'overtime'].includes(component?.kind)) { %>
+                                <input form="bulletin-form-<%= emp.id %>" class="bulletin-component-input" type="number" name="<%= component.kind === 'paidLeave' ? 'paidLeaveDays' : component.kind === 'birthLeave' ? 'congeNaissanceDays' : component.kind === 'holiday' ? 'joursFeries' : component.key %>" value="<%= component.base ?? 0 %>" min="0" <%= ['paidLeave', 'birthLeave', 'holiday'].includes(component.kind) ? 'max="26"' : '' %> step="<%= ['paidLeave', 'birthLeave', 'holiday'].includes(component.kind) ? '1' : '0.01' %>">
+                            <% } else { %>
+                                <%= component?.gains !== null ? fmt(component?.gains) + ' DH' : component?.retenues !== null ? fmt(component?.retenues) + ' DH' : '—' %>
+                            <% } %>
+                        </td>
                         <% if (component?.kind === 'salary') { %>
                             <td>
                                 <% if (emp.bulletin && emp.actif && !emp.blocageSaisiePaie && ['draft', 'generated'].includes(emp.bulletin.status)) { %>
@@ -270,14 +321,6 @@
                             </td>
                         <% } %>
                     <% }); %>
-
-                    <td class="net-column" data-payroll-net style="font-variant-numeric: tabular-nums;">
-                        <% if (emp.bulletin && emp.bulletin.netAPayer !== undefined && emp.bulletinStatus !== 'error') { %>
-                            <strong><%= fmt(emp.bulletin.netAPayer) %> DH</strong>
-                        <% } else { %>
-                            <span style="color: var(--color-text-subtle);">—</span>
-                        <% } %>
-                    </td>
 
                     <td class="status-column">
                         <% if (emp.bulletinStatus === 'blocked' || emp.blocageSaisiePaie || !emp.actif) { %>
@@ -334,6 +377,15 @@
                                     data-action="/bulletins/<%= emp.id %>/mask">Masquer</button>
                             <% } %>
                         </div>
+                    </td>
+
+                    <td class="net-column" data-payroll-net style="font-variant-numeric: tabular-nums;">
+                        <% if (emp.bulletin && emp.bulletin.netAPayer !== undefined && emp.bulletinStatus !== 'error') { %>
+                            <strong data-payroll-net-value><%= fmt(emp.bulletin.netAPayer) %> DH</strong>
+                        <% } else { %>
+                            <span data-payroll-net-value style="color: var(--color-text-subtle);">—</span>
+                        <% } %>
+                        <small class="worked-days-message" data-payroll-status role="status" aria-live="polite"></small>
                     </td>
 
                 </tr>

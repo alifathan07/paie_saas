@@ -4,7 +4,12 @@ import { calculatePayroll } from "./src/payroll-engine/PayrollEngine.js";
 
 const showView = fs.readFileSync("./src/views/bulletins/show.ejs", "utf8");
 const showScript = fs.readFileSync("./public/js/show-bulletin.js", "utf8");
+const listScript = fs.readFileSync("./public/js/bulletins-list.js", "utf8");
 const controller = fs.readFileSync("./src/controllers/bulletins.controller.js", "utf8");
+const addSection = controller.slice(
+    controller.indexOf("export const addMonthlyIndemnity"),
+    controller.indexOf("export const stickMonthlyIndemnity")
+);
 
 const employee = {
     baseSalary: 10000,
@@ -31,6 +36,50 @@ assert.match(showView, /data-original-amount="<%= payableAmount %>"/);
 assert.match(showScript, /document\.querySelectorAll\('\.nimp-amount-input'\)/);
 assert.match(showScript, /\/indemnities\/update/);
 assert.match(showScript, /saveEmployee: false/);
+assert.match(showScript, /calculate\(\{ preserveIndemnityInputs: true, allowLocked: true \}\)/);
+assert.match(showScript, /if \(!preserveIndemnityInputs\) amountInput\.value/);
+assert.match(showScript, /state\.textContent = 'Aperçu · non enregistré'/);
+assert.match(showView, /id="save-payroll-changes"/);
+assert.match(showView, /show-bulletin\.js\?v=live-preview-6/);
+assert.doesNotMatch(showScript, /saveAvanceDeduction|savePaidLeaveDays|savePublicHolidayDays|saveBirthLeaveDays/);
+const saveStart = showScript.indexOf("const saveBeforeSwitch = async () => {");
+const saveEnd = showScript.indexOf("document.querySelector('#save-payroll-changes')", saveStart);
+assert.notEqual(saveStart, -1);
+assert.notEqual(saveEnd, -1);
+const saveFlow = showScript.slice(saveStart, saveEnd);
+assert.ok(saveFlow.indexOf("await calculateWorkingTime()") < saveFlow.indexOf("fetch(form.action"));
+assert.match(showScript, /function previewWorkingTime\(\)/);
+const nimpSaveSetup = showScript.indexOf("if (input.disabled) return;");
+const nimpSaveStart = showScript.lastIndexOf("document.querySelectorAll('.nimp-amount-input').forEach(input => {", nimpSaveSetup);
+const nimpSaveEnd = showScript.indexOf("lines?.addEventListener('keydown'", nimpSaveStart);
+assert.notEqual(nimpSaveStart, -1);
+assert.notEqual(nimpSaveEnd, -1);
+assert.doesNotMatch(showScript.slice(nimpSaveStart, nimpSaveEnd), /window\.location\.reload\(\)/);
+
+assert.match(addSection, /const workingTime = resolveWorkingTimeForPayslip\(emp, existing\)/);
+assert.match(addSection, /const indemnityRatio = workingTime\.mode === "HOURS"/);
+assert.match(addSection, /const payableAmount = Number\(\(monthlyAmount \* indemnityRatio\)\.toFixed\(2\)\)/);
+assert.match(addSection, /baseAmount: monthlyAmount/);
+assert.equal(Number((1500 * 23 / 26).toFixed(2)), 1326.92, "a 1,500 DH monthly indemnity must prorate to 23 of 26 days");
+
+const workedDaysSection = controller.slice(
+    controller.indexOf("export const updateBulletinWorkedDays"),
+    controller.indexOf("export const updateBulletinPaidLeave")
+);
+const liveCalculationSection = controller.slice(
+    controller.indexOf("export const calculateLive"),
+    controller.indexOf("export const changeBulletinPeriod")
+);
+assert.match(workedDaysSection, /prorateMonthlyNimpLines\(/);
+assert.match(workedDaysSection, /persistPayslipBonuses\(existing\.id, calc, transaction\)/);
+assert.match(liveCalculationSection, /overrides\.monthlyNimpLines = prorateMonthlyNimpLines\(/);
+assert.match(liveCalculationSection, /monthlyNimpLines:\s*enteredMonthlyNimpLines/);
+assert.doesNotMatch(showView, /data-nimp-payable/);
+assert.match(showScript, /\/calculate\?\$\{body\}/);
+assert.match(showScript, /amountInput\.value = Number\(line\.amount \|\| 0\)\.toFixed\(2\)/);
+assert.match(listScript, /input\.value = Number\(line\.amount \|\| 0\)\.toFixed\(2\)/);
+assert.doesNotMatch(listScript, /Payable : /);
+assert.equal(Number((500 * 21 / 26).toFixed(2)), 403.85, "a 500 DH monthly ceiling must prorate to 21 of 26 days");
 
 const updateSection = controller.slice(
     controller.indexOf("export const updateMonthlyIndemnity"),

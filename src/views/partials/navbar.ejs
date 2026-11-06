@@ -7,25 +7,25 @@
     <% } %>
 
     <div class="navbar-left">
-        <button type="button" class="navbar-menu-toggle" data-sidebar-toggle aria-label="Ouvrir le menu" title="Menu">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-        </button>
-        <% const pageNames = { dashboard: 'Accueil', bulletins: 'Traitement de paie', editions: 'Éditions', employees: 'Salariés', companies: 'Sociétés', parametrage: 'Paramétrage', rubriques: 'Rubriques', avances: 'Avances', indemnites: 'Indemnités', primes: 'Primes', profile: 'Mon profil', admin: 'Administration' }; %>
-        <span class="navbar-page-name"><%= pageNames[currentPage] || 'Accueil' %></span>
-        <label class="navbar-search" aria-label="Rechercher">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-            <input type="search" placeholder="Rechercher" autocomplete="off">
-        </label>
+        <div class="navbar-company" title="Société active : <%= activeCompanyName || 'Société active' %>">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V5.5L12 3l7 2.5V21M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01" /></svg>
+            <span class="navbar-company-name"><%= activeCompanyName || 'Société active' %></span>
+        </div>
     </div>
 
+    <% 
+        const selectedMonthNum = typeof periodMonth !== 'undefined' && periodMonth ? Number(periodMonth) : (new Date().getMonth() + 1);
+        const selectedYearNum = typeof periodYear !== 'undefined' && periodYear ? Number(periodYear) : new Date().getFullYear();
+        const selectedPeriodFormatted = `${String(selectedMonthNum).padStart(2, '0')}/${selectedYearNum}`;
+        const fallbackMonthNames = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+        const selectedMonthNames = typeof periodMonthNames !== 'undefined' && Array.isArray(periodMonthNames) ? periodMonthNames : fallbackMonthNames;
+        const selectedPeriodFull = `${selectedMonthNames[selectedMonthNum] || fallbackMonthNames[selectedMonthNum] || ''} ${selectedYearNum}`;
+    %>
+
     <div class="navbar-right">
-        <div class="navbar-company" title="Société active">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V5.5L12 3l7 2.5V21M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01" /></svg>
-            <span><%= activeCompanyName || 'Société active' %></span>
-        </div>
-        <button type="button" class="navbar-period-trigger" id="open-period-dialog" aria-haspopup="dialog" aria-controls="period-dialog">
+        <button type="button" class="navbar-period-trigger" id="open-period-dialog" aria-haspopup="dialog" aria-controls="period-dialog" title="Changer de période (<%= selectedPeriodFull %>)">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-            <span>Année <%= periodYear %></span>
+            <span><%= selectedPeriodFull %></span>
         </button>
         <div class="navbar-shortcuts">
             <a href="/bulletins?month=<%= encodeURIComponent(periodMonth) %>&year=<%= encodeURIComponent(periodYear) %>"
@@ -46,7 +46,6 @@
             </a>
             <button type="button" class="navbar-icon-link" title="Notifications" aria-label="Notifications"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></button>
         </div>
-        <button type="button" class="navbar-icon-link navbar-theme-toggle" data-theme-toggle title="Changer de thème" aria-label="Changer de thème" aria-pressed="false"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></svg></button>
         <div class="navbar-user-menu">
             <% const userName = (typeof user !== 'undefined' && user && user.name) ? user.name : 'Utilisateur RH'; %>
             <div class="user-avatar"><%= userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'RH' %></div>

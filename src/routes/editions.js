@@ -2,6 +2,8 @@ import express from "express";
 import PDFDocument from "pdfkit";
 import { prisma } from "../lib/db.js";
 import { resolveCompanyId } from "../lib/company.js";
+import { hideOvertimeFromView, isOvertimeEnabled } from "../lib/overtimeFeature.js";
+import { isImposableRubriqueVisible, isRubriqueVisible } from "../lib/rubriqueVisibility.js";
 import { generateBulletinPdf } from "../pdf/bulletinPdf.js";
 import { mapPayslipToViewModel, getBulletinPdfCumulative } from "../controllers/bulletins.controller.js";
 import { getRubriqueMaps } from "../services/rubrique.service.js";
@@ -208,14 +210,20 @@ function matriculeNumber(value) {
     return match ? Number(match.join("")) : NaN;
 }
 
-async function pdfDataFromPayslip(payslip, rubriqueCodes = {}) {
+async function pdfDataFromPayslip(payslip, rubriqueMaps = {}) {
     const emp = payslip.employee;
     const company = emp.company || {};
+    const overtimeEnabled = isOvertimeEnabled(company);
+    const bulletin = hideOvertimeFromView(mapPayslipToViewModel(payslip), overtimeEnabled);
+    const rubriqueVisibility = rubriqueMaps.rubriqueVisibility || {};
     const hireDate = new Date(emp.dateEmbauche);
     const seniorityYears = Math.max(0, Math.floor((new Date() - hireDate) / (1000 * 60 * 60 * 24 * 365.25)));
 
     return {
-        ...mapPayslipToViewModel(payslip),
+        ...bulletin,
+        variablePrimes: bulletin.variablePrimes.filter(line => isImposableRubriqueVisible(rubriqueVisibility, line)),
+        retenus: bulletin.retenus.filter(line => line.rubriqueRetenuId === null || line.rubriqueRetenuId === undefined
+            || isRubriqueVisible(rubriqueVisibility, "retenu", `id:${line.rubriqueRetenuId}`)),
         employeeName: emp.nomComplet,
         employeeMatricule: emp.matricule,
         employeeCNSS: emp.numeroCNSS || "—",
@@ -239,7 +247,9 @@ async function pdfDataFromPayslip(payslip, rubriqueCodes = {}) {
         monthName: MONTH_NAMES_FR[payslip.month] || "Mois",
         paymentDate: `${payslip.year}-${String(payslip.month).padStart(2, "0")}-25`,
         paymentMethod: emp.modePaiement || "Virement",
-        rubriqueCodes,
+        overtimeEnabled,
+        rubriqueCodes: rubriqueMaps.codes || {},
+        rubriqueVisibility,
         cumulative: await getBulletinPdfCumulative(payslip.employeeId, payslip.year, payslip.month, payslip),
     };
 }
@@ -276,7 +286,7 @@ editions.post("/bulletins/pdf", async (req, res) => {
         if (selected.length === 0) {
             return renderBulletinExportPage(req, res, { error: "Aucun bulletin trouvé dans cette plage de matricules pour la période sélectionnée." });
         }
-        const rubriqueCodes = (await getRubriqueMaps(companyId)).codes;
+        const rubriqueMaps = await getRubriqueMaps(companyId);
 
         const doc = new PDFDocument({
             size: "A4",
@@ -292,7 +302,7 @@ editions.post("/bulletins/pdf", async (req, res) => {
 
         for (const [index, payslip] of selected.entries()) {
             if (index > 0) doc.addPage();
-            generateBulletinPdf(await pdfDataFromPayslip(payslip, rubriqueCodes), null, { doc });
+            generateBulletinPdf(await pdfDataFromPayslip(payslip, rubriqueMaps), null, { doc });
         }
         doc.end();
     } catch (error) {

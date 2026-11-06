@@ -16,6 +16,8 @@ import {
     updateBulletinWorkedDays,
     updateBulletinPaidLeave,
     updateBulletinPublicHoliday,
+    updateBulletinBirthLeave,
+    updateBulletinPrimeRendement,
     addMonthlyPrime,
     createBulletinPrimeCatalogue,
     deleteMonthlyPrime,
@@ -51,7 +53,9 @@ bulletins.get("/:id/calculate", calculateLive);
 bulletins.get("/:id/worked-days", updateBulletinWorkedDays);
 bulletins.post("/:id/worked-days", updateBulletinWorkedDays);
 bulletins.post("/:id/paid-leave", updateBulletinPaidLeave);
+bulletins.post("/:id/birth-leave", updateBulletinBirthLeave);
 bulletins.post("/:id/public-holiday", updateBulletinPublicHoliday);
+bulletins.post("/:id/prime-rendement", updateBulletinPrimeRendement);
 
 // Add a taxable prime directly to the selected month's payslip
 bulletins.post("/:id/primes", addMonthlyPrime);

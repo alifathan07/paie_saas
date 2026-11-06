@@ -1,0 +1,42 @@
+# Dependencies & build output
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+out/
+*.log
+**/*.map
+
+# Generated code (Prisma client etc.), never edit or read this
+src/generated/
+
+# Lockfiles (huge, useless to the agent)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Prisma migration history (read schema.prisma only)
+prisma/migrations/
+
+# Generated static build output only
+public/**/*.map
+public/dist/
+public/build/
+
+# Secrets, keep the agent away from these
+.env
+.env.*
+!.env.example
+
+# Binary reference documents
+*.pdf
+
+# Infra / tooling noise
+.git/
+.github/
+.codex/
+ecosystem.config.cjs
+
+# Old notes and audits (read when needed)
+md_files/

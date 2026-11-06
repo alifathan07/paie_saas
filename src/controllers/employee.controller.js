@@ -13,6 +13,7 @@ import {
 } from "../services/employeeService.js";
 import { calculatePayroll } from "../payroll-engine/PayrollEngine.js";
 import { resolveCompanyId } from "../lib/company.js";
+import { isChantiersEnabled } from "../lib/chantiersFeature.js";
 import {
     listIndemnites,
     getRepresentationRate,
@@ -21,13 +22,18 @@ import {
     removeEmployeeIndemnite,
     setEmployeeIndemnite,
 } from "../services/indemniteService.js";
-import { listChantiers, syncChantiers } from "../services/chantier.service.js";
+import { getCompanyChantiers, getCompanyChantiersEnabled, syncChantiers } from "../services/chantier.service.js";
 
 const getSessionCompanyId = async (req) => resolveCompanyId(req);
 
 // POST /employees/chantiers/sync — Refresh the local chantier catalog from the API.
 export const syncEmployeeChantiers = async (req, res) => {
     try {
+        const companyId = await getSessionCompanyId(req);
+        if (!companyId) return res.status(400).json({ ok: false, error: "Aucune entreprise associée à cette session." });
+        if (!await getCompanyChantiersEnabled(companyId)) {
+            return res.status(403).json({ ok: false, error: "Les chantiers sont désactivés pour cette société." });
+        }
         const chantiers = await syncChantiers();
         return res.json({ ok: true, count: chantiers.length, chantiers });
     } catch (error) {
@@ -44,6 +50,7 @@ export const listEmployees = async (req, res) => {
         const employees = await getEmployees({ search, categoryId, companyId });
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
+        const chantiersEnabled = await getCompanyChantiersEnabled(companyId);
 
         res.render("employees/index", {
             title: "Liste des employés",
@@ -53,7 +60,8 @@ export const listEmployees = async (req, res) => {
             search: search || '',
             categoryId: categoryId || '',
             categories,
-            functions
+            functions,
+            chantiersEnabled
         });
     } catch (error) {
         console.error("Error listing employees:", error);
@@ -65,6 +73,7 @@ export const listEmployees = async (req, res) => {
             search: '',
             categoryId: '',
             categories: [],
+            chantiersEnabled: false,
             error: "Impossible de charger la liste des employés"
         });
     }
@@ -78,7 +87,7 @@ export const renderCreateForm = async (req, res) => {
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
         const banques = await getBanques();
-        const chantiers = await listChantiers();
+        const { chantiersEnabled, chantiers } = await getCompanyChantiers(companyId);
         const indemnites = await listIndemnites(companyId);
         const representationRate = await getRepresentationRate(companyId);
         res.render("employees/create", {
@@ -90,6 +99,7 @@ export const renderCreateForm = async (req, res) => {
             functions,
             banques,
             chantiers,
+            chantiersEnabled,
             indemnites,
             representationAvailable: indemnites.some(item => item.isRepresentation),
             defaultRepresentationRate: Number((representationRate * 100).toFixed(0)),
@@ -205,7 +215,7 @@ export const handleCreateEmployee = async (req, res) => {
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
         const banques = await getBanques();
-        const chantiers = await listChantiers();
+        const { chantiersEnabled, chantiers } = await getCompanyChantiers(companyId);
         res.status(400).render("employees/create", {
             title: "Nouveau Salarié",
             currentPage: "employees",
@@ -215,6 +225,7 @@ export const handleCreateEmployee = async (req, res) => {
             functions,
             banques,
             chantiers,
+            chantiersEnabled,
             indemnites: await listIndemnites(companyId),
             defaultRepresentationRate: Number((await getRepresentationRate(companyId) * 100).toFixed(0)),
             error: "Erreur lors de la création. CIN ou Matricule déjà utilisés, ou champs invalides."
@@ -227,6 +238,11 @@ export const employeeshow = async (req, res) => {
     try {
         const { id } = req.params;
         const employee = await getEmployee(parseInt(id), await getSessionCompanyId(req));
+        if (!isChantiersEnabled(employee.company)) {
+            employee.chantierId = null;
+            employee.chantierNom = null;
+            employee.chantier = null;
+        }
         const payroll = calculatePayroll(employee);
 
         res.render("employees/show", {
@@ -234,7 +250,8 @@ export const employeeshow = async (req, res) => {
             currentPage: "employees",
             user: req.session.user,
             employee,
-            payroll
+            payroll,
+            chantiersEnabled: isChantiersEnabled(employee.company)
         });
     } catch (error) {
         console.error("Error fetching employee:", error);
@@ -265,7 +282,12 @@ export const renderEditForm = async (req, res) => {
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
         const banques = await getBanques();
-        const chantiers = await listChantiers();
+        const { chantiersEnabled, chantiers } = await getCompanyChantiers(companyId);
+        if (!chantiersEnabled) {
+            employee.chantierId = null;
+            employee.chantierNom = null;
+            employee.chantier = null;
+        }
         const indemnites = await listIndemnites(companyId);
         const representationRate = await getRepresentationRate(companyId);
         employee.indemnitesNonImposables = employee.bonuses.filter(item => item.bonus && !item.bonus.taxable)
@@ -283,6 +305,7 @@ export const renderEditForm = async (req, res) => {
             functions,
             banques,
             chantiers,
+            chantiersEnabled,
             indemnites,
             representationAvailable: indemnites.some(item => item.isRepresentation),
             defaultRepresentationRate: Number((representationRate * 100).toFixed(0)),
@@ -344,6 +367,7 @@ export const handleEmployeeTaxablePrime = async (req, res) => {
             enabled,
             req.body.implementerEnConge === undefined ? undefined : (req.body.implementerEnConge === 'true' || req.body.implementerEnConge === '1'),
             req.body.implementerEnJourFerie === undefined ? undefined : (req.body.implementerEnJourFerie === 'true' || req.body.implementerEnJourFerie === '1'),
+            req.body.implementerEnCongeNaissance === undefined ? undefined : (req.body.implementerEnCongeNaissance === 'true' || req.body.implementerEnCongeNaissance === '1'),
         );
         return res.json({ ok: true, ...result });
     } catch (error) {
@@ -460,7 +484,7 @@ export const handleUpdateEmployee = async (req, res) => {
         const categories = await getEmployeeCategories(companyId);
         const functions = await getEmployeeFunctions(companyId);
         const banques = await getBanques();
-        const chantiers = await listChantiers();
+        const { chantiersEnabled, chantiers } = await getCompanyChantiers(companyId);
         const indemnites = await listIndemnites(companyId);
         const representationRate = await getRepresentationRate(companyId);
 
@@ -475,6 +499,7 @@ export const handleUpdateEmployee = async (req, res) => {
             functions,
             banques,
             chantiers,
+            chantiersEnabled,
             indemnites,
             representationAvailable: indemnites.some(item => item.isRepresentation),
             defaultRepresentationRate: Number((representationRate * 100).toFixed(0)),

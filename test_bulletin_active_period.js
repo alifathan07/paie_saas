@@ -1,4 +1,4 @@
-lleimport assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ejs from 'ejs';
 import { prisma } from './src/lib/db.js';
@@ -28,7 +28,7 @@ prisma.payslip.findMany = async args => {
     assert.deepEqual(args.where, { employee: { companyId: 7 } });
     return rows;
 };
-async function request({ month = '9', year = '2026', method = 'GET', path = '/', json = false, session = { companyId: 7 } } = {}) {
+async function request({ month = '9', year = '2026', method = 'GET', path = '/', json = false, session = { user: { activeCompanyId: 7 } } } = {}) {
     let passed = false;
     const req = { method, path, query: method === 'GET' ? { month, year } : {}, body: method === 'POST' ? { month, year } : {}, session, get: () => json ? 'application/json' : 'text/html' };
     const res = { locals: {}, status(code) { this.code = code; return this; }, send(body) { this.body = body; }, json(body) { this.body = body; }, redirect(url) { this.url = url; } };
@@ -42,6 +42,11 @@ try {
     result = await request({ month: '8', session: result.req.session });
     assert.equal(result.passed, true);
     assert.match(result.res.locals.bulletinPeriodMessage, /clôturer/);
+    assert.equal(result.req.session.bulletinPeriodMessage, undefined);
+    const staleSession = { user: { activeCompanyId: 7 }, selectedPeriod: { month: 9, year: 2026 } };
+    result = await request({ session: staleSession });
+    assert.equal(result.res.url, '/bulletins?month=8&year=2026');
+    assert.deepEqual(result.req.session.selectedPeriod, { month: 8, year: 2026 });
     assert.equal(result.req.session.bulletinPeriodMessage, undefined);
     assert.equal((await request({ month: '7' })).passed, true);
     assert.equal((await request({ path: '/12' })).res.url, '/bulletins/12?month=8&year=2026');
@@ -64,7 +69,7 @@ try {
     rows = [];
     const active = getActiveBulletinPeriod(rows);
     // Explicitly test the default path without period query parameters.
-    const req = { method: 'GET', path: '/', query: {}, session: { companyId: 7 } };
+    const req = { method: 'GET', path: '/', query: {}, session: { user: { activeCompanyId: 7 } } };
     const res = { locals: {}, redirect(url) { this.url = url; } };
     await enforceBulletinPeriod(req, res, () => assert.fail('Expected default period redirect'));
     assert.equal(res.url, `/bulletins?month=${active.month}&year=${active.year}`);

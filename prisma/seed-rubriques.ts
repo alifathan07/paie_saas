@@ -11,6 +11,7 @@ const baseRubriques = [
   { key: 'net_salary', name: 'Salaire net à payer', code: '1005' },
   { key: 'paid_leave_days', name: 'Nombre jours congé payé', code: '1009' },
   { key: 'public_holiday_days', name: 'Nombre jours fériés', code: '1010' },
+  { key: 'birth_leave_days', name: 'Nombre jours congé de naissance', code: '1011' },
 ]
 
 const retenuRubriques = [
@@ -28,6 +29,18 @@ const imposableRubriques = [
   { code: '1007', name: 'Heures supplémentaires 50%', calculationKey: 'overtime_50' },
   { code: '1008', name: 'Heures supplémentaires 100%', calculationKey: 'overtime_100' },
 ]
+
+const defaultManualImposableRubriques = [
+  { name: 'Rappelle', calculationKey: 'rappelle' },
+]
+
+function nextImposableCode(existingCodes) {
+  const used = new Set(existingCodes.map(code => Number(code)).filter(code => Number.isInteger(code) && code >= 1001 && code <= 1999))
+  for (let code = 1001; code <= 1999; code += 1) {
+    if (!used.has(code)) return String(code)
+  }
+  throw new Error('Aucun code disponible pour une rubrique imposable.')
+}
 
 async function main() {
   const companies = await prisma.company.findMany({ orderBy: { id: 'asc' } })
@@ -51,10 +64,38 @@ async function main() {
     }
 
     for (const row of imposableRubriques) {
+      const entryType = row.entryType || 'CALCULATED'
       await prisma.rubriqueImposable.upsert({
         where: { companyId_code: { companyId: company.id, code: row.code } },
-        update: { name: row.name, entryType: 'CALCULATED', calculationKey: row.calculationKey, active: true },
-        create: { companyId: company.id, ...row, entryType: 'CALCULATED' },
+        update: { name: row.name, entryType, calculationKey: row.calculationKey, active: true },
+        create: { companyId: company.id, ...row, entryType },
+      })
+    }
+
+    for (const row of defaultManualImposableRubriques) {
+      const existing = await prisma.rubriqueImposable.findFirst({
+        where: { companyId: company.id, name: row.name },
+        select: { id: true },
+      })
+      if (existing) {
+        await prisma.rubriqueImposable.update({
+          where: { id: existing.id },
+          data: { entryType: 'MANUAL_AMOUNT', calculationKey: row.calculationKey, active: true },
+        })
+        continue
+      }
+
+      const [baseRows, imposableRows] = await Promise.all([
+        prisma.rubriqueBase.findMany({ where: { companyId: company.id }, select: { code: true } }),
+        prisma.rubriqueImposable.findMany({ where: { companyId: company.id }, select: { code: true } }),
+      ])
+      await prisma.rubriqueImposable.create({
+        data: {
+          companyId: company.id,
+          code: nextImposableCode([...baseRows, ...imposableRows].map(item => item.code)),
+          ...row,
+          entryType: 'MANUAL_AMOUNT',
+        },
       })
     }
 

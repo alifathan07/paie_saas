@@ -98,7 +98,7 @@
     let settingsSubmitting = false;
 
     const submitSettings = () => {
-        if (settingsSubmitting) return;
+        if (settingsSubmitting || !settingsForm.reportValidity()) return;
         settingsSubmitting = true;
         settingsForm.requestSubmit();
     };
@@ -109,6 +109,7 @@
             document.querySelectorAll('.settings-mode-options input[type="checkbox"]').forEach((other) => {
                 if (other !== checkbox) other.checked = false;
             });
+            submitSettings();
         });
     });
 

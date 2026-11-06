@@ -7,7 +7,7 @@
     const locked = page.dataset.locked === 'true';
     const money = value => `${Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD`;
     const days = value => Number(value || 0).toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const paidLeaveConflictMessage = 'Veuillez vérifier les jours travaillés, congés payés et jours fériés : leur total ne peut pas dépasser le nombre de jours du mois.';
+    const paidLeaveConflictMessage = 'Veuillez vérifier les jours travaillés, congés payés, congés de naissance et jours fériés : leur total ne peut pas dépasser le nombre de jours du mois.';
     let paidLeaveConflictAlertOpen = false;
     const showPaidLeaveConflictAlert = () => {
         if (paidLeaveConflictAlertOpen) return;
@@ -37,6 +37,9 @@
         values.set('month', page.dataset.month);
         values.set('year', page.dataset.year);
         values.delete('normalHours');
+        document.querySelectorAll('.nimp-amount-input').forEach(input => {
+            values.append('nimpSourceRatios', input.dataset.calculationRatio || '');
+        });
         return values;
     };
 
@@ -46,6 +49,7 @@
     const primeAmountInput = document.querySelector('#prime-amount-input');
     const primeCodeInput = document.querySelector('#prime-code-input');
     const paidLeaveStoredInput = document.querySelector('#paid-leave-days-value');
+    const birthLeaveStoredInput = document.querySelector('#birth-leave-days-value');
     const publicHolidayStoredInput = document.querySelector('#jours-feries-value');
     const initialPaidLeaveRow = document.querySelector('.paid-leave-row');
     const syncPaidLeaveRow = () => {
@@ -53,66 +57,18 @@
         if (rowInput && paidLeaveStoredInput) paidLeaveStoredInput.value = rowInput.value || '0';
     };
     initialPaidLeaveRow?.querySelector('.paid-leave-row-input')?.addEventListener('input', syncPaidLeaveRow);
-    async function savePaidLeaveDays() {
-        if (!paidLeaveStoredInput || locked) return;
-        if (typeof hasPaidLeaveConflict === 'function' && hasPaidLeaveConflict()) {
-            showPaidLeaveConflictAlert();
-            return;
-        }
-        const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, paidLeaveDays: paidLeaveStoredInput.value || '0' });
-        const response = await fetch(`/bulletins/${page.dataset.employeeId}/paid-leave`, { method: 'POST', headers: { Accept: 'application/json' }, body });
-        const result = await response.json();
-        if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer le congé payé.');
-        renderPayroll(result.payroll);
-    }
-    initialPaidLeaveRow?.querySelector('.paid-leave-row-input')?.addEventListener('change', () => {
-        savePaidLeaveDays().catch(errorObject => {
-            if (errorObject.message === paidLeaveConflictMessage) showPaidLeaveConflictAlert();
-            else window.AppDialog.alert(errorObject.message);
-            calculate();
-        });
-    });
-    initialPaidLeaveRow?.querySelector('.paid-leave-row-input')?.addEventListener('keydown', event => {
-        if (event.key !== 'Enter') return;
-        event.preventDefault();
-        syncPaidLeaveRow();
-        savePaidLeaveDays().catch(errorObject => {
-            if (errorObject.message === paidLeaveConflictMessage) showPaidLeaveConflictAlert();
-            else window.AppDialog.alert(errorObject.message);
-            calculate();
-        });
-    });
     const publicHolidayRow = document.querySelector('.public-holiday-row');
     const syncPublicHolidayRow = () => {
         const rowInput = publicHolidayRow?.querySelector('.public-holiday-row-input');
         if (rowInput && publicHolidayStoredInput) publicHolidayStoredInput.value = rowInput.value || '0';
     };
-    async function savePublicHolidayDays() {
-        if (!publicHolidayStoredInput || locked) return;
-        if (typeof hasPaidLeaveConflict === 'function' && hasPaidLeaveConflict()) {
-            showPaidLeaveConflictAlert();
-            return;
-        }
-        const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, joursFeries: publicHolidayStoredInput.value || '0' });
-        const response = await fetch(`/bulletins/${page.dataset.employeeId}/public-holiday`, { method: 'POST', headers: { Accept: 'application/json' }, body });
-        const result = await response.json();
-        if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer les jours fériés.');
-        if (Number(result.payroll?.joursFeries || 0) <= 0) {
-            window.location.reload();
-            return;
-        }
-        renderPayroll(result.payroll);
-    }
     publicHolidayRow?.querySelector('.public-holiday-row-input')?.addEventListener('input', syncPublicHolidayRow);
-    publicHolidayRow?.querySelector('.public-holiday-row-input')?.addEventListener('change', () => {
-        savePublicHolidayDays().catch(errorObject => { window.AppDialog.alert(errorObject.message); calculate(); });
-    });
-    publicHolidayRow?.querySelector('.public-holiday-row-input')?.addEventListener('keydown', event => {
-        if (event.key !== 'Enter') return;
-        event.preventDefault();
-        syncPublicHolidayRow();
-        savePublicHolidayDays().catch(errorObject => { window.AppDialog.alert(errorObject.message); calculate(); });
-    });
+    const birthLeaveRow = document.querySelector('.birth-leave-row');
+    const syncBirthLeaveRow = () => {
+        const rowInput = birthLeaveRow?.querySelector('.birth-leave-row-input');
+        if (rowInput && birthLeaveStoredInput) birthLeaveStoredInput.value = rowInput.value || '0';
+    };
+    birthLeaveRow?.querySelector('.birth-leave-row-input')?.addEventListener('input', syncBirthLeaveRow);
     const primeRubriqueSelect = document.querySelector('#prime-rubrique-select');
     primeRubriqueSelect?.addEventListener('change', () => {
         const option = primeRubriqueSelect.selectedOptions[0];
@@ -423,7 +379,7 @@
         const row = input.closest('.monthly-indemnity-line, .fixed-indemnity-line');
         const employeeId = page.dataset.employeeId;
         if (!row || !employeeId) return;
-        const originalValue = input.value;
+        let originalValue = input.value;
         let committing = false;
         let capAlertOpen = false;
         const showCapAlert = () => {
@@ -440,8 +396,11 @@
             event.stopImmediatePropagation();
             input.dispatchEvent(new Event('change', { bubbles: false }));
         });
+
         input.addEventListener('change', async () => {
-            if (committing) return;
+            if (committing || !locked) return;
+            clearTimeout(timer);
+            ++calculationVersion;
             const oldLabel = input.dataset.originalLabel;
             const oldAmount = Number(input.dataset.originalAmount);
             let amount = Number(input.value);
@@ -477,7 +436,13 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.ok) throw new Error(result.error || "Impossible de modifier l'indemnité.");
-                window.location.reload();
+                originalValue = Number(result.bonus.amount).toFixed(2);
+                input.dataset.originalAmount = originalValue;
+                input.value = originalValue;
+                input.disabled = false;
+                if (await calculate({ preserveIndemnityInputs: true, allowLocked: true })) {
+                    document.querySelector('#calculation-state').textContent = 'Indemnité enregistrée';
+                }
             } catch (error) {
                 input.disabled = false;
                 input.value = originalValue;
@@ -577,8 +542,8 @@
         calculate();
     });
 
-    function renderPayroll(result) {
-        ['baseSalary', 'baseConge', 'paidLeaveAmount', 'baseFerie', 'joursFeriesAmount', 'sbg', 'sbi', 'sni', 'cnss', 'amo', 'irNet', 'fraisPro', 'netAPayer', 'primeAnciennete', 'cnssPatronale', 'amoPatronale'].forEach(key => setResult(key, result[key]));
+    function renderPayroll(result, { preserveIndemnityInputs = false } = {}) {
+        ['baseSalary', 'baseConge', 'paidLeaveAmount', 'baseCongeNaissance', 'congeNaissanceAmount', 'baseFerie', 'joursFeriesAmount', 'sbg', 'sbi', 'sni', 'cnss', 'amo', 'irNet', 'fraisPro', 'netAPayer', 'primeAnciennete', 'primeRendementAmount', 'cnssPatronale', 'amoPatronale'].forEach(key => setResult(key, result[key]));
         document.querySelectorAll('[data-overtime-amount]').forEach(node => {
             const hours = Number(result[node.dataset.overtimeAmount] || 0);
             const base = Number(result.baseSalary || 0);
@@ -589,6 +554,8 @@
         document.querySelectorAll('[data-result="paidLeaveDays"]').forEach(node => { node.textContent = days(result.paidLeaveDays); });
         document.querySelectorAll('.public-holiday-row-input').forEach(node => { node.value = result.joursFeries ?? 0; });
         if (publicHolidayStoredInput) publicHolidayStoredInput.value = result.joursFeries ?? 0;
+        document.querySelectorAll('.birth-leave-row-input').forEach(node => { node.value = result.congeNaissanceDays ?? 0; });
+        if (birthLeaveStoredInput) birthLeaveStoredInput.value = result.congeNaissanceDays ?? 0;
         document.querySelectorAll('[data-result="irTaux"]').forEach(node => {
             node.textContent = result.irTaux === undefined || result.irTaux === null
                 ? '—'
@@ -604,8 +571,6 @@
         document.querySelectorAll('.monthly-indemnity-line').forEach(row => {
             const label = row.querySelector('[name="nimpLabels"]')?.value?.trim().toLowerCase();
             const line = nimpLines.find(item => String(item.label || '').trim().toLowerCase() === label);
-            const payable = row.querySelector('[data-nimp-payable]');
-            if (payable) payable.textContent = money(line?.amount || 0);
             const amountInput = row.querySelector('[name="nimpAmounts"]');
             if (amountInput && line) {
                 const ficheAmount = Number(amountInput.dataset.ficheAmount);
@@ -618,13 +583,8 @@
                 amountInput.dataset.maxAmount = maximum > 0 ? maximum.toFixed(2) : '';
                 if (maximum > 0) amountInput.max = maximum.toFixed(2);
                 else amountInput.removeAttribute('max');
-                // Keep the payable amount entered for this bulletin. Recalculation
-                // may change the ceiling, but must not replace a bulletin-only
-                // override with the employee fiche amount.
-                const currentValue = Number(amountInput.value);
-                if (maximum > 0 && Number.isFinite(currentValue) && currentValue > maximum) {
-                    amountInput.value = maximum.toFixed(2);
-                }
+                if (!preserveIndemnityInputs) amountInput.value = Number(line.amount || 0).toFixed(2);
+                amountInput.dataset.calculationRatio = ratio.toFixed(8);
             }
         });
         document.querySelectorAll('[data-result="workedDays"]').forEach(node => { node.textContent = timeValue(result.workedDays); });
@@ -640,8 +600,8 @@
 
     let timer;
     let calculationVersion = 0;
-    async function calculate() {
-        if (locked) return;
+    async function calculate({ preserveIndemnityInputs = false, allowLocked = false } = {}) {
+        if (locked && !allowLocked) return false;
         const version = ++calculationVersion;
         const state = document.querySelector('#calculation-state');
         const error = document.querySelector('#calculation-error');
@@ -650,139 +610,111 @@
         try {
             const response = await fetch(`/bulletins/${page.dataset.employeeId}/calculate?${params()}`, { headers: { Accept: 'application/json' } });
             const result = await response.json();
-            if (version !== calculationVersion) return;
-            if (!response.ok || !result.ok) throw new Error();
-            renderPayroll(result);
-            state.textContent = 'Calcul actualisé';
+            if (version !== calculationVersion) return false;
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible de calculer le bulletin.');
+            renderPayroll(result, { preserveIndemnityInputs });
+            state.textContent = 'Aperçu · non enregistré';
+            return true;
         } catch (errorObject) {
             if (version !== calculationVersion) return;
             state.textContent = 'Calcul à vérifier';
-            error.textContent = 'Impossible de calculer le bulletin pour le moment.';
+            error.textContent = errorObject.message || 'Impossible de calculer le bulletin pour le moment.';
             error.hidden = false;
+            return false;
         }
     }
-
-    const avanceInput = document.querySelector('.avance-deduction-input');
-    let savedAvanceDeduction = avanceInput?.dataset.savedValue || '0.00';
-    let savingAvanceDeduction = false;
-    let avanceSaveTimer;
-    async function saveAvanceDeduction() {
-        if (!avanceInput || locked || page.dataset.saved !== 'true' || savingAvanceDeduction) return;
-        const currentValue = Number(avanceInput.value || 0).toFixed(2);
-        if (currentValue === Number(savedAvanceDeduction || 0).toFixed(2)) return;
-        if (!avanceInput.checkValidity()) return;
-        clearTimeout(avanceSaveTimer);
-        savingAvanceDeduction = true;
-        avanceInput.readOnly = true;
-        try {
-            const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, amount: currentValue });
-            const response = await fetch(`/bulletins/${page.dataset.employeeId}/avances`, {
-                method: 'POST', headers: { Accept: 'application/json' }, body,
-            });
-            const result = await response.json();
-            if (!response.ok || !result.ok) throw new Error(result.error || "Impossible d'enregistrer l'avance.");
-            savedAvanceDeduction = currentValue;
-            await calculate();
-        } catch (errorObject) {
-            window.AppDialog.alert(errorObject.message);
-            avanceInput.value = Number(savedAvanceDeduction || 0).toFixed(2);
-            calculate();
-        } finally {
-            savingAvanceDeduction = false;
-            avanceInput.readOnly = false;
-        }
-    }
-    avanceInput?.addEventListener('input', () => {
-        clearTimeout(avanceSaveTimer);
-        avanceSaveTimer = setTimeout(saveAvanceDeduction, 450);
-    });
-    avanceInput?.addEventListener('blur', () => {
-        clearTimeout(avanceSaveTimer);
-        saveAvanceDeduction();
-    });
-    avanceInput?.addEventListener('keydown', event => {
-        if (event.key !== 'Enter') return;
-        event.preventDefault();
-        saveAvanceDeduction();
-    });
 
     const workingTimeInput = form.elements.workedDays || form.elements.workedHours;
     const hasPaidLeaveConflict = () => {
         if (!workingTimeInput || workingTimeInput.name !== 'workedDays') return false;
         const workedDays = Number(workingTimeInput.value);
         const paidLeaveDays = Number(paidLeaveStoredInput?.value || 0);
+        const birthLeaveDays = Number(birthLeaveStoredInput?.value || 0);
         const publicHolidayDays = Number(publicHolidayStoredInput?.value || 0);
         const monthlyDays = Number(workingTimeInput.max || 26);
-        return Number.isFinite(workedDays) && Number.isFinite(paidLeaveDays) && Number.isFinite(publicHolidayDays)
-            && workedDays + paidLeaveDays + publicHolidayDays > monthlyDays;
+        return Number.isFinite(workedDays) && Number.isFinite(paidLeaveDays) && Number.isFinite(birthLeaveDays) && Number.isFinite(publicHolidayDays)
+            && workedDays + paidLeaveDays + birthLeaveDays + publicHolidayDays > monthlyDays;
     };
-    form.addEventListener('submit', event => {
-        if (!hasPaidLeaveConflict()) return;
-        event.preventDefault();
-        showPaidLeaveConflictAlert();
-    });
-    let savedWorkingTime = workingTimeInput?.value;
-    let savingWorkingTime = false;
-    let workingTimeTimer;
-    async function calculateWorkingTime(save = false) {
-        if (!workingTimeInput || workingTimeInput.disabled || savingWorkingTime || !workingTimeInput.checkValidity()) return;
-        if (save && hasPaidLeaveConflict()) {
+    form.addEventListener('submit', async event => {
+        if (hasPaidLeaveConflict()) {
+            event.preventDefault();
             showPaidLeaveConflictAlert();
             return;
         }
+        if (locked || !hasPendingChanges()) return;
+        event.preventDefault();
+        const submitter = event.submitter;
+        if (await saveBeforeSwitch()) {
+            if (submitter) form.requestSubmit(submitter);
+        }
+    });
+    let workingTimeTimer;
+    async function calculateWorkingTime() {
+        if (!workingTimeInput || workingTimeInput.disabled || !workingTimeInput.checkValidity()) return;
         const version = ++calculationVersion;
         const state = document.querySelector('#calculation-state');
         const error = document.querySelector('#calculation-error');
-        const body = new URLSearchParams({ month: page.dataset.month, year: page.dataset.year, [workingTimeInput.name]: workingTimeInput.value });
-        if (save) { savingWorkingTime = true; workingTimeInput.readOnly = true; }
-        state.textContent = save ? 'Enregistrement…' : 'Calcul en cours…';
+        const body = params();
+        state.textContent = 'Calcul en cours…';
         error.hidden = true;
         try {
-            const url = `/bulletins/${page.dataset.employeeId}/worked-days`;
-            const response = await fetch(save ? url : `${url}?${body}`, {
-                method: save ? 'POST' : 'GET', headers: { Accept: 'application/json' },
-                ...(save ? { body } : {}),
+            const response = await fetch(`/bulletins/${page.dataset.employeeId}/calculate?${body}`, {
+                headers: { Accept: 'application/json' },
             });
             const result = await response.json();
-            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible de mettre à jour les jours.');
-            if (save) savedWorkingTime = workingTimeInput.value;
-            if (version !== calculationVersion) return;
-            renderPayroll(result.payroll);
-            state.textContent = save ? 'Temps de travail enregistré' : 'Aperçu · temps non enregistré';
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible de calculer le bulletin.');
+            if (version !== calculationVersion) return false;
+            renderPayroll(result.payroll || result);
+            state.textContent = 'Aperçu · non enregistré';
+            return true;
         } catch (failure) {
-            if (version !== calculationVersion) return;
-            state.textContent = 'Modification non enregistrée';
+            if (version !== calculationVersion) return false;
+            state.textContent = 'Calcul à vérifier';
             error.textContent = failure.message;
             error.hidden = false;
-        } finally {
-            if (save) { savingWorkingTime = false; workingTimeInput.readOnly = false; }
+            return false;
         }
     }
-    function saveWorkingTime() {
+    function previewWorkingTime() {
         clearTimeout(workingTimeTimer);
         clearTimeout(timer);
-        if (page.dataset.saved === 'true' && workingTimeInput.value !== savedWorkingTime) calculateWorkingTime(true);
+        calculateWorkingTime();
     }
-    workingTimeInput?.addEventListener('blur', saveWorkingTime);
+    workingTimeInput?.addEventListener('blur', previewWorkingTime);
     workingTimeInput?.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
             event.preventDefault();
-            if (workingTimeInput.reportValidity()) saveWorkingTime();
-        }
-    });
-    window.addEventListener('beforeunload', event => {
-        if (workingTimeInput && !workingTimeInput.disabled && workingTimeInput.value !== savedWorkingTime) {
-            event.preventDefault();
-            event.returnValue = '';
+            event.stopPropagation();
+            if (workingTimeInput.reportValidity()) previewWorkingTime();
         }
     });
 
     form.addEventListener('input', event => {
-        // Non-taxable indemnities have their own save-on-change flow. A generic
-        // preview request here would immediately overwrite what the user is
-        // typing with the old persisted payable amount.
-        if (event.target.matches('[name="nimpLabels"], [name="nimpAmounts"]')) return;
-        if (event.target === workingTimeInput && page.dataset.saved === 'true') {
+        const saveButton = document.querySelector('#save-payroll-changes');
+        if (saveButton) saveButton.textContent = 'Enregistrer les modifications';
+        if (event.target instanceof HTMLInputElement
+            && !event.target.matches('[name="nimpLabels"], [name="nimpAmounts"]')
+            && !event.target.checkValidity()) {
+            clearTimeout(timer);
+            ++calculationVersion;
+            document.querySelector('#calculation-state').textContent = 'Vérifiez la valeur saisie.';
+            return;
+        }
+        if (event.target.matches('[name="nimpLabels"], [name="nimpAmounts"]')) {
+            clearTimeout(timer);
+            ++calculationVersion;
+            if (event.target.name === 'nimpAmounts' && !event.target.checkValidity()) {
+                document.querySelector('#calculation-state').textContent = 'Saisissez un montant valide.';
+                return;
+            }
+            if (event.target.name === 'nimpLabels' && !event.target.value.trim()) {
+                document.querySelector('#calculation-state').textContent = 'Saisissez un libellé valide.';
+                return;
+            }
+            timer = setTimeout(() => calculate({ preserveIndemnityInputs: true, allowLocked: true }), 350);
+            return;
+        }
+        if (event.target === workingTimeInput) {
             clearTimeout(workingTimeTimer);
             clearTimeout(timer);
             ++calculationVersion;
@@ -792,12 +724,15 @@
         }
         if (event.target.classList.contains('live-input') || event.target.name.includes('primes')) {
             clearTimeout(timer);
+            ++calculationVersion;
             timer = setTimeout(calculate, 350);
         }
     });
     form.addEventListener('change', event => {
         if (event.target.matches('[name="nimpLabels"], [name="nimpAmounts"]')) return;
-        if (event.target === workingTimeInput && page.dataset.saved === 'true') return;
+        if (event.target === workingTimeInput) return;
+        if (event.target instanceof HTMLInputElement && !event.target.checkValidity()) return;
+        clearTimeout(timer);
         calculate();
     });
     const employeePanel = document.querySelector('#bulletin-employee-panel');
@@ -858,28 +793,47 @@
     const saveBeforeSwitch = async () => {
         if (!hasPendingChanges()) return true;
         if (switchingEmployee) return false;
+        if (!form.reportValidity()) return false;
+        if (hasPaidLeaveConflict()) {
+            showPaidLeaveConflictAlert();
+            return false;
+        }
         switchingEmployee = true;
         const state = document.querySelector('#calculation-state');
         const error = document.querySelector('#calculation-error');
-        state.textContent = 'Enregistrement…';
-        error.hidden = true;
         try {
+            clearTimeout(timer);
+            clearTimeout(workingTimeTimer);
+            const previewed = workingTimeInput ? await calculateWorkingTime() : await calculate();
+            if (!previewed) return false;
+            const previewVersion = calculationVersion;
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            if (calculationVersion !== previewVersion) return false;
+            state.textContent = 'Enregistrement…';
+            error.hidden = true;
+            const submittedSignature = formSignature();
+            const body = new URLSearchParams(new FormData(form));
             const response = await fetch(form.action, {
                 method: 'POST',
                 headers: {
                     Accept: 'application/json',
                     'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
                 },
-                body: new URLSearchParams(new FormData(form)),
+                body,
             });
             const result = await response.json();
             if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer les modifications.');
-            savedFormSignature = formSignature();
+            savedFormSignature = submittedSignature;
             page.dataset.saved = 'true';
-            state.textContent = 'Enregistré';
-            sessionStorage.setItem(saveConfirmationStorageKey, 'true');
-            showSavedConfirmation();
-            return true;
+            const changesPending = hasPendingChanges();
+            const saveButton = document.querySelector('#save-payroll-changes');
+            if (saveButton) saveButton.textContent = changesPending ? 'Enregistrer les modifications' : 'Modifications enregistrées';
+            state.textContent = changesPending ? 'Aperçu · non enregistré' : 'Enregistré';
+            if (!changesPending) {
+                sessionStorage.setItem(saveConfirmationStorageKey, 'true');
+                showSavedConfirmation();
+            }
+            return !changesPending;
         } catch (failure) {
             state.textContent = 'Modification non enregistrée';
             error.textContent = failure.message;
@@ -889,43 +843,63 @@
             switchingEmployee = false;
         }
     };
-    let catalogueSaveTimer;
-    document.querySelectorAll('.catalogue-rubrique-amount').forEach(input => input.addEventListener('input', () => {
-        if (locked) return;
-        clearTimeout(catalogueSaveTimer);
-        catalogueSaveTimer = setTimeout(() => saveBeforeSwitch(), 800);
-    }));
+    document.querySelector('#save-payroll-changes')?.addEventListener('click', async event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+            await saveBeforeSwitch();
+        } finally {
+            button.disabled = false;
+        }
+    });
+    document.querySelector('#save-prime-rendement')?.addEventListener('click', async event => {
+        const button = event.currentTarget;
+        const input = form.querySelector('[name="primeRendementInput"]');
+        const status = document.querySelector('#prime-rendement-status');
+        if (!input || !input.reportValidity()) return;
+        button.disabled = true;
+        status.textContent = 'Enregistrement…';
+        try {
+            const body = new URLSearchParams({
+                month: page.dataset.month,
+                year: page.dataset.year,
+                primeRendementInput: input.value,
+            });
+            const response = await fetch(`/bulletins/${page.dataset.employeeId}/prime-rendement`, {
+                method: 'POST',
+                headers: { Accept: 'application/json' },
+                body,
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer la prime rendement.');
+            input.value = Number(result.payroll?.primeRendementInput ?? input.value).toFixed(2);
+            const savedEntries = JSON.parse(savedFormSignature);
+            const fieldEntry = savedEntries.find(entry => entry[0] === 'primeRendementInput');
+            if (fieldEntry) fieldEntry[1] = input.value;
+            else savedEntries.push(['primeRendementInput', input.value]);
+            savedFormSignature = JSON.stringify(savedEntries);
+            await calculate();
+            const changesPending = hasPendingChanges();
+            status.textContent = changesPending ? 'Prime rendement enregistrée · autres modifications en attente' : 'Enregistrée';
+            const saveButton = document.querySelector('#save-payroll-changes');
+            if (saveButton && !changesPending) saveButton.textContent = 'Modifications enregistrées';
+        } catch (error) {
+            status.textContent = error.message || 'Erreur d’enregistrement.';
+        } finally {
+            button.disabled = false;
+        }
+    });
+    window.addEventListener('beforeunload', event => {
+        if (hasPendingChanges()) {
+            event.preventDefault();
+            event.returnValue = '';
+        }
+    });
     form.addEventListener('keydown', async event => {
         if (event.key !== 'Enter' || event.target.matches('textarea, button, select')) return;
         event.preventDefault();
         if (locked || !hasPendingChanges() || switchingEmployee) return;
-        switchingEmployee = true;
-        const state = document.querySelector('#calculation-state');
-        const error = document.querySelector('#calculation-error');
-        state.textContent = 'Enregistrement…';
-        error.hidden = true;
-        try {
-            const response = await fetch(form.action, {
-                method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-                },
-                body: new URLSearchParams(new FormData(form)),
-            });
-            const result = await response.json();
-            if (!response.ok || !result.ok) throw new Error(result.error || 'Impossible d’enregistrer les modifications.');
-            savedFormSignature = formSignature();
-            page.dataset.saved = 'true';
-            sessionStorage.setItem(saveConfirmationStorageKey, 'true');
-            window.location.reload();
-        } catch (failure) {
-            state.textContent = 'Modification non enregistrée';
-            error.textContent = failure.message;
-            error.hidden = false;
-        } finally {
-            switchingEmployee = false;
-        }
+        await saveBeforeSwitch();
     });
     employeeLinks.forEach(link => link.addEventListener('click', async event => {
         if (locked || !hasPendingChanges()) return;

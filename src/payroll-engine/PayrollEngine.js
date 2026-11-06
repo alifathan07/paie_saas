@@ -6,6 +6,7 @@ import { calculateCIMR } from "./calculators/cimr.calculator.js";
 import { calculateFraisProfessionnels } from "./calculators/fraisProfessionnels.calculator.js";
 import { calculateIR } from "./calculators/ir.calculator.js";
 import { calculateOvertime } from "./calculators/overtime.calculator.js";
+import { calculateBirthLeaveCompensation } from "./calculators/congeNaissance.calculator.js";
 import { normalizeWorkingTime, workingTimeConfigFromCompany } from "./utils/workingTime.js";
 
 export const PAYROLL_WORKED_DAYS = 26;
@@ -98,26 +99,25 @@ export const calculatePayroll = (employee, overrides = {}) => {
   // 4. Monthly variable taxable primes
   let variablePrimes = [];
   if (Array.isArray(overrides.variablePrimes)) {
-    variablePrimes = overrides.variablePrimes.map(p => ({
-      label: String(p.label || p.name || 'Prime'),
-      code: String(p.code || ''),
-      rubriqueImposableId: p.rubriqueImposableId ? Number(p.rubriqueImposableId) : null,
-      amount: Math.max(0, Number(p.amount) || 0)
-    })).filter(p => p.amount > 0 || p.rubriqueImposableId);
+    variablePrimes = overrides.variablePrimes.flatMap(p => {
+      const sourceAmount = p.amount;
+      const parsedAmount = Number(sourceAmount);
+      const amount = Math.max(0, Number(sourceAmount) || 0);
+      const label = String(p.label || p.name || 'Prime');
+      const rubriqueImposableId = p.rubriqueImposableId ? Number(p.rubriqueImposableId) : null;
+      const explicitZero = String(p.label || p.name || '').trim()
+        && sourceAmount !== undefined
+        && sourceAmount !== null
+        && sourceAmount !== ''
+        && Number.isFinite(parsedAmount)
+        && parsedAmount === 0;
+      if (!(amount > 0 || rubriqueImposableId || explicitZero)) return [];
+      return [{ label, code: String(p.code || ''), rubriqueImposableId, amount }];
+    });
   }
   const variableLabels = new Set(variablePrimes.map(p => p.label.toLowerCase()));
 
-  // 5. Overtime (Heures supplémentaires: 25%, 50%, 100%)
-  const overtime = calculateOvertime(
-    effectiveBase,
-    overrides.heuresSup25,
-    overrides.heuresSup50,
-    overrides.heuresSup100,
-    workingTime.standardMonthlyHours
-  );
-  const heuresSupAmount = overtime.totalAmount;
-
-  // 6. Employee-specific representation indemnity.
+  // 5. Employee-specific representation indemnity.
   const nimpLines = [];
   const nimpLabels = new Set();
   const representationRate = Math.max(0, Number(employee.indemniteRepresentationRate) || 0);
@@ -182,6 +182,16 @@ export const calculatePayroll = (employee, overrides = {}) => {
     ? Number((contractualBaseSalary + fullMonthSeniority + leavePrimeAmount).toFixed(2))
     : 0;
   const paidLeaveAmount = Number((baseConge * paidLeaveDays / PAYROLL_WORKED_DAYS).toFixed(2));
+
+  const congeNaissanceDays = Math.max(0, Math.min(PAYROLL_WORKED_DAYS, Number(overrides.congeNaissanceDays) || 0));
+  const birthLeaveCompensation = calculateBirthLeaveCompensation({
+    leaveDays: congeNaissanceDays,
+    historicalPayslips: overrides.birthLeaveHistory || [],
+    year: targetDate.getFullYear(),
+    month: targetDate.getMonth() + 1,
+  });
+  const { baseCongeNaissance, congeNaissanceAmount } = birthLeaveCompensation;
+
   const joursFeries = Math.max(0, Math.min(PAYROLL_WORKED_DAYS, Number(overrides.joursFeries) || 0));
   const holidayPrimeAmount = (employee.bonuses || []).reduce((total, item) => {
     const isTaxable = item.bonus ? Boolean(item.bonus.taxable) : Boolean(item.taxable);
@@ -213,11 +223,25 @@ export const calculatePayroll = (employee, overrides = {}) => {
     bonusesNIMP = prorateAmount(overrides.bonusesNIMP, indemnityRatio);
   }
   bonusesNIMP = Number(bonusesNIMP.toFixed(2));
-  const bonusesIMP = Number((variablePrimes.reduce((sum, p) => sum + p.amount, 0) + paidLeaveAmount + joursFeriesAmount).toFixed(2));
+  const bonusesIMP = Number((variablePrimes.reduce((sum, p) => sum + p.amount, 0) + paidLeaveAmount + congeNaissanceAmount + joursFeriesAmount).toFixed(2));
+
+  // Use taxable SBI before overtime so the hourly-rate base does not include
+  // the overtime amount being calculated.
+  const sbiBeforeOvertime = Number((effectiveBase + primeAnciennete + bonusesIMP).toFixed(2));
+  const overtime = calculateOvertime(
+    sbiBeforeOvertime,
+    overrides.heuresSup25,
+    overrides.heuresSup50,
+    overrides.heuresSup100,
+  );
+  const heuresSupAmount = overtime.totalAmount;
+  const primeRendementInput = Math.max(0, Number(overrides.primeRendementInput) || 0);
+  const primeRendementAmount = Math.max(0, Number(overrides.primeRendementAmount) || 0);
 
   // 8. Salaire Brut Global (SBG)
-  // SBG = Base effective + Ancienneté + Primes imposables + Heures sup + Indemnités non imposables
-  const sbg = Number((effectiveBase + primeAnciennete + bonusesIMP + heuresSupAmount + bonusesNIMP).toFixed(2));
+  // SBG = Base effective + Ancienneté + Primes imposables + Heures sup +
+  // Prime rendement + Indemnités non imposables
+  const sbg = Number((effectiveBase + primeAnciennete + bonusesIMP + heuresSupAmount + primeRendementAmount + bonusesNIMP).toFixed(2));
 
   // 9. Salaire Brut Imposable (SBI)
   // SBI = SBG - Indemnités non imposables
@@ -303,6 +327,9 @@ export const calculatePayroll = (employee, overrides = {}) => {
     paidLeaveDays,
     baseConge,
     paidLeaveAmount,
+    congeNaissanceDays,
+    baseCongeNaissance,
+    congeNaissanceAmount,
     joursFeries,
     baseFerie,
     joursFeriesAmount,
@@ -313,6 +340,8 @@ export const calculatePayroll = (employee, overrides = {}) => {
     heuresSup50: overtime.heuresSup50,
     heuresSup100: overtime.heuresSup100,
     heuresSupAmount,
+    primeRendementInput,
+    primeRendementAmount,
 
     sbg,
     brutGlobal: sbg,
