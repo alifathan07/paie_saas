@@ -277,7 +277,7 @@ export const createEmployee = async (data) => {
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
         cimrRate, cimrReduitBaseImposable,
-        indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie
+        indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie, blocageSaisiePaieMotif
     } = data;
 
     const targetCompanyId = Number(companyId);
@@ -329,6 +329,7 @@ export const createEmployee = async (data) => {
                 : null,
             indemniteRepresentationRate: cleanRepresentationRate(indemniteRepresentationRate),
             blocageSaisiePaie: Boolean(blocageSaisiePaie),
+            blocageSaisiePaieMotif: blocageSaisiePaie ? (String(blocageSaisiePaieMotif || '').trim() || null) : null,
             companyId: targetCompanyId,
             bonuses: employeeBonusData.length > 0 ? { create: employeeBonusData } : undefined
         },
@@ -350,7 +351,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
         banque, agence, rib, actif, baseSalary, companyId, bonusList,
         cimrRate, cimrReduitBaseImposable,
-        indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie,
+        indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie, blocageSaisiePaieMotif,
         replaceNonTaxableBonuses
     } = data;
 
@@ -440,6 +441,9 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
                 : undefined,
             blocageSaisiePaie: blocageSaisiePaie !== undefined
                 ? Boolean(blocageSaisiePaie)
+                : undefined,
+            blocageSaisiePaieMotif: blocageSaisiePaie !== undefined
+                ? (blocageSaisiePaie ? (String(blocageSaisiePaieMotif || '').trim() || null) : null)
                 : undefined,
             bulletinMasque: isUnblockingPayroll ? false : undefined,
             bulletinMasqueDepuis: isUnblockingPayroll ? null : undefined,

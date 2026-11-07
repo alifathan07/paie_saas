@@ -97,6 +97,14 @@ try {
         cnss_immatriculation: "000654321", days_worked: 1, gross_salary: 1, amo_salary_base: 1,
     }]), { message: "BDS_PAYROLL_EMPLOYEE_NOT_IN_TEMPLATE" });
 
+    const blockedEmployee = generateCnssBdsFile(makeTemplate(["000123456", "000234567"]), [{
+        cnss_immatriculation: "000123456", days_worked: 0, gross_salary: 0, amo_salary_base: 0, bds_situation: "CS",
+    }, {
+        cnss_immatriculation: "000234567", days_worked: 1, gross_salary: 1, amo_salary_base: 1,
+    }]);
+    assert.equal(getLines(blockedEmployee).filter(line => line.startsWith("A02")).length, 2);
+    assert.equal(getLines(blockedEmployee)[2].slice(103, 112), "CS       ");
+
     let queriedPayslips;
     mock(prisma.company, "findUnique", async ({ where }) => {
         assert.deepEqual(where, { id: 3 });
@@ -111,6 +119,7 @@ try {
             employee: { matricule: "E-01", numeroCNSS: "000123456" },
         }];
     });
+    mock(prisma.employee, "findMany", async () => []);
     const monthlyFile = await generateMonthlyCnssBdsFile(3, 10, 2026, makeTemplate(["000123456"]));
     assert.deepEqual(queriedPayslips.where.employee, { companyId: 3 }, "Payroll lookup must stay company-scoped");
     assert.deepEqual(queriedPayslips.where.status, { in: ["GENERATED", "VALIDATED", "CLOSED"] });

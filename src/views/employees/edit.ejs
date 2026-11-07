@@ -73,7 +73,7 @@
     <div class="form-section">
         <h2 class="section-title">1. État Civil & Identité</h2>
         <div class="form-grid-3">
-            <div class="form-group">
+            <div class="form-group" id="blocageSaisiePaieMotifGroup" style="display:<%= employee.blocageSaisiePaie ? 'block' : 'none' %>;">
                 <label for="nomComplet">Nom complet <span style="color:red;">*</span></label>
                 <input type="text" id="nomComplet" name="nomComplet" class="form-input" required value="<%= employee.nomComplet %>">
             </div>
@@ -239,6 +239,17 @@
             <div class="form-group" style="display:flex; align-items:center; gap:10px; padding-top: 22px;">
                 <input type="checkbox" id="blocageSaisiePaie" name="blocageSaisiePaie" value="1" <%= employee.blocageSaisiePaie ? 'checked' : '' %>>
                 <label for="blocageSaisiePaie" style="margin:0;">Bloquer la saisie de paie</label>
+            </div>
+            <div class="form-group">
+                <label for="blocageSaisiePaieMotif">Motif CNSS si bloqué</label>
+                <select id="blocageSaisiePaieMotif" name="blocageSaisiePaieMotif" class="form-input">
+                    <option value="">Sélectionner un motif</option>
+                    <% const bdsMotifs = { CS: 'Congé sans solde', MS: 'Maintien sans salaire', IL: 'Maladie', AT: 'Accident de travail', IT: 'Maternité', MP: 'Maladie professionnelle' }; %>
+                    <% Object.entries(bdsMotifs).forEach(([code, label]) => { %>
+                        <option value="<%= code %>" <%= employee.blocageSaisiePaieMotif === code ? 'selected' : '' %>><%= code %> — <%= label %></option>
+                    <% }); %>
+                </select>
+                <small>Le blocage est interne ; le motif détermine la situation BDS et le salarié reste dans le fichier.</small>
             </div>
         </div>
         <div class="form-grid-3">
@@ -580,9 +591,15 @@ document.querySelector('[data-function-save]').addEventListener('click', async (
     const response = await fetch('/employees/functions/inline', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ name }) });
     const result = await response.json();
     if (!response.ok) return alert(result.error || 'Impossible d’ajouter la fonction.');
-    functionSelect.add(new Option(result.name, result.id, true, true));
+functionSelect.add(new Option(result.name, result.id, true, true));
     functionModal.hidden = true;
     functionInput.value = '';
+});
+
+const payrollBlockCheckbox = document.getElementById('blocageSaisiePaie');
+const payrollBlockReasonGroup = document.getElementById('blocageSaisiePaieMotifGroup');
+payrollBlockCheckbox?.addEventListener('change', () => {
+    if (payrollBlockReasonGroup) payrollBlockReasonGroup.style.display = payrollBlockCheckbox.checked ? 'block' : 'none';
 });
 
 </script>

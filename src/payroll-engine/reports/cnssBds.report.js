@@ -85,16 +85,21 @@ function normalizeDays(value) {
 }
 
 function normalizeSituation(record) {
+    if (record.bds_situation !== undefined) {
+        const situation = String(record.bds_situation || "").trim().toUpperCase();
+        if (!/^(CS|MS|IL|AT|IT|MP|SO|DE)$/.test(situation)) throw new Error("INVALID_BDS_SITUATION_CODE");
+        return { field: situation.padEnd(9, " ") };
+    }
     const code = String(record.situation_code ?? "N").toUpperCase();
     if (!/^[NESM]$/.test(code)) throw new Error("INVALID_BDS_SITUATION_CODE");
-    if (code === "N") return { code, date: "        " };
+    if (code === "N") return { field: `${code}${" ".repeat(8)}` };
     const date = String(record.situation_date || "");
     if (!/^\d{8}$/.test(date)) throw new Error("INVALID_BDS_SITUATION_DATE");
     const parsedDate = new Date(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T00:00:00Z`);
     if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10).replaceAll("-", "") !== date) {
         throw new Error("INVALID_BDS_SITUATION_DATE");
     }
-    return { code, date };
+    return { field: `${code}${date}` };
 }
 
 function parseTemplateAmount(field) {
@@ -102,7 +107,7 @@ function parseTemplateAmount(field) {
     return BigInt(field);
 }
 
-export function generateCnssBdsFile(templateFile, payrollData) {
+export function generateCnssBdsFile(templateFile, payrollData, options = {}) {
     const { lines, hasTrailingLineBreak } = splitTemplateLines(templateFile);
     const a00Lines = lines.filter(line => line.slice(0, 3) === "A00");
     const a01Lines = lines.filter(line => line.slice(0, 3) === "A01");
@@ -128,7 +133,7 @@ export function generateCnssBdsFile(templateFile, payrollData) {
 
     const templateCnssNumbers = new Set();
     const matchedCnssNumbers = new Set();
-    const updatedLines = lines.map(line => {
+    const updatedLines = lines.flatMap(line => {
         if (line.slice(0, 3) !== "A02") return line;
         const cnss = line.slice(A02_CNSS_START, A02_CNSS_END);
         if (!/^\d{9}$/.test(cnss)) throw new Error("INVALID_BDS_TEMPLATE_CNSS_NUMBER");
@@ -142,8 +147,7 @@ export function generateCnssBdsFile(templateFile, payrollData) {
             + formatDigits(record.days, 2)
             + formatDigits(record.grossCents, 12, "BDS_AMOUNT_OVERFLOW")
             + formatDigits(record.amoCents, 12, "BDS_AMOUNT_OVERFLOW")
-            + record.code
-            + record.date
+            + record.field
             + line.slice(A02_FIELD_END);
     });
 
@@ -160,8 +164,9 @@ export function generateCnssBdsFile(templateFile, payrollData) {
     }
 
     const footerIndex = updatedLines.findIndex(line => line.slice(0, 3) === "A03");
+    const updatedA02Count = updatedLines.filter(line => line.slice(0, 3) === "A02").length;
     const footer = originalFooter.slice(0, 18)
-        + formatDigits(a02Lines.length, 6, "BDS_EMPLOYEE_COUNT_OVERFLOW")
+        + formatDigits(updatedA02Count, 6, "BDS_EMPLOYEE_COUNT_OVERFLOW")
         + formatDigits(grossTotal, 14)
         + formatDigits(amoTotal, 14);
     updatedLines[footerIndex] = footer;

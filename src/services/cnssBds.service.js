@@ -25,7 +25,7 @@ export async function generateMonthlyCnssBdsFile(companyId, month, year, templat
             workedDays: true,
             sbg: true,
             sbi: true,
-            employee: { select: { matricule: true, numeroCNSS: true } },
+            employee: { select: { matricule: true, numeroCNSS: true, blocageSaisiePaie: true, blocageSaisiePaieMotif: true } },
         },
         orderBy: [{ employee: { matricule: "asc" } }, { id: "asc" }],
     });
@@ -36,12 +36,14 @@ export async function generateMonthlyCnssBdsFile(companyId, month, year, templat
         if (!/^\d{9}$/.test(cnss)) {
             throw new Error(`EMPLOYEE_CNSS_MISSING:${payslip.employee.matricule}`);
         }
+        const blocked = Boolean(payslip.employee.blocageSaisiePaie);
         return {
             cnss_immatriculation: cnss,
-            days_worked: Number(payslip.workedDays),
+            days_worked: blocked ? 0 : Number(payslip.workedDays),
             // These are the saved bulletin gross and AMO base used by payroll reports.
-            gross_salary: payslip.sbg,
-            amo_salary_base: payslip.sbi,
+            gross_salary: blocked ? 0 : payslip.sbg,
+            amo_salary_base: blocked ? 0 : payslip.sbi,
+            bds_situation: blocked ? (payslip.employee.blocageSaisiePaieMotif || "MS") : undefined,
         };
     });
 

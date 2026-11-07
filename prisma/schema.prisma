@@ -183,6 +183,7 @@ model Employee {
   contratDateDebut  DateTime? // Contrat Du
   contratDateFin    DateTime? // Contrat Au (nullable = CDI)
   blocageSaisiePaie Boolean           @default(false) // locks employee out of active payroll run
+  blocageSaisiePaieMotif String?      // CNSS BDS situation used when payroll input is blocked
 
   // --- État civil ---
   situationFam        SituationFamiliale

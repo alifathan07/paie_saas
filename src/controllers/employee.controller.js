@@ -207,6 +207,7 @@ export const handleCreateEmployee = async (req, res) => {
                 ? String(req.body.indemniteRepresentationRate || '').trim()
                 : '',
             blocageSaisiePaie: req.body.blocageSaisiePaie === '1' || req.body.blocageSaisiePaie === 'true',
+            blocageSaisiePaieMotif: req.body.blocageSaisiePaieMotif,
         });
         res.redirect("/employees");
     } catch (error) {
@@ -473,6 +474,7 @@ export const handleUpdateEmployee = async (req, res) => {
                 ? String(req.body.indemniteRepresentationRate || '').trim()
                 : '',
             blocageSaisiePaie: Boolean(req.body.blocageSaisiePaie),
+            blocageSaisiePaieMotif: req.body.blocageSaisiePaieMotif,
         }, activeCompanyId);
         const returnTab = ['indemnites', 'primes'].includes(req.body.returnTab) ? '?tab=' + req.body.returnTab : '';
         res.redirect(`/employees/${id}/edit${returnTab}`);
