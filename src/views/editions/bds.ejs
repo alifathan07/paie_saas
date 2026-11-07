@@ -1,0 +1,43 @@
+<%- include('../partials/header') %>
+
+<div class="page-header editions-header">
+    <div class="header-title-area">
+        <h1 class="page-title">Fichier BDS CNSS</h1>
+        <p class="page-subtitle">Complétez le fichier préétabli Damancom avec les bulletins du mois choisi</p>
+    </div>
+</div>
+
+<% if (error) { %>
+    <div class="bulk-summary editions-error" role="alert"><%= error %></div>
+<% } %>
+
+<section class="edition-form-card">
+    <div class="edition-form-heading">
+        <span class="edition-form-icon" aria-hidden="true">▥</span>
+        <div>
+            <h2>Préparer la déclaration mensuelle</h2>
+            <p>Choisissez une date du mois à déclarer et importez le fichier .txt préétabli téléchargé depuis Damancom. Les jours fractionnaires doivent être corrigés avant l'export ; les jours supérieurs à 26 sont plafonnés à 26.</p>
+        </div>
+    </div>
+
+    <form method="POST" action="/editions/bds" enctype="multipart/form-data" class="bulletin-export-form">
+        <div class="bulletin-export-grid">
+            <label>
+                <span>Date du mois à déclarer</span>
+                <input class="form-input" type="date" name="declarationDate" required value="<%= declarationDate %>">
+                <small>Le mois et l'année de cette date déterminent les bulletins utilisés.</small>
+            </label>
+            <label>
+                <span>Fichier préétabli CNSS (.txt)</span>
+                <input class="form-input" type="file" name="template" accept=".txt,text/plain" required>
+                <small>Le fichier original doit contenir les enregistrements A00, A01, A02 et A03.</small>
+            </label>
+        </div>
+        <div class="edition-form-actions">
+            <a href="/editions" class="button secondary">Retour</a>
+            <button type="submit" class="btn-primary">Télécharger le fichier BDS complété</button>
+        </div>
+    </form>
+</section>
+
+<%- include('../partials/footer') %>

@@ -1,4 +1,6 @@
 import express from "express";
+import multer from "multer";
+import { TextDecoder } from "node:util";
 import PDFDocument from "pdfkit";
 import { prisma } from "../lib/db.js";
 import { resolveCompanyId } from "../lib/company.js";
@@ -12,6 +14,7 @@ import { getMonthlyPayrollJournal } from "../services/monthlyPayrollJournal.serv
 import { getMonthlyIrReport } from "../services/monthlyIrReport.service.js";
 import { generateAmoReportPdf, generateContributionReportsPdf, generatePayrollJournalPdf } from "../pdf/contributionReportsPdf.js";
 import { generateIrReportPdf } from "../pdf/irReportPdf.js";
+import { generateMonthlyCnssBdsFile } from "../services/cnssBds.service.js";
 
 export const editions = express.Router();
 
@@ -27,6 +30,130 @@ const reports = {
     livre: "Livre de paie",
     ir: "État IR",
 };
+
+const bdsTemplateUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    fileFilter: (req, file, callback) => {
+        const isTextFile = String(file.originalname || "").toLowerCase().endsWith(".txt");
+        if (!isTextFile) return callback(new Error("INVALID_BDS_TEMPLATE_FILE"));
+        callback(null, true);
+    },
+}).single("template");
+
+function parseBdsDeclarationDate(value) {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null;
+    const year = Number(value.slice(0, 4));
+    if (year < 2020 || year > 2040) return null;
+    return { date: value, month: Number(value.slice(5, 7)), year };
+}
+
+function renderBdsPage(req, res, options = {}) {
+    const savedPeriod = req.session.selectedPeriod || {};
+    const defaultDate = `${savedPeriod.year || new Date().getFullYear()}-${String(savedPeriod.month || new Date().getMonth() + 1).padStart(2, "0")}-01`;
+    return res.status(options.status || 200).render("editions/bds", {
+        title: "Fichier BDS CNSS",
+        currentPage: "editions",
+        user: req.session.user,
+        declarationDate: parseBdsDeclarationDate(req.body?.declarationDate)?.date || defaultDate,
+        error: options.error || null,
+    });
+}
+
+function hasFixedWidthBdsRecords(template) {
+    const lines = template.split(/\r\n|\n|\r/);
+    const records = lines.filter(line => ["A00", "A01", "A02"].includes(line.slice(0, 3)));
+    return records.length > 0 && records.every(line => line.length === 260);
+}
+
+function decodeBdsTemplate(buffer) {
+    try {
+        const utf8 = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+        if (hasFixedWidthBdsRecords(utf8)) return { template: utf8, encoding: "utf8" };
+    } catch {
+        // Legacy CNSS exports may use a single-byte Windows encoding.
+    }
+    return { template: buffer.toString("latin1"), encoding: "latin1" };
+}
+
+const BDS_ERROR_MESSAGES = {
+    INVALID_BDS_TEMPLATE_FILE: "Sélectionnez un fichier .txt préétabli téléchargé depuis Damancom.",
+    INVALID_BDS_TEMPLATE: "Le fichier préétabli est vide ou invalide.",
+    INVALID_BDS_FOOTER: "Le fichier préétabli doit contenir une ligne A03 valide.",
+    INVALID_BDS_HEADERS: "Le fichier préétabli doit contenir une ligne A00 et une ligne A01.",
+    INVALID_BDS_RECORD_LENGTH: "Chaque ligne A00, A01 et A02 doit contenir exactement 260 caractères.",
+    INVALID_BDS_TEMPLATE_CNSS_NUMBER: "Un numéro CNSS de la ligne A02 n'est pas valide.",
+    DUPLICATE_BDS_TEMPLATE_CNSS_NUMBER: "Le fichier préétabli contient un numéro CNSS en double.",
+    INVALID_BDS_TEMPLATE_AMOUNT: "Un montant déjà présent dans le fichier préétabli n'est pas numérique.",
+    INVALID_BDS_PAYROLL_DATA: "Les données de paie du mois sont invalides.",
+    INVALID_BDS_PAYROLL_RECORD: "Une donnée de paie est invalide.",
+    INVALID_BDS_CNSS_NUMBER: "Un numéro d'immatriculation CNSS n'est pas valide.",
+    DUPLICATE_BDS_PAYROLL_CNSS_NUMBER: "Plusieurs bulletins utilisent le même numéro CNSS.",
+    INVALID_BDS_DAYS: "Les jours travaillés doivent être un nombre entier positif.",
+    INVALID_BDS_AMOUNT: "Un salaire contient un montant invalide.",
+    BDS_AMOUNT_OVERFLOW: "Un salaire dépasse la capacité du format CNSS.",
+    BDS_FIELD_OVERFLOW: "Un total dépasse la capacité du format CNSS.",
+    BDS_EMPLOYEE_COUNT_OVERFLOW: "L'effectif dépasse la capacité du format CNSS.",
+    INVALID_BDS_SITUATION_CODE: "Un code de situation doit être N, E, S ou M.",
+    INVALID_BDS_SITUATION_DATE: "La date de situation doit être une date valide au format AAAAMMJJ.",
+    BDS_PAYROLL_EMPLOYEE_NOT_IN_TEMPLATE: "Un salarié du mois est absent du fichier préétabli. Téléchargez le fichier Damancom actualisé.",
+    COMPANY_NOT_FOUND: "La société active est introuvable.",
+    COMPANY_CNSS_NUMBER_MISSING: "Le numéro d'affiliation CNSS de la société n'est pas renseigné.",
+    BDS_COMPANY_AFFILIATION_MISMATCH: "Le numéro d'affiliation du fichier préétabli ne correspond pas à la société active.",
+    NO_MONTHLY_PAYROLL: "Aucun bulletin généré, validé ou clôturé pour ce mois.",
+};
+
+function bdsErrorMessage(error) {
+    const message = String(error?.message || "");
+    if (error?.code === "LIMIT_FILE_SIZE") return "Le fichier .txt ne doit pas dépasser 5 Mo.";
+    return BDS_ERROR_MESSAGES[message] || (message.startsWith("EMPLOYEE_CNSS_MISSING:")
+        ? `Le numéro CNSS est absent ou invalide pour le matricule ${message.split(":").slice(1).join(":")}.`
+        : "Impossible de générer le fichier BDS.");
+}
+
+editions.get("/bds", (req, res) => renderBdsPage(req, res));
+
+editions.post("/bds", (req, res, next) => {
+    bdsTemplateUpload(req, res, error => {
+        req.bdsUploadError = error || null;
+        next();
+    });
+}, async (req, res) => {
+    if (req.bdsUploadError) {
+        return renderBdsPage(req, res, { status: 400, error: bdsErrorMessage(req.bdsUploadError) });
+    }
+    const period = parseBdsDeclarationDate(req.body?.declarationDate);
+    if (!period) {
+        return renderBdsPage(req, res, { status: 400, error: "Sélectionnez une date de déclaration valide." });
+    }
+    if (!req.file) {
+        return renderBdsPage(req, res, { status: 400, error: "Sélectionnez le fichier .txt préétabli de Damancom." });
+    }
+
+    const { template, encoding } = decodeBdsTemplate(req.file.buffer);
+    try {
+        const output = await generateMonthlyCnssBdsFile(
+            await resolveCompanyId(req),
+            period.month,
+            period.year,
+            template,
+        );
+        res.setHeader("Content-Type", `text/plain; charset=${encoding === "utf8" ? "utf-8" : "windows-1252"}`);
+        res.setHeader("Content-Disposition", `attachment; filename="BDS_CNSS_${period.year}${String(period.month).padStart(2, "0")}.txt"`);
+        return res.send(encoding === "utf8" ? output : Buffer.from(output, "latin1"));
+    } catch (error) {
+        const message = String(error?.message || "");
+        if (!BDS_ERROR_MESSAGES[message] && !message.startsWith("EMPLOYEE_CNSS_MISSING:")) {
+            console.error("CNSS BDS export error:", error);
+        }
+        return renderBdsPage(req, res, {
+            status: message === "NO_MONTHLY_PAYROLL" ? 404 : 400,
+            error: bdsErrorMessage(error),
+        });
+    }
+});
 
 editions.get("/", (req, res) => {
     const requestedMonth = Number(req.query.month);
