@@ -367,9 +367,12 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         : undefined;
     const existing = await prisma.employee.findFirst({
         where: { id: empId, companyId: targetCompanyId },
-        select: { companyId: true }
+        select: { companyId: true, blocageSaisiePaie: true }
     });
     if (!existing) throw new Error('EMPLOYEE_NOT_FOUND');
+    const isUnblockingPayroll = existing.blocageSaisiePaie
+        && blocageSaisiePaie !== undefined
+        && !Boolean(blocageSaisiePaie);
     const chantiersEnabled = await getCompanyChantiersEnabled(targetCompanyId);
 
     // Only replace bonus assignments when the edit form explicitly submitted them.
@@ -377,7 +380,6 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
     const employeeBonusData = shouldReplaceBonuses && bonusList.length > 0
         ? await resolveBonusList(bonusList, targetCompanyId)
         : [];
-
     return prisma.$transaction(async tx => {
         const preservedBonuses = shouldReplaceBonuses && !replaceNonTaxableBonuses
             ? await tx.employeeBonus.findMany({
@@ -439,6 +441,8 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
             blocageSaisiePaie: blocageSaisiePaie !== undefined
                 ? Boolean(blocageSaisiePaie)
                 : undefined,
+            bulletinMasque: isUnblockingPayroll ? false : undefined,
+            bulletinMasqueDepuis: isUnblockingPayroll ? null : undefined,
             companyId: undefined,
                 bonuses: shouldReplaceBonuses ? { create: bonusesToCreate } : undefined
             },
@@ -452,7 +456,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         // Employee edits affect only open bulletins. The refresh service limits
         // itself to DRAFT/GENERATED records, so validated and closed bulletins
         // remain immutable snapshots while the next bulletin uses new data.
-        await refreshDraftPayslips(tx, updated);
+        await refreshDraftPayslips(tx, updated, { restoreBlockedZeroWorkTime: isUnblockingPayroll });
         return updated;
     });
 };

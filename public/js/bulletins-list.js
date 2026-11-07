@@ -112,7 +112,7 @@
     document.querySelectorAll('.mask-bulletin-button').forEach(button => {
         button.addEventListener('click', () => {
             maskForm.action = button.dataset.action;
-            maskMessage.textContent = `Choisissez quand masquer le bulletin de ${button.dataset.employee}.`;
+            maskMessage.textContent = `Choisissez à partir de quel mois masquer le bulletin de ${button.dataset.employee}.`;
             maskDialog.showModal();
         });
     });

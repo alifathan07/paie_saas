@@ -9,6 +9,7 @@
 
 import { prisma } from "../lib/db.js";
 import { resolveCompanyId } from "../lib/company.js";
+import { employeeBulletinVisibilityWhere } from "../lib/bulletinMask.js";
 import { applyCompanyOvertimeSetting, hideOvertimeFromView, isOvertimeEnabled } from "../lib/overtimeFeature.js";
 import { applyCompanyPrimeRendementSetting, hidePrimeRendementFromView, isPrimeRendementEnabled } from "../lib/primeRendementFeature.js";
 import { isImposableRubriqueVisible, isRubriqueVisible } from "../lib/rubriqueVisibility.js";
@@ -1019,7 +1020,7 @@ export const listBulletins = async (req, res) => {
         // increasingly expensive as the workforce grew.
         const employeeWhere = {
             companyId,
-            bulletinMasque: false,
+            ...employeeBulletinVisibilityWhere(month, year),
             bulletinMasks: { none: { month, year } },
         };
         const dbEmployees = await prisma.employee.findMany({
@@ -1317,12 +1318,12 @@ export const listBulletins = async (req, res) => {
     }
 };
 
-// POST /bulletins/:id/mask — hide an employee from this period or all periods.
+// POST /bulletins/:id/mask — hide an employee from this period or this and later periods.
 export const maskBulletin = async (req, res) => {
     const empId = Number(req.params.id);
     const month = Number(req.body.month);
     const year = Number(req.body.year);
-    const scope = req.body.scope === "all" ? "all" : "month";
+    const scope = ["all", "future"].includes(req.body.scope) ? "future" : "month";
 
     if (!Number.isInteger(month) || month < 1 || month > 12
         || !Number.isInteger(year) || year < 2020 || year > 2040) {
@@ -1335,8 +1336,11 @@ export const maskBulletin = async (req, res) => {
         if (!employee) return res.status(404).send("Employé introuvable.");
         if (!employee.blocageSaisiePaie) return res.status(400).send("Seuls les employés dont la saisie de paie est bloquée peuvent être masqués.");
 
-        if (scope === "all") {
-            await prisma.employee.update({ where: { id: empId }, data: { bulletinMasque: true } });
+        if (scope === "future") {
+            await prisma.employee.update({
+                where: { id: empId },
+                data: { bulletinMasque: true, bulletinMasqueDepuis: year * 100 + month },
+            });
         } else {
             await prisma.bulletinMask.upsert({
                 where: { employeeId_month_year: { employeeId: empId, month, year } },

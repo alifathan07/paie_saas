@@ -1,5 +1,9 @@
 import { calculatePayroll } from "../payroll-engine/PayrollEngine.js";
-import { normalizeWorkingTime } from "../payroll-engine/utils/workingTime.js";
+import {
+    DEFAULT_STANDARD_MONTHLY_DAYS,
+    DEFAULT_STANDARD_MONTHLY_HOURS,
+    normalizeWorkingTime,
+} from "../payroll-engine/utils/workingTime.js";
 import { calculateCumulativeIR } from "../payroll-engine/calculators/cumulativeIr.calculator.js";
 import { applyCompanyOvertimeSetting } from "../lib/overtimeFeature.js";
 import { applyCompanyPrimeRendementSetting, isPrimeRendementEnabled } from "../lib/primeRendementFeature.js";
@@ -126,7 +130,7 @@ async function replacePayslipLines(tx, payslipId, calc) {
     if (rows.length) await tx.payslipBonus.createMany({ data: rows });
 }
 
-export async function refreshDraftPayslips(tx, employee) {
+export async function refreshDraftPayslips(tx, employee, { restoreBlockedZeroWorkTime = false } = {}) {
     const drafts = await tx.payslip.findMany({ where: { employeeId: employee.id, status: { in: OPEN_STATUSES } }, include: { bonuses: true, retenus: true } });
     if (!drafts.length) return;
     const config = await tx.payrollConfig.findFirst({ orderBy: { id: "asc" } });
@@ -142,12 +146,28 @@ export async function refreshDraftPayslips(tx, employee) {
             .filter(line => line.taxable && (!fixedTaxable.has(line.name.toLowerCase()) || Number(line.amount) === 0))
             .map(line => ({ label: line.name, amount: Number(line.amount) }));
         const monthlyNimpLines = payslip.bonuses.filter(line => !line.taxable && !fixedNimp.has(line.name.toLowerCase())).map(line => ({ label: line.name, amount: Number(line.amount) }));
+        const workingTimeMode = payslip.workingTimeMode || employee.company?.workingTimeMode || "DAYS";
+        const standardMonthlyDays = Number(
+            payslip.standardMonthlyDays || employee.company?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS,
+        );
+        const standardMonthlyHours = Number(
+            payslip.standardMonthlyHours || employee.company?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS,
+        );
+        const restoreZeroInput = restoreBlockedZeroWorkTime && (
+            workingTimeMode === "HOURS"
+                ? Number(payslip.workedHours || 0) <= 0
+                : Number(payslip.workedDays || 0) <= 0
+        );
         const workingTime = normalizeWorkingTime({
-            workingTimeMode: payslip.workingTimeMode || employee.company.workingTimeMode,
-            standardMonthlyDays: Number(payslip.standardMonthlyDays || employee.company.standardMonthlyDays),
-            standardMonthlyHours: Number(payslip.standardMonthlyHours || employee.company.standardMonthlyHours),
-            workedDays: payslip.workingTimeMode === "HOURS" ? undefined : payslip.workedDays,
-            workedHours: payslip.workingTimeMode === "HOURS" ? payslip.workedHours : undefined,
+            workingTimeMode,
+            standardMonthlyDays,
+            standardMonthlyHours,
+            workedDays: workingTimeMode === "HOURS"
+                ? undefined
+                : restoreZeroInput ? standardMonthlyDays : payslip.workedDays,
+            workedHours: workingTimeMode === "HOURS"
+                ? restoreZeroInput ? standardMonthlyHours : payslip.workedHours
+                : undefined,
         });
         const birthLeaveHistory = Number(payslip.congeNaissanceDays || 0) > 0
             ? await listBirthLeaveReferencePayslips({
