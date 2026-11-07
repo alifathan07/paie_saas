@@ -2,7 +2,7 @@
     const tableWrapper = document.querySelector('#bulletins-table-wrapper');
     const topScrollbar = document.querySelector('#bulletins-scrollbar');
     const bulletinTable = document.querySelector('#bulletins-table');
-    const stickyFilters = document.querySelector('.card.bulletin-filters');
+    const appHeader = document.querySelector('.app-header');
     if (tableWrapper && topScrollbar && bulletinTable) {
         const scrollbarContent = topScrollbar.firstElementChild;
         const stickyHeader = document.createElement('div');
@@ -28,8 +28,7 @@
         const syncStickyHeader = () => {
             const wrapperRect = tableWrapper.getBoundingClientRect();
             const headerRect = bulletinTable.tHead.getBoundingClientRect();
-            const filterHeight = stickyFilters?.getBoundingClientRect().height || 0;
-            const top = filterHeight ? filterHeight + 12 : 0;
+            const top = appHeader?.getBoundingClientRect().bottom || 0;
             const headerHeight = headerRect.height;
             const left = wrapperRect.left + tableWrapper.clientLeft;
             const width = tableWrapper.clientWidth;
@@ -93,7 +92,7 @@
         tableLayoutObserver.observe(tableWrapper);
         const matriculeHeader = bulletinTable.querySelector('thead th:first-child');
         if (matriculeHeader) tableLayoutObserver.observe(matriculeHeader);
-        if (stickyFilters) new ResizeObserver(scheduleStickyHeaderSync).observe(stickyFilters);
+        if (appHeader) new ResizeObserver(scheduleStickyHeaderSync).observe(appHeader);
         window.addEventListener('resize', scheduleStickyHeaderSync);
         window.addEventListener('scroll', scheduleStickyHeaderSync, { passive: true });
         syncWidth();

@@ -3,6 +3,8 @@
 <% const overtimeEnabled = company.overtimeEnabled !== false; %>
 <% const primeRendementEnabled = company.primeRendementEnabled !== false; %>
 <% const chantiersEnabled = company.chantiersEnabled !== false; %>
+<% const currentMonth = new Date().getMonth() + 1; %>
+<% const currentYear = new Date().getFullYear(); %>
 <% const rubriqueVisibilityGroups = [
     { title: 'Rubriques de base', category: 'base', rows: company.rubriqueBases || [] },
     { title: 'Rubriques de retenue', category: 'retenu', rows: company.rubriqueRetenus || [] },
@@ -10,6 +12,36 @@
 ]; %>
 <div class="page-header"><div class="header-title-area"><h1 class="page-title"><%= company.name %></h1><p class="page-subtitle">Société #<%= company.id %> · créée le <%= new Date(company.createdAt).toLocaleDateString('fr-FR') %></p></div><div class="header-actions"><a href="/admin/companies" class="btn-secondary">Toutes les sociétés</a></div></div>
 <div class="dashboard-grid"><div class="stat-card"><span>Employés</span><strong><%= company._count.employees %></strong></div><div class="stat-card"><span>Bulletins enregistrés</span><strong><%= payslipCount %></strong></div><div class="stat-card"><span>Propriétaire</span><strong><%= owner?.name || '—' %></strong></div></div>
+<section class="admin-section-card" id="company-bulletins-delete" aria-labelledby="company-bulletins-delete-title">
+    <h2 id="company-bulletins-delete-title">Supprimer les bulletins d'un mois</h2>
+    <p>Cette action supprime tous les bulletins de la société pour la période choisie, quel que soit leur statut. Les retenues d'avances liées seront restituées au solde des avances. Les bulletins des périodes suivantes ne seront pas recalculés automatiquement.</p>
+    <% if (bulletinDeleteResult) { %>
+        <div class="alert alert-success" role="status">
+            <%= bulletinDeleteResult.count %> bulletin<%= bulletinDeleteResult.count === 1 ? '' : 's' %> supprimé<%= bulletinDeleteResult.count === 1 ? '' : 's' %> pour <%= String(bulletinDeleteResult.month).padStart(2, '0') %>/<%= bulletinDeleteResult.year %>.
+        </div>
+    <% } %>
+    <form method="POST" action="/admin/companies/<%= company.id %>/bulletins/delete">
+        <div class="form-grid-2">
+            <label class="form-label" for="delete-bulletins-month">Mois
+                <select class="form-input" id="delete-bulletins-month" name="month" required>
+                    <% ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'].forEach((name, index) => { %>
+                        <option value="<%= index + 1 %>" <%= index + 1 === currentMonth ? 'selected' : '' %>><%= name %></option>
+                    <% }); %>
+                </select>
+            </label>
+            <label class="form-label" for="delete-bulletins-year">Année
+                <input class="form-input" id="delete-bulletins-year" type="number" name="year" min="1900" max="9999" step="1" value="<%= currentYear %>" required>
+            </label>
+        </div>
+        <label class="form-label" style="display:flex;align-items:flex-start;gap:8px;margin:16px 0">
+            <input type="checkbox" name="confirmDelete" value="yes" required>
+            <span>Je confirme la suppression définitive des bulletins de cette société pour le mois sélectionné, y compris les bulletins validés et clôturés.</span>
+        </label>
+        <button class="btn-primary" type="submit" data-confirm="Supprimer tous les bulletins de <%= company.name %> pour le mois et l'année sélectionnés ? Cette action est irréversible." data-confirm-title="Suppression définitive des bulletins" data-confirm-label="Supprimer les bulletins" data-confirm-danger="true" style="background:#b42318;border-color:#b42318">
+            Supprimer les bulletins du mois
+        </button>
+    </form>
+</section>
 <section class="admin-section-card"><h2>Propriétaire</h2><% if (owner) { %><p><a href="/admin/users/<%= owner.id %>"><strong><%= owner.name %></strong></a> · <%= owner.email %></p><p>Statut : <%= owner.isBlocked ? 'Bloqué' : 'Actif' %></p><% if (!owner.isAdmin) { %><form method="POST" action="/admin/clients/<%= owner.id %>/mode" style="margin-top:12px"><input type="hidden" name="companyId" value="<%= company.id %>"><button class="btn-primary">Entrer en support</button></form><% } %><% } else { %><p>Propriétaire introuvable.</p><% } %></section>
 <section class="admin-section-card" id="company-overtime-settings" aria-labelledby="company-overtime-title">
     <h2 id="company-overtime-title">Heures supplémentaires</h2>

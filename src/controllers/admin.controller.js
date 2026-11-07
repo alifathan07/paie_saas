@@ -193,7 +193,91 @@ export const adminCompanyDetails = async (req, res) => {
         prisma.payslip.count({ where: { employee: { companyId } } }),
         prisma.payslip.findMany({ where: { employee: { companyId } }, orderBy: { id: "desc" }, take: 10, select: { id: true, month: true, year: true, status: true, employee: { select: { nomComplet: true } } } }),
     ]);
-    return res.render("admin/company-details", page(req, { company, payslipCount, recentPayslips }));
+    const deletedBulletins = Number(req.query.bulletinsDeleted);
+    const deletedMonth = Number(req.query.periodMonth);
+    const deletedYear = Number(req.query.periodYear);
+    const bulletinDeleteResult = req.query.bulletinsDeleted !== undefined
+        && Number.isSafeInteger(deletedBulletins) && deletedBulletins >= 0
+        && Number.isInteger(deletedMonth) && deletedMonth >= 1 && deletedMonth <= 12
+        && Number.isInteger(deletedYear) && deletedYear >= 1900 && deletedYear <= 9999
+        ? { count: deletedBulletins, month: deletedMonth, year: deletedYear }
+        : null;
+    return res.render("admin/company-details", page(req, { company, payslipCount, recentPayslips, bulletinDeleteResult }));
+};
+
+export const deleteCompanyBulletins = async (req, res) => {
+    const companyId = Number(req.params.id);
+    const month = Number(req.body.month);
+    const year = Number(req.body.year);
+    if (!Number.isSafeInteger(companyId) || companyId <= 0
+        || !Number.isInteger(month) || month < 1 || month > 12
+        || !Number.isInteger(year) || year < 1900 || year > 9999
+        || req.body.confirmDelete !== "yes") {
+        return res.status(400).send("Société, période ou confirmation de suppression invalide.");
+    }
+
+    const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true },
+    });
+    if (!company) return res.status(404).send("Société introuvable.");
+
+    const actorUserId = Number(req.session?.user?.id);
+    if (!Number.isSafeInteger(actorUserId) || actorUserId <= 0) {
+        return res.status(403).send("Administrateur introuvable.");
+    }
+
+    const deletedCount = await prisma.$transaction(async tx => {
+        const deductions = await tx.avanceDeduction.findMany({
+            where: { payslip: { month, year, employee: { companyId } } },
+            select: { avanceId: true, amount: true },
+        });
+        const amountByAdvance = new Map();
+        for (const deduction of deductions) {
+            const amountCents = Math.round(Number(deduction.amount) * 100);
+            if (!Number.isSafeInteger(amountCents) || amountCents < 0) {
+                throw new Error("INVALID_ADVANCE_DEDUCTION");
+            }
+            const totalCents = (amountByAdvance.get(deduction.avanceId) || 0) + amountCents;
+            if (!Number.isSafeInteger(totalCents)) throw new Error("INVALID_ADVANCE_DEDUCTION");
+            amountByAdvance.set(deduction.avanceId, totalCents);
+        }
+
+        for (const [avanceId, amountCents] of amountByAdvance) {
+            const restored = await tx.avance.updateMany({
+                where: { id: avanceId, employee: { companyId } },
+                data: { solde: { increment: Number((amountCents / 100).toFixed(2)) } },
+            });
+            if (restored.count !== 1) throw new Error("ADVANCE_RESTORE_FAILED");
+        }
+
+        const deleted = await tx.payslip.deleteMany({
+            where: { month, year, employee: { companyId } },
+        });
+        await tx.auditLog.create({
+            data: {
+                actorUserId,
+                action: "DELETE_COMPANY_MONTH_BULLETINS",
+                targetType: "PAYSLIP_PERIOD",
+                companyId,
+                metadata: {
+                    month,
+                    year,
+                    deletedCount: deleted.count,
+                    restoredAdvanceCount: amountByAdvance.size,
+                },
+                ipAddress: req.ip || req.socket?.remoteAddress || null,
+            },
+        });
+        return deleted.count;
+    });
+
+    const query = new URLSearchParams({
+        bulletinsDeleted: String(deletedCount),
+        periodMonth: String(month),
+        periodYear: String(year),
+    });
+    return res.redirect(`/admin/companies/${companyId}?${query}#company-bulletins-delete`);
 };
 
 export const updateCompanyOvertimeFeature = async (req, res) => {

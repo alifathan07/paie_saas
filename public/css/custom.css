@@ -326,6 +326,7 @@ a:hover {
 
 .main-wrapper {
   margin-left: var(--sidebar-width);
+  padding-top: 60px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -333,13 +334,17 @@ a:hover {
 
 .app-header {
   min-height: 60px;
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: var(--sidebar-width);
+  z-index: 90;
   background: #fff;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  position: relative;
   padding: 0 24px;
   flex-shrink: 0;
   color: #334155;
@@ -632,11 +637,7 @@ body.theme-muted .app-header { background: #f8fafc; }
   padding: 32px;
 }
 
-/* Keep the payroll period and bulk actions available while reviewing the table. */
 .card.bulletin-filters {
-  position: sticky;
-  top: 0;
-  z-index: 20;
   display: grid;
   gap: 18px;
   margin-bottom: 20px;
@@ -652,6 +653,16 @@ body.theme-muted .app-header { background: #f8fafc; }
   display: grid;
   gap: 12px;
   min-width: 0;
+}
+
+@media print {
+  .app-header {
+    position: static;
+  }
+
+  .main-wrapper {
+    padding-top: 0;
+  }
 }
 
 .bulletin-filter-heading {
@@ -3897,6 +3908,10 @@ body.sidebar-collapsed .sidebar {
 
 body.sidebar-collapsed .main-wrapper {
   margin-left: 72px;
+}
+
+body.sidebar-collapsed .app-header {
+  left: 72px;
 }
 
 body.sidebar-collapsed .sidebar-brand {

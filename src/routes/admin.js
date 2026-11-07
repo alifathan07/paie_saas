@@ -2,7 +2,7 @@ import express from "express";
 import { isAdmin } from "../../middlewares/admin.js";
 import {
     adminDashboard, adminClients, adminCreateUserPage, adminCreateUser, adminUserDetails, adminCompanies, adminCompanyDetails,
-    updateCompanyOvertimeFeature, updateCompanyPrimeRendementFeature, updateCompanyChantiersFeature, updateCompanyRubriqueVisibility,
+    updateCompanyOvertimeFeature, updateCompanyPrimeRendementFeature, updateCompanyChantiersFeature, updateCompanyRubriqueVisibility, deleteCompanyBulletins,
     adminAuditLogs, adminUsage, adminSystem, updateClientBilling, blockClient, unblockClient,
     createClientCompany, enterClientMode, exitClientMode, adminReports, updateReport,
     adminUpdateUserProfile, adminSetUserPassword, updateGlobalPayrollConfig,
@@ -20,6 +20,7 @@ admin.post("/users/:id/password", adminSetUserPassword);
 admin.get("/clients", adminClients);
 admin.get("/companies", adminCompanies);
 admin.get("/companies/:id", adminCompanyDetails);
+admin.post("/companies/:id/bulletins/delete", deleteCompanyBulletins);
 admin.post("/companies/:id/overtime", updateCompanyOvertimeFeature);
 admin.post("/companies/:id/prime-rendement", updateCompanyPrimeRendementFeature);
 admin.post("/companies/:id/chantiers", updateCompanyChantiersFeature);
