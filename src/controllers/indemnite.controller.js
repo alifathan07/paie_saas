@@ -100,3 +100,4 @@ export async function remove(req, res) {
     }
     return res.redirect("/indemnites");
 }
+const ntg= "ntg"
