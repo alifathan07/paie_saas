@@ -1,175 +1,211 @@
-const A02_RECORD_LENGTH = 260;
-// CNSS fixed-width A02 layout: A02 (3) + affiliation (7) + period (6),
-// followed by the employee registration number (9).
-const A02_CNSS_START = 16;
-const A02_CNSS_END = 25;
-const A02_FIELD_START = 77;
-const A02_FIELD_END = 112;
-const MAX_SALARY_CENTS = 999_999_999_999n;
+const RECORD_LENGTH = 260;
+const SITUATION_RANK = { "": 0, SO: 1, DE: 2, IT: 3, IL: 4, AT: 5, CS: 6, MS: 7, MP: 8 };
+const B02 = { cnss: 16, name: 25, children: 85, afPay: 87, afDeduct: 93, afNet: 99, afReverse: 105 };
 
 function splitTemplateLines(templateFile) {
-    if (typeof templateFile !== "string" || !templateFile.length) {
-        throw new Error("INVALID_BDS_TEMPLATE");
-    }
-    const hasTrailingLineBreak = /(?:\r\n|\n|\r)$/.test(templateFile);
+    if (typeof templateFile !== "string" || !templateFile.length) throw new Error("INVALID_BDS_TEMPLATE");
+    const trailing = /(?:\r\n|\n|\r)$/.test(templateFile);
     const lines = templateFile.split(/\r\n|\n|\r/);
-    if (hasTrailingLineBreak) lines.pop();
-    return { lines, hasTrailingLineBreak };
+    if (trailing) lines.pop();
+    return lines;
 }
 
-function footerLine(lines) {
-    const footers = lines.filter(line => line.slice(0, 3) === "A03");
-    if (footers.length !== 1 || footers[0].length < 18) {
-        throw new Error("INVALID_BDS_FOOTER");
-    }
-    return footers[0];
+function ascii(value) {
+    return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E]/g, " ");
 }
 
-export function getCnssBdsTemplateAffiliation(templateFile) {
-    const { lines } = splitTemplateLines(templateFile);
-    return footerLine(lines).slice(3, 12);
+function text(value, width) { return ascii(value).slice(0, width).padEnd(width, " "); }
+
+function digits(value, width, errorCode = "BDS_FIELD_OVERFLOW") {
+    const normalized = String(value ?? "").trim();
+    if (!/^\d+$/.test(normalized)) throw new Error("INVALID_BDS_NUMERIC_FIELD");
+    if (normalized.length > width) throw new Error(errorCode);
+    return normalized.padStart(width, "0");
 }
 
-function normalizePayrollRecords(payrollData) {
-    if (Array.isArray(payrollData)) return payrollData;
-    if (payrollData instanceof Map) {
-        return [...payrollData.entries()].map(([key, value]) => ({
-            ...value,
-            cnss_immatriculation: value?.cnss_immatriculation ?? key,
-        }));
-    }
-    if (payrollData && typeof payrollData === "object") {
-        if ("cnss_immatriculation" in payrollData) return [payrollData];
-        return Object.entries(payrollData).map(([key, value]) => ({
-            ...value,
-            cnss_immatriculation: value?.cnss_immatriculation ?? key,
-        }));
-    }
-    throw new Error("INVALID_BDS_PAYROLL_DATA");
+function numberValue(value, width, errorCode = "BDS_FIELD_OVERFLOW") {
+    let result;
+    try { result = BigInt(value ?? 0); } catch { throw new Error("INVALID_BDS_NUMERIC_FIELD"); }
+    if (result < 0n) throw new Error("INVALID_BDS_NUMERIC_FIELD");
+    return digits(result.toString(), width, errorCode);
 }
 
-function normalizeCnssNumber(value) {
-    const number = String(value ?? "").trim();
-    if (!/^\d{9}$/.test(number)) throw new Error("INVALID_BDS_CNSS_NUMBER");
-    return number;
-}
-
-function toCents(value) {
-    if (value === null || value === undefined || String(value).trim() === "") {
-        throw new Error("INVALID_BDS_AMOUNT");
-    }
-    if (typeof value === "boolean") throw new Error("INVALID_BDS_AMOUNT");
+function centsFromAmount(value) {
     const amount = Number(value);
     if (!Number.isFinite(amount) || amount < 0) throw new Error("INVALID_BDS_AMOUNT");
-    const cents = Math.round((amount + Number.EPSILON) * 100);
-    if (!Number.isSafeInteger(cents) || BigInt(cents) > MAX_SALARY_CENTS) {
-        throw new Error("BDS_AMOUNT_OVERFLOW");
-    }
-    return BigInt(cents);
-}
-
-function formatDigits(value, width, errorCode = "BDS_FIELD_OVERFLOW") {
-    const digits = BigInt(value).toString();
-    if (digits.length > width) throw new Error(errorCode);
-    return digits.padStart(width, "0");
+    return BigInt(Math.round((amount + Number.EPSILON) * 100));
 }
 
 function normalizeDays(value) {
-    if (value === null || value === undefined || typeof value === "boolean"
-        || (typeof value === "string" && !/^\d+$/.test(value.trim()))) {
+    const days = Number(value);
+    if (!Number.isInteger(days) || days < 0 || days > 26) throw new Error("INVALID_BDS_DAYS");
+    return days;
+}
+
+function normalizeSituation(value) {
+    const situation = String(value ?? "").trim().toUpperCase();
+    if (!Object.hasOwn(SITUATION_RANK, situation)) throw new Error("INVALID_BDS_SITUATION_CODE");
+    return situation;
+}
+
+function sourceNumber(source, start, width) {
+    const value = source?.slice(start, start + width).trim();
+    return value && /^\d+$/.test(value) ? BigInt(value) : undefined;
+}
+
+function amountCents(record, field, source, start, width) {
+    if (record[field] !== undefined && record[field] !== null) return BigInt(record[field]);
+    return sourceNumber(source, start, width) ?? 0n;
+}
+
+function parseTemplate(templateFile) {
+    const lines = splitTemplateLines(templateFile);
+    const structural = lines.filter(line => ["A00", "A01", "A02", "B00", "B01", "B02"].includes(line.slice(0, 3)));
+    if (!structural.length || structural.some(line => line.length !== RECORD_LENGTH)) throw new Error("INVALID_BDS_RECORD_LENGTH");
+    const b00 = lines.find(line => ["A00", "B00"].includes(line.slice(0, 3)));
+    const b01 = lines.find(line => ["A01", "B01"].includes(line.slice(0, 3)));
+    const b02 = lines.filter(line => ["A02", "B02"].includes(line.slice(0, 3)));
+    if (!b00 || !b01) throw new Error("INVALID_BDS_HEADERS");
+    const byCnss = new Map();
+    for (const line of b02) {
+        const cnss = line.slice(B02.cnss, B02.cnss + 9);
+        if (!/^\d{9}$/.test(cnss)) throw new Error("INVALID_BDS_TEMPLATE_CNSS_NUMBER");
+        if (byCnss.has(cnss)) throw new Error("DUPLICATE_BDS_TEMPLATE_CNSS_NUMBER");
+        byCnss.set(cnss, line);
+    }
+    return { b00, b01, byCnss };
+}
+
+function buildB00(source) { return "B00" + source.slice(3, 17) + "B0" + " ".repeat(241); }
+
+function buildB01(source) {
+    // CNSS requires B01 to equal A01 except for the record identifier. The
+    // application does not store every B01 field, so preserve the official
+    // pre-established header instead of reconstructing it from partial data.
+    return "B01" + source.slice(3);
+}
+
+function calculateSummary(record, source, context, type) {
+    const hasCnss = /^\d{9}$/.test(String(record.cnss_immatriculation || ""));
+    const cnss = hasCnss ? String(record.cnss_immatriculation) : "000000000";
+    const situation = type === "B02" ? normalizeSituation(record.bds_situation) : "";
+    const days = normalizeDays(record.days_worked);
+    const real = record.salary_real_cents !== undefined ? BigInt(record.salary_real_cents) : centsFromAmount(record.gross_salary);
+    const capped = record.salary_plaf_cents !== undefined ? BigInt(record.salary_plaf_cents) : (real < context.salaryCeilingCents ? real : context.salaryCeilingCents);
+    if (capped > real) throw new Error("BDS_CAPPED_SALARY_EXCEEDS_REAL");
+    // Identity and family-allowance fields in B02 must match the official
+    // pre-established A02 record exactly.
+    const children = type === "B02" ? (sourceNumber(source, B02.children, 2) ?? 0n) : 0n;
+    const afPay = type === "B02" ? (sourceNumber(source, B02.afPay, 6) ?? 0n) : 0n;
+    const afDeduct = type === "B02" ? (sourceNumber(source, B02.afDeduct, 6) ?? 0n) : 0n;
+    const afNet = type === "B02" ? (sourceNumber(source, B02.afNet, 6) ?? 0n) : 0n;
+    const afReverse = type === "B02"
+        ? (record.af_a_reverser_cents !== undefined ? BigInt(record.af_a_reverser_cents) : ((situation === "SO" || situation === "DE") ? afNet : (sourceNumber(source, B02.afReverse, 6) ?? 0n)))
+        : 0n;
+    const control = type === "B02"
+        ? BigInt(cnss) + afReverse + BigInt(days) + real + capped + BigInt(SITUATION_RANK[situation])
+        : BigInt(cnss) + BigInt(days) + real + capped;
+    if (type === "B02" && (situation === "CS" || situation === "MS") && (days !== 0 || real !== 0n || capped !== 0n)) {
+        throw new Error("INVALID_BDS_SITUATION_VALUES");
+    }
+    if (type === "B02" && situation === "" && days === 0 && (real !== 0n || capped !== 0n)) {
         throw new Error("INVALID_BDS_DAYS");
     }
-    const days = Number(value);
-    if (!Number.isInteger(days) || days < 0) throw new Error("INVALID_BDS_DAYS");
-    return Math.min(days, 26);
+    return { ...record, cnss_immatriculation: cnss, children, af_a_payer_cents: afPay, af_a_deduire_cents: afDeduct, af_net_a_payer_cents: afNet, af_a_reverser_cents: afReverse, days_worked: BigInt(days), salary_real_cents: real, salary_plaf_cents: capped, cnss_number_value: BigInt(cnss), control };
 }
 
-function normalizeSituation(record) {
-    if (record.bds_situation !== undefined) {
-        const situation = String(record.bds_situation || "").trim().toUpperCase();
-        if (!/^(CS|MS|IL|AT|IT|MP|SO|DE)$/.test(situation)) throw new Error("INVALID_BDS_SITUATION_CODE");
-        return { field: situation.padEnd(9, " ") };
-    }
-    const code = String(record.situation_code ?? "N").toUpperCase();
-    if (!/^[NESM]$/.test(code)) throw new Error("INVALID_BDS_SITUATION_CODE");
-    if (code === "N") return { field: `${code}${" ".repeat(8)}` };
-    const date = String(record.situation_date || "");
-    if (!/^\d{8}$/.test(date)) throw new Error("INVALID_BDS_SITUATION_DATE");
-    const parsedDate = new Date(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T00:00:00Z`);
-    if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10).replaceAll("-", "") !== date) {
-        throw new Error("INVALID_BDS_SITUATION_DATE");
-    }
-    return { field: `${code}${date}` };
+function buildB02(record, source, context) {
+    const situation = normalizeSituation(record.bds_situation);
+    const reverse = BigInt(record.af_a_reverser_cents);
+    return "B02" + source.slice(3, 105)
+        + numberValue(reverse, 6)
+        + numberValue(record.days_worked, 2)
+        + numberValue(record.salary_real_cents, 13)
+        + numberValue(record.salary_plaf_cents, 9)
+        + text(situation, 2)
+        + numberValue(record.control, 19)
+        + " ".repeat(104);
 }
 
-function parseTemplateAmount(field) {
-    if (!/^\d+$/.test(field)) throw new Error("INVALID_BDS_TEMPLATE_AMOUNT");
-    return BigInt(field);
+function buildB04(record, context) {
+    const cnss = record.cnss_immatriculation || "000000000";
+    return "B04" + digits(context.affiliation, 7) + digits(context.period, 6)
+        + digits(cnss, 9) + text(record.employeeName, 60) + text(record.cin, 8)
+        + numberValue(record.days_worked, 2) + numberValue(record.salary_real_cents, 13)
+        + numberValue(record.salary_plaf_cents, 9) + numberValue(record.control, 19) + " ".repeat(124);
+}
+
+function emptyB04(context) {
+    return "B04" + digits(context.affiliation, 7) + digits(context.period, 6)
+        + " ".repeat(9 + 60 + 8) + "00" + "0".repeat(13 + 9 + 19) + " ".repeat(124);
+}
+
+function sum(records, field) { return records.reduce((total, record) => total + BigInt(record[field] || 0), 0n); }
+
+function buildB03(records, context) {
+    return "B03" + digits(context.affiliation, 7) + digits(context.period, 6)
+        + numberValue(records.length, 6) + numberValue(sum(records, "children"), 6)
+        + numberValue(sum(records, "af_a_payer_cents"), 12) + numberValue(sum(records, "af_a_deduire_cents"), 12)
+        + numberValue(sum(records, "af_net_a_payer_cents"), 12) + numberValue(sum(records, "cnss_number_value"), 15)
+        + numberValue(sum(records, "af_a_reverser_cents"), 12) + numberValue(sum(records, "days_worked"), 6)
+        + numberValue(sum(records, "salary_real_cents"), 15) + numberValue(sum(records, "salary_plaf_cents"), 13)
+        + numberValue(sum(records, "control"), 19) + " ".repeat(116);
+}
+
+function buildB05(records, context) {
+    return "B05" + digits(context.affiliation, 7) + digits(context.period, 6)
+        + numberValue(records.length, 6) + numberValue(sum(records, "cnss_number_value"), 15)
+        + numberValue(sum(records, "days_worked"), 6) + numberValue(sum(records, "salary_real_cents"), 15)
+        + numberValue(sum(records, "salary_plaf_cents"), 13) + numberValue(sum(records, "control"), 19) + " ".repeat(170);
+}
+
+function buildB06(preEstablished, entrants, context) {
+    return buildB05([...preEstablished, ...entrants], context).replace(/^B05/, "B06");
 }
 
 export function generateCnssBdsFile(templateFile, payrollData, options = {}) {
-    const { lines, hasTrailingLineBreak } = splitTemplateLines(templateFile);
-    const a00Lines = lines.filter(line => line.slice(0, 3) === "A00");
-    const a01Lines = lines.filter(line => line.slice(0, 3) === "A01");
-    const a02Lines = lines.filter(line => line.slice(0, 3) === "A02");
-    if (a00Lines.length !== 1 || a01Lines.length !== 1) throw new Error("INVALID_BDS_HEADERS");
-    for (const line of [...a00Lines, ...a01Lines, ...a02Lines]) {
-        if (line.length !== A02_RECORD_LENGTH) throw new Error("INVALID_BDS_RECORD_LENGTH");
+    const template = parseTemplate(templateFile);
+    const affiliation = template.b01.slice(3, 10);
+    const period = template.b01.slice(10, 16);
+    if (!/^\d{7}$/.test(affiliation)) throw new Error("INVALID_BDS_AFFILIATION");
+    if (!/^\d{6}$/.test(period)) throw new Error("INVALID_BDS_PERIOD");
+    if (options.affiliation !== undefined && String(options.affiliation).trim() !== affiliation) {
+        throw new Error("BDS_COMPANY_AFFILIATION_MISMATCH");
     }
-
-    const originalFooter = footerLine(lines);
+    if (options.period !== undefined && String(options.period).trim() !== period) {
+        throw new Error("BDS_TEMPLATE_PERIOD_MISMATCH");
+    }
+    const context = { affiliation, period, salaryCeilingCents: BigInt(options.salaryCeilingCents ?? 600000) };
+    const records = Array.isArray(payrollData) ? payrollData : [];
     const payrollByCnss = new Map();
-    for (const record of normalizePayrollRecords(payrollData)) {
+    for (const record of records) {
         if (!record || typeof record !== "object") throw new Error("INVALID_BDS_PAYROLL_RECORD");
-        const cnss = normalizeCnssNumber(record.cnss_immatriculation);
+        const cnss = String(record.cnss_immatriculation || "").trim();
+        if (!/^\d{9}$/.test(cnss)) throw new Error("INVALID_BDS_CNSS_NUMBER");
         if (payrollByCnss.has(cnss)) throw new Error("DUPLICATE_BDS_PAYROLL_CNSS_NUMBER");
-        payrollByCnss.set(cnss, {
-            days: normalizeDays(record.days_worked),
-            grossCents: toCents(record.gross_salary),
-            amoCents: toCents(record.amo_salary_base),
-            ...normalizeSituation(record),
-        });
+        payrollByCnss.set(cnss, record);
     }
-
-    const templateCnssNumbers = new Set();
-    const matchedCnssNumbers = new Set();
-    const updatedLines = lines.flatMap(line => {
-        if (line.slice(0, 3) !== "A02") return line;
-        const cnss = line.slice(A02_CNSS_START, A02_CNSS_END);
-        if (!/^\d{9}$/.test(cnss)) throw new Error("INVALID_BDS_TEMPLATE_CNSS_NUMBER");
-        if (templateCnssNumbers.has(cnss)) throw new Error("DUPLICATE_BDS_TEMPLATE_CNSS_NUMBER");
-        templateCnssNumbers.add(cnss);
-
+    const preEstablished = [];
+    const knownCnss = new Set(template.byCnss.keys());
+    for (const [cnss, source] of template.byCnss) {
         const record = payrollByCnss.get(cnss);
-        if (!record) return line;
-        matchedCnssNumbers.add(cnss);
-        return line.slice(0, A02_FIELD_START)
-            + formatDigits(record.days, 2)
-            + formatDigits(record.grossCents, 12, "BDS_AMOUNT_OVERFLOW")
-            + formatDigits(record.amoCents, 12, "BDS_AMOUNT_OVERFLOW")
-            + record.field
-            + line.slice(A02_FIELD_END);
-    });
-
-    if (matchedCnssNumbers.size !== payrollByCnss.size) {
-        throw new Error("BDS_PAYROLL_EMPLOYEE_NOT_IN_TEMPLATE");
+        if (!record) throw new Error(`BDS_PREESTABLISHED_EMPLOYEE_MISSING:${cnss}`);
+        preEstablished.push(calculateSummary(record, source, context, "B02"));
     }
-
-    let grossTotal = 0n;
-    let amoTotal = 0n;
-    for (const line of updatedLines) {
-        if (line.slice(0, 3) !== "A02") continue;
-        grossTotal += parseTemplateAmount(line.slice(79, 91));
-        amoTotal += parseTemplateAmount(line.slice(91, 103));
-    }
-
-    const footerIndex = updatedLines.findIndex(line => line.slice(0, 3) === "A03");
-    const updatedA02Count = updatedLines.filter(line => line.slice(0, 3) === "A02").length;
-    const footer = originalFooter.slice(0, 18)
-        + formatDigits(updatedA02Count, 6, "BDS_EMPLOYEE_COUNT_OVERFLOW")
-        + formatDigits(grossTotal, 14)
-        + formatDigits(amoTotal, 14);
-    updatedLines[footerIndex] = footer;
-
-    return updatedLines.join("\r\n") + (hasTrailingLineBreak ? "\r\n" : "");
+    preEstablished.sort((a, b) => a.cnss_immatriculation.localeCompare(b.cnss_immatriculation));
+    const entrants = [...payrollByCnss.values()]
+        .filter(record => !knownCnss.has(String(record.cnss_immatriculation)))
+        .map(record => calculateSummary(record, null, context, "B04"))
+        .sort((a, b) => a.cnss_immatriculation.localeCompare(b.cnss_immatriculation));
+    const lines = [
+        buildB00(template.b00),
+        buildB01(template.b01),
+        ...preEstablished.map(record => buildB02(record, template.byCnss.get(record.cnss_immatriculation), context)),
+        buildB03(preEstablished, context),
+        ...(entrants.length ? entrants.map(record => buildB04(record, context)) : [emptyB04(context)]),
+        buildB05(entrants, context),
+        buildB06(preEstablished, entrants, context),
+    ];
+    if (lines.some(line => line.length !== RECORD_LENGTH)) throw new Error("INVALID_BDS_RECORD_LENGTH");
+    return lines.join("\r\n") + "\r\n";
 }

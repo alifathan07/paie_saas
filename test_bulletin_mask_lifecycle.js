@@ -16,7 +16,6 @@ const employee = {
     id: 7,
     companyId: 3,
     blocageSaisiePaie: true,
-    actif: true,
     baseSalary: 5000,
     dateEmbauche: new Date("2020-01-01"),
     nbPersonacharge: 0,
@@ -71,6 +70,8 @@ mock(prisma.payslip, "findMany", async ({ where }) => {
     }
     return [];
 });
+mock(prisma.bulletinMask, "findMany", async () => []);
+mock(prisma.bulletinMask, "deleteMany", async () => ({ count: 0 }));
 mock(prisma.payrollConfig, "findFirst", async () => null);
 mock(prisma.payslip, "update", async ({ data }) => {
     const id = data.month === blockedHoursDraft.month ? blockedHoursDraft.id : blockedDraft.id;

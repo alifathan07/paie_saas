@@ -64,7 +64,7 @@ function renderBdsPage(req, res, options = {}) {
 
 function hasFixedWidthBdsRecords(template) {
     const lines = template.split(/\r\n|\n|\r/);
-    const records = lines.filter(line => ["A00", "A01", "A02"].includes(line.slice(0, 3)));
+    const records = lines.filter(line => ["A00", "A01", "A02", "B00", "B01", "B02"].includes(line.slice(0, 3)));
     return records.length > 0 && records.every(line => line.length === 260);
 }
 
@@ -81,22 +81,29 @@ function decodeBdsTemplate(buffer) {
 const BDS_ERROR_MESSAGES = {
     INVALID_BDS_TEMPLATE_FILE: "Sélectionnez un fichier .txt préétabli téléchargé depuis Damancom.",
     INVALID_BDS_TEMPLATE: "Le fichier préétabli est vide ou invalide.",
-    INVALID_BDS_FOOTER: "Le fichier préétabli doit contenir une ligne A03 valide.",
-    INVALID_BDS_HEADERS: "Le fichier préétabli doit contenir une ligne A00 et une ligne A01.",
-    INVALID_BDS_RECORD_LENGTH: "Chaque ligne A00, A01 et A02 doit contenir exactement 260 caractères.",
-    INVALID_BDS_TEMPLATE_CNSS_NUMBER: "Un numéro CNSS de la ligne A02 n'est pas valide.",
+    INVALID_BDS_FOOTER: "Le fichier préétabli doit contenir une structure CNSS valide.",
+    INVALID_BDS_HEADERS: "Le fichier préétabli doit contenir les en-têtes B00/A00 et B01/A01.",
+    INVALID_BDS_RECORD_LENGTH: "Chaque ligne B00 à B06 doit contenir exactement 260 caractères.",
+    INVALID_BDS_TEMPLATE_CNSS_NUMBER: "Un numéro CNSS d'une ligne B02/A02 n'est pas valide.",
     DUPLICATE_BDS_TEMPLATE_CNSS_NUMBER: "Le fichier préétabli contient un numéro CNSS en double.",
     INVALID_BDS_TEMPLATE_AMOUNT: "Un montant déjà présent dans le fichier préétabli n'est pas numérique.",
     INVALID_BDS_PAYROLL_DATA: "Les données de paie du mois sont invalides.",
     INVALID_BDS_PAYROLL_RECORD: "Une donnée de paie est invalide.",
     INVALID_BDS_CNSS_NUMBER: "Un numéro d'immatriculation CNSS n'est pas valide.",
+    INVALID_BDS_AFFILIATION: "Le numéro d'affiliation CNSS doit contenir 7 chiffres.",
+    INVALID_BDS_PERIOD: "La période BDS doit être au format AAAAMM.",
+    INVALID_BDS_NUMERIC_FIELD: "Un champ numérique BDS est invalide.",
+    BDS_CAPPED_SALARY_EXCEEDS_REAL: "Le salaire plafonné ne peut pas dépasser le salaire réel.",
+    INVALID_BDS_SITUATION_VALUES: "Pour CS/MS, les jours et salaires doivent être nuls.",
+    BDS_TEMPLATE_PERIOD_MISMATCH: "La période du fichier préétabli ne correspond pas à la période sélectionnée.",
+    BDS_PREESTABLISHED_EMPLOYEE_MISSING: "Un salarié du préétabli est absent des bulletins de la période.",
     DUPLICATE_BDS_PAYROLL_CNSS_NUMBER: "Plusieurs bulletins utilisent le même numéro CNSS.",
     INVALID_BDS_DAYS: "Les jours travaillés doivent être un nombre entier positif.",
     INVALID_BDS_AMOUNT: "Un salaire contient un montant invalide.",
     BDS_AMOUNT_OVERFLOW: "Un salaire dépasse la capacité du format CNSS.",
     BDS_FIELD_OVERFLOW: "Un total dépasse la capacité du format CNSS.",
     BDS_EMPLOYEE_COUNT_OVERFLOW: "L'effectif dépasse la capacité du format CNSS.",
-    INVALID_BDS_SITUATION_CODE: "Un code de situation doit être N, E, S ou M.",
+    INVALID_BDS_SITUATION_CODE: "Le code situation doit être vide, SO, DE, IT, IL, AT, CS, MS ou MP.",
     INVALID_BDS_SITUATION_DATE: "La date de situation doit être une date valide au format AAAAMMJJ.",
     BDS_PAYROLL_EMPLOYEE_NOT_IN_TEMPLATE: "Un salarié du mois est absent du fichier préétabli. Téléchargez le fichier Damancom actualisé.",
     COMPANY_NOT_FOUND: "La société active est introuvable.",
@@ -134,14 +141,16 @@ editions.post("/bds", (req, res, next) => {
 
     const { template, encoding } = decodeBdsTemplate(req.file.buffer);
     try {
+        const companyId = await resolveCompanyId(req);
         const output = await generateMonthlyCnssBdsFile(
-            await resolveCompanyId(req),
+            companyId,
             period.month,
             period.year,
             template,
         );
+        const company = await prisma.company.findUnique({ where: { id: companyId }, select: { numeroAffiliationCnss: true } });
         res.setHeader("Content-Type", `text/plain; charset=${encoding === "utf8" ? "utf-8" : "windows-1252"}`);
-        res.setHeader("Content-Disposition", `attachment; filename="BDS_CNSS_${period.year}${String(period.month).padStart(2, "0")}.txt"`);
+        res.setHeader("Content-Disposition", `attachment; filename="DS_${company.numeroAffiliationCnss}_${period.year}${String(period.month).padStart(2, "0")}.txt"`);
         return res.send(encoding === "utf8" ? output : Buffer.from(output, "latin1"));
     } catch (error) {
         const message = String(error?.message || "");

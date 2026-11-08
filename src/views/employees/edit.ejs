@@ -41,7 +41,7 @@
                 <% (employees || []).forEach(item => { %>
                     <% const isCurrent = Number(item.id) === Number(employee.id); %>
                     <a class="bulletin-employee-link <%= isCurrent ? 'is-current' : '' %>" href="/employees/<%= item.id %>/edit?tab=general" data-search="<%= `${item.nomComplet} ${item.matricule || ''}`.toLowerCase() %>" role="listitem" aria-current="<%= isCurrent ? 'page' : 'false' %>">
-                        <span class="bulletin-employee-dot <%= item.actif ? 'is-validated' : 'is-draft' %>" title="<%= item.actif ? 'Actif' : 'Inactif' %>" aria-label="<%= item.actif ? 'Actif' : 'Inactif' %>"></span>
+                        <span class="bulletin-employee-dot <%= item.blocageSaisiePaie ? 'is-draft' : 'is-validated' %>" title="<%= item.blocageSaisiePaie ? 'Bloqué' : 'Actif' %>" aria-label="<%= item.blocageSaisiePaie ? 'Bloqué' : 'Actif' %>"></span>
                         <span class="bulletin-employee-copy">
                             <strong><%= item.nomComplet %></strong>
                             <small><%= item.matricule || 'Sans matricule' %></small>
@@ -149,6 +149,11 @@
                 <input type="date" id="dateEmbauche" name="dateEmbauche" class="form-input" required value="<%= new Date(employee.dateEmbauche).toISOString().split('T')[0] %>">
             </div>
             <div class="form-group">
+                <label for="dateSortieDisplay">Date de sortie</label>
+                <input type="date" id="dateSortieDisplay" class="form-input" readonly value="<%= employee.dateSortie ? new Date(employee.dateSortie).toISOString().split('T')[0] : '' %>">
+                <small id="motifSortieDisplay" style="color:var(--color-text-subtle);"><%= employee.motifSortie ? `Motif : ${employee.motifSortie}` : '' %></small>
+            </div>
+            <div class="form-group">
                 <label for="categoryId">Catégorie <a href="/employees/categories" target="_blank" style="font-size: 12px; margin-left: 6px;">Gérer</a></label>
                 <div class="category-select-with-add"><select id="categoryId" name="categoryId" class="form-input" required><option value="">Sélectionner une catégorie</option><% (categories || []).forEach(function(category) { %><option value="<%= category.id %>" <%= employee.categoryId === category.id ? 'selected' : '' %>><%= category.name %></option><% }); %></select><button type="button" class="btn-secondary category-add-button" data-category-add aria-label="Ajouter une catégorie">+</button></div>
                 <div id="category-modal" class="app-modal" hidden><div class="app-modal-backdrop" data-close-category></div><div class="app-modal-card category-modal-card" role="dialog" aria-modal="true" aria-labelledby="category-modal-title"><div class="app-modal-header"><div><h2 id="category-modal-title">Ajouter une catégorie</h2><p>Créez une catégorie disponible pour les employés.</p></div><button type="button" class="modal-close" data-close-category>×</button></div><div class="category-modal-field"><label for="new-category-name">Nom de la catégorie</label><input id="new-category-name" type="text" class="form-input" data-category-input maxlength="191" placeholder="Ex. Administration"></div><div class="app-modal-actions"><button type="button" class="btn-secondary" data-close-category>Annuler</button><button type="button" class="btn-primary" data-category-save>Ajouter</button></div></div></div>
@@ -178,18 +183,6 @@
             </div>
         </div>
         <div class="form-grid-3">
-            <div class="form-group">
-                <label for="dateSortie">Date de sortie</label>
-                <input type="date" id="dateSortie" name="dateSortie" class="form-input" value="<%= employee.dateSortie ? new Date(employee.dateSortie).toISOString().split('T')[0] : '' %>">
-            </div>
-            <div class="form-group">
-                <label for="motifSortie">Motif de sortie</label>
-                <input type="text" id="motifSortie" name="motifSortie" class="form-input" maxlength="191" value="<%= employee.motifSortie || '' %>" placeholder="Ex. Démission, retraite, fin de contrat">
-            </div>
-            <div class="form-group" style="display:flex; align-items:center; gap:10px; padding-top:22px;">
-                <input type="checkbox" id="actif" name="actif" value="1" <%= employee.actif ? 'checked' : '' %>>
-                <label for="actif" style="margin:0;">Salarié actif</label>
-            </div>
         </div>
         <div class="form-grid-2">
             <div class="form-group">
@@ -240,16 +233,11 @@
                 <input type="checkbox" id="blocageSaisiePaie" name="blocageSaisiePaie" value="1" <%= employee.blocageSaisiePaie ? 'checked' : '' %>>
                 <label for="blocageSaisiePaie" style="margin:0;">Bloquer la saisie de paie</label>
             </div>
-            <div class="form-group">
-                <label for="blocageSaisiePaieMotif">Motif CNSS si bloqué</label>
-                <select id="blocageSaisiePaieMotif" name="blocageSaisiePaieMotif" class="form-input">
-                    <option value="">Sélectionner un motif</option>
-                    <% const bdsMotifs = { CS: 'Congé sans solde', MS: 'Maintien sans salaire', IL: 'Maladie', AT: 'Accident de travail', IT: 'Maternité', MP: 'Maladie professionnelle' }; %>
-                    <% Object.entries(bdsMotifs).forEach(([code, label]) => { %>
-                        <option value="<%= code %>" <%= employee.blocageSaisiePaieMotif === code ? 'selected' : '' %>><%= code %> — <%= label %></option>
-                    <% }); %>
-                </select>
-                <small>Le blocage est interne ; le motif détermine la situation BDS et le salarié reste dans le fichier.</small>
+            <input type="hidden" id="blocageSaisiePaieMotifValue" name="blocageSaisiePaieMotif" value="<%= employee.blocageSaisiePaieMotif || '' %>">
+            <input type="hidden" id="dateSortieValue" name="dateSortie" value="<%= employee.dateSortie ? new Date(employee.dateSortie).toISOString().split('T')[0] : '' %>">
+            <input type="hidden" id="motifSortieValue" name="motifSortie" value="<%= employee.motifSortie || '' %>">
+            <div class="form-group" style="padding-top:22px;">
+                <small id="payroll-block-summary" style="color:var(--color-text-subtle);"><%= employee.blocageSaisiePaie ? `Motif CNSS : ${employee.blocageSaisiePaieMotif || 'À sélectionner'}` : 'Aucun blocage de saisie' %></small>
             </div>
         </div>
         <div class="form-grid-3">
@@ -349,6 +337,42 @@
         <button type="submit" class="btn-primary" style="min-width: 200px;">Mettre à jour le salarié</button>
     </div>
 </form>
+
+<div id="payroll-block-modal" class="app-modal" hidden>
+    <div class="app-modal-backdrop" data-close-payroll-block></div>
+    <div class="app-modal-card" role="dialog" aria-modal="true" aria-labelledby="payroll-block-title">
+        <div class="app-modal-header">
+            <div><h2 id="payroll-block-title">Bloquer la saisie de paie</h2><p>Sélectionnez la situation CNSS à déclarer pour ce salarié.</p></div>
+            <button type="button" class="modal-close" data-close-payroll-block aria-label="Fermer">×</button>
+        </div>
+        <div class="form-group">
+            <label for="blocageSaisiePaieMotif">Motif CNSS si bloqué</label>
+            <select id="blocageSaisiePaieMotifModal" class="form-input">
+                <option value="">Sélectionner un motif</option>
+                <% const bdsMotifs = { CS: 'Congé sans solde', MS: 'Maintien sans salaire', IL: 'Maladie', AT: 'Accident de travail', IT: 'Maternité', MP: 'Maladie professionnelle', SO: 'Sortie' }; %>
+                <% Object.entries(bdsMotifs).forEach(([code, label]) => { %>
+                    <option value="<%= code %>" <%= employee.blocageSaisiePaieMotif === code ? 'selected' : '' %>><%= code %> — <%= label %></option>
+                <% }); %>
+            </select>
+        </div>
+        <div class="app-modal-actions"><button type="button" class="btn-secondary" data-cancel-payroll-block>Annuler</button><button type="button" class="btn-primary" id="confirm-payroll-block">Continuer</button></div>
+    </div>
+</div>
+
+<div id="payroll-exit-modal" class="app-modal" hidden>
+    <div class="app-modal-backdrop" data-close-payroll-exit></div>
+    <div class="app-modal-card" role="dialog" aria-modal="true" aria-labelledby="payroll-exit-title">
+        <div class="app-modal-header">
+            <div><h2 id="payroll-exit-title">Sortie du salarié</h2><p>La date et le motif de sortie sont obligatoires pour le code SO.</p></div>
+            <button type="button" class="modal-close" data-close-payroll-exit aria-label="Fermer">×</button>
+        </div>
+        <div class="form-grid-2">
+            <div class="form-group"><label for="dateSortieModal">Date de sortie</label><input type="date" id="dateSortieModal" class="form-input" required value="<%= employee.dateSortie ? new Date(employee.dateSortie).toISOString().split('T')[0] : '' %>"></div>
+            <div class="form-group"><label for="motifSortieModal">Motif de sortie</label><input type="text" id="motifSortieModal" class="form-input" maxlength="191" required value="<%= employee.motifSortie || '' %>" placeholder="Ex. Démission, retraite, fin de contrat"></div>
+        </div>
+        <div class="app-modal-actions"><button type="button" class="btn-secondary" data-cancel-payroll-exit>Annuler</button><button type="button" class="btn-primary" id="confirm-payroll-exit">Valider la sortie</button></div>
+    </div>
+</div>
     </div>
 </div>
 
@@ -597,9 +621,109 @@ functionSelect.add(new Option(result.name, result.id, true, true));
 });
 
 const payrollBlockCheckbox = document.getElementById('blocageSaisiePaie');
-const payrollBlockReasonGroup = document.getElementById('blocageSaisiePaieMotifGroup');
+const payrollBlockModal = document.getElementById('payroll-block-modal');
+const payrollExitModal = document.getElementById('payroll-exit-modal');
+const payrollBlockReason = document.getElementById('blocageSaisiePaieMotifModal');
+const payrollBlockReasonValue = document.getElementById('blocageSaisiePaieMotifValue');
+const payrollExitDate = document.getElementById('dateSortieModal');
+const payrollExitReason = document.getElementById('motifSortieModal');
+const payrollExitDateValue = document.getElementById('dateSortieValue');
+const payrollExitReasonValue = document.getElementById('motifSortieValue');
+const payrollExitDateDisplay = document.getElementById('dateSortieDisplay');
+const payrollExitReasonDisplay = document.getElementById('motifSortieDisplay');
+const payrollBlockSummary = document.getElementById('payroll-block-summary');
+const savePayrollBlock = async (blocked, reason = '', dateSortie = '', motifSortie = '') => {
+    const response = await fetch('/employees/<%= employee.id %>/payroll-block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: new URLSearchParams({ blocked: String(blocked), reason, dateSortie, motifSortie }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Impossible d'enregistrer le blocage.");
+    return result;
+};
+const openPayrollBlockModal = () => {
+    payrollBlockReason.value = payrollBlockReasonValue.value;
+    payrollBlockModal.hidden = false;
+};
+const closePayrollBlockModal = () => { payrollBlockModal.hidden = true; };
+const closePayrollExitModal = () => { payrollExitModal.hidden = true; };
 payrollBlockCheckbox?.addEventListener('change', () => {
-    if (payrollBlockReasonGroup) payrollBlockReasonGroup.style.display = payrollBlockCheckbox.checked ? 'block' : 'none';
+    if (payrollBlockCheckbox.checked) return openPayrollBlockModal();
+    const previousReason = payrollBlockReasonValue.value;
+    const previousDate = payrollExitDateValue.value;
+    const previousExitReason = payrollExitReasonValue.value;
+    payrollBlockReasonValue.value = '';
+    payrollExitDateValue.value = '';
+    payrollExitReasonValue.value = '';
+    payrollExitDateDisplay.value = '';
+    payrollExitReasonDisplay.textContent = '';
+    payrollBlockSummary.textContent = 'Aucun blocage de saisie';
+    savePayrollBlock(false).catch(error => {
+        payrollBlockCheckbox.checked = true;
+        payrollBlockReasonValue.value = previousReason;
+        payrollExitDateValue.value = previousDate;
+        payrollExitReasonValue.value = previousExitReason;
+        payrollExitDateDisplay.value = previousDate;
+        payrollExitReasonDisplay.textContent = previousExitReason ? `Motif : ${previousExitReason}` : '';
+        payrollBlockSummary.textContent = `Motif CNSS : ${previousReason || 'À sélectionner'}`;
+        alert(error.message);
+    });
+});
+document.querySelectorAll('[data-close-payroll-block], [data-cancel-payroll-block]').forEach(button => button.addEventListener('click', () => {
+    if (!payrollBlockReasonValue.value) payrollBlockCheckbox.checked = false;
+    closePayrollBlockModal();
+}));
+document.getElementById('confirm-payroll-block')?.addEventListener('click', async () => {
+    if (!payrollBlockReason.value) return payrollBlockReason.focus();
+    const reason = payrollBlockReason.value;
+    if (payrollBlockReason.value !== 'SO') {
+        payrollExitDateValue.value = '';
+        payrollExitReasonValue.value = '';
+    }
+    if (reason === 'SO') {
+        closePayrollBlockModal();
+        payrollExitDate.value = payrollExitDateValue.value;
+        payrollExitReason.value = payrollExitReasonValue.value;
+        payrollExitModal.hidden = false;
+        return;
+    }
+    try {
+        await savePayrollBlock(true, reason);
+        payrollBlockReasonValue.value = reason;
+        payrollExitDateDisplay.value = '';
+        payrollExitReasonDisplay.textContent = '';
+        payrollBlockSummary.textContent = `Motif CNSS : ${reason}`;
+        closePayrollBlockModal();
+    } catch (error) {
+        alert(error.message);
+    }
+});
+document.querySelectorAll('[data-close-payroll-exit], [data-cancel-payroll-exit]').forEach(button => button.addEventListener('click', () => {
+    closePayrollExitModal();
+    payrollBlockCheckbox.checked = false;
+    payrollBlockReasonValue.value = '';
+    payrollBlockReason.value = '';
+    payrollBlockSummary.textContent = 'Aucun blocage de saisie';
+}));
+document.getElementById('confirm-payroll-exit')?.addEventListener('click', async () => {
+    if (!payrollExitDate.value || !payrollExitReason.value.trim()) {
+        if (!payrollExitDate.value) payrollExitDate.focus();
+        else payrollExitReason.focus();
+        return;
+    }
+    try {
+        await savePayrollBlock(true, 'SO', payrollExitDate.value, payrollExitReason.value.trim());
+        payrollBlockReasonValue.value = 'SO';
+        payrollExitDateValue.value = payrollExitDate.value;
+        payrollExitReasonValue.value = payrollExitReason.value.trim();
+        payrollExitDateDisplay.value = payrollExitDate.value;
+        payrollExitReasonDisplay.textContent = `Motif : ${payrollExitReason.value.trim()}`;
+        payrollBlockSummary.textContent = 'Motif CNSS : SO — Sortie';
+        closePayrollExitModal();
+    } catch (error) {
+        alert(error.message);
+    }
 });
 
 </script>

@@ -9,7 +9,6 @@ const employee = {
     baseSalary: 12000,
     dateEmbauche: new Date("2020-01-01"),
     nbPersonacharge: 0,
-    actif: true,
     blocageSaisiePaie: false,
     company: {
         workingTimeMode: "DAYS",

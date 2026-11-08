@@ -1033,7 +1033,6 @@ export const listBulletins = async (req, res) => {
                 categoryId: true,
                 ...(chantiersEnabled ? { chantierId: true, chantierNom: true } : {}),
                 blocageSaisiePaie: true,
-                actif: true,
                 baseSalary: true,
                 indemniteRepresentationName: true,
                 indemniteRepresentationRate: true,
@@ -1136,7 +1135,7 @@ export const listBulletins = async (req, res) => {
         const mappedEmployees = dbEmployees.map(emp => {
             const payslip = emp.payslips[0] || null;
             let status = payslip ? payslip.status.toLowerCase() : "none";
-            if (emp.blocageSaisiePaie || !emp.actif) {
+            if (emp.blocageSaisiePaie) {
                 status = "blocked";
             }
 
@@ -1231,7 +1230,6 @@ export const listBulletins = async (req, res) => {
                 baseSalary: payslip ? Number(payslip.baseSalary) : Number(emp.baseSalary),
                 dateEmbauche: emp.dateEmbauche,
                 blocageSaisiePaie: emp.blocageSaisiePaie,
-                actif: emp.actif,
                 // The overview follows the company's configured input mode.
                 // Do not expose the other unit from a saved/validated snapshot.
                 workingTimeMode: emp.company?.workingTimeMode || payslip?.workingTimeMode || "DAYS",
@@ -1374,7 +1372,7 @@ export const validateBulkBulletins = async (req, res) => {
             where: {
                 month,
                 year,
-                employee: { companyId, actif: true },
+                employee: { companyId, blocageSaisiePaie: false },
                 status: { in: [BULLETIN_STATUS.DRAFT, BULLETIN_STATUS.GENERATED] },
             },
             select: { workedDays: true, paidLeaveDays: true, congeNaissanceDays: true, joursFeries: true, standardMonthlyDays: true },
@@ -1386,7 +1384,7 @@ export const validateBulkBulletins = async (req, res) => {
             where: {
                 month,
                 year,
-                employee: { companyId, actif: true },
+                employee: { companyId, blocageSaisiePaie: false },
                 status: { in: [BULLETIN_STATUS.DRAFT, BULLETIN_STATUS.GENERATED] },
             },
             data: {
@@ -1490,7 +1488,7 @@ export const generateBulkBulletins = async (req, res) => {
 
         // Include blocked employees: the engine generates their zero payroll.
         const eligibleEmployees = await prisma.employee.findMany({
-            where: { companyId, actif: true },
+            where: { companyId },
             include: {
                 company: true,
                 bonuses: {
@@ -1553,7 +1551,7 @@ export const generateBulletin = async (req, res) => {
             bonuses: { include: { bonus: true } }
         });
         if (!emp) return res.status(404).redirect("/bulletins");
-        if (!emp.actif) return res.status(400).send("Impossible de générer le bulletin : cet employé est inactif.");
+        if (emp.blocageSaisiePaie) return res.status(400).send("Impossible de générer le bulletin : la saisie est bloquée pour cet employé.");
 
         // Check if existing bulletin is already VALIDATED
         const existing = await prisma.payslip.findFirst({
@@ -1600,8 +1598,8 @@ export const generateBulletin = async (req, res) => {
             baseSalary: req.body.baseSalary || req.query.baseSalary,
             dependents: req.body.dependents || req.query.dependents,
             ...resolveWorkingTimeForPayslip(emp, existing, {
-                workedDays: emp.blocageSaisiePaie || !emp.actif ? 0 : (req.body.workedDays ?? req.query.workedDays),
-                workedHours: emp.blocageSaisiePaie || !emp.actif ? 0 : (req.body.workedHours ?? req.query.workedHours),
+                workedDays: emp.blocageSaisiePaie ? 0 : (req.body.workedDays ?? req.query.workedDays),
+                workedHours: emp.blocageSaisiePaie ? 0 : (req.body.workedHours ?? req.query.workedHours),
             }),
             heuresSup25: req.body.heuresSup25 || req.query.heuresSup25 || 0,
             heuresSup50: req.body.heuresSup50 || req.query.heuresSup50 || 0,
@@ -1639,7 +1637,7 @@ export const generateBulletin = async (req, res) => {
         }
 
         // Keep the employee's contractual salary aligned with the latest payroll input.
-        if (!emp.blocageSaisiePaie && emp.actif) {
+        if (!emp.blocageSaisiePaie) {
             await prisma.employee.update({
                 where: { id: empId },
                 data: { baseSalary: submittedBaseSalary },
@@ -1735,7 +1733,7 @@ export const addMonthlyPrime = async (req, res) => {
             bonuses: { include: { bonus: true } }
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée pour cet employé." });
+        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée pour cet employé." });
         let taxableDefinition = null;
         if (rubriqueImposableId) {
             taxableDefinition = await prisma.rubriqueImposable.findFirst({ where: { id: rubriqueImposableId, companyId: emp.companyId, active: true } });
@@ -1854,7 +1852,7 @@ export const deleteMonthlyPrime = async (req, res) => {
             .filter(b => (b.bonus ? b.bonus.taxable : b.taxable))
             .map(b => `${String(b.bonus ? b.bonus.name : b.name || '').toLowerCase()}|${Number(b.amount)}`));
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
+        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -1926,7 +1924,7 @@ export const addMonthlyIndemnity = async (req, res) => {
 
         const emp = await getActiveEmployee(req, empId, { bonuses: { include: { bonus: true } } });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
+        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -2051,7 +2049,7 @@ export const updateMonthlyIndemnity = async (req, res) => {
             bonuses: { include: { bonus: true } },
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
+        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -2182,7 +2180,7 @@ export const deleteMonthlyIndemnity = async (req, res) => {
             bonuses: { include: { bonus: true } },
         });
         if (!emp) return res.status(404).json({ ok: false, error: "Employé introuvable." });
-        if (emp.blocageSaisiePaie || !emp.actif) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
+        if (emp.blocageSaisiePaie) return res.status(400).json({ ok: false, error: "La saisie de paie est bloquée." });
 
         const existing = await prisma.payslip.findUnique({
             where: { employeeId_month_year: { employeeId: empId, month, year } },
@@ -2625,8 +2623,8 @@ export const calculateLive = async (req, res) => {
                 workingTimeMode: emp.company?.workingTimeMode || "DAYS",
                 standardMonthlyDays: emp.company?.standardMonthlyDays || DEFAULT_STANDARD_MONTHLY_DAYS,
                 standardMonthlyHours: emp.company?.standardMonthlyHours || DEFAULT_STANDARD_MONTHLY_HOURS,
-                workedDays: emp.blocageSaisiePaie || !emp.actif ? 0 : (emp.company?.workingTimeMode === "HOURS" ? undefined : req.query.workedDays),
-                workedHours: emp.blocageSaisiePaie || !emp.actif ? 0 : (emp.company?.workingTimeMode === "HOURS" ? req.query.workedHours : undefined),
+                workedDays: emp.blocageSaisiePaie ? 0 : (emp.company?.workingTimeMode === "HOURS" ? undefined : req.query.workedDays),
+                workedHours: emp.blocageSaisiePaie ? 0 : (emp.company?.workingTimeMode === "HOURS" ? req.query.workedHours : undefined),
             }),
             heuresSup25: Math.max(0, Number(req.query.heuresSup25) || 0),
             heuresSup50: Math.max(0, Number(req.query.heuresSup50) || 0),
@@ -2797,7 +2795,7 @@ export const showBulletin = async (req, res) => {
         const previousEmployee = await prisma.employee.findFirst({
             where: {
                 companyId: emp.companyId,
-                actif: true,
+                blocageSaisiePaie: false,
                 OR: [
                     { nomComplet: { lt: emp.nomComplet } },
                     { nomComplet: emp.nomComplet, id: { lt: emp.id } },
@@ -2812,7 +2810,7 @@ export const showBulletin = async (req, res) => {
         const nextEmployee = await prisma.employee.findFirst({
             where: {
                 companyId: emp.companyId,
-                actif: true,
+                blocageSaisiePaie: false,
                 OR: [
                     { nomComplet: { gt: emp.nomComplet } },
                     { nomComplet: emp.nomComplet, id: { gt: emp.id } },
@@ -2830,7 +2828,7 @@ export const showBulletin = async (req, res) => {
             const periodEmployees = await prisma.employee.findMany({
                 where: {
                     companyId: emp.companyId,
-                    OR: [{ actif: true }, { id: emp.id }],
+                    OR: [{ blocageSaisiePaie: false }, { id: emp.id }],
                 },
                 orderBy: [{ nomComplet: 'asc' }, { id: 'asc' }],
                 select: {

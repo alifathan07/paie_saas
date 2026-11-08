@@ -205,7 +205,6 @@ model Employee {
   agence       String?
   rib          String?      @unique
 
-  actif                       Boolean         @default(true)
   indemniteRepresentationName String?
   indemniteRepresentationRate Decimal?        @db.Decimal(6, 4)
   bulletinMasque              Boolean         @default(false)

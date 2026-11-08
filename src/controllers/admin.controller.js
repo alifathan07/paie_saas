@@ -181,7 +181,7 @@ export const adminCompanyDetails = async (req, res) => {
         where: { id: companyId },
         include: {
             userCompanies: { include: { user: { select: { id: true, name: true, email: true, isAdmin: true, isBlocked: true } } } },
-            employees: { orderBy: { createdAt: "desc" }, take: 30, select: { id: true, nomComplet: true, matricule: true, actif: true, createdAt: true } },
+            employees: { orderBy: { createdAt: "desc" }, take: 30, select: { id: true, nomComplet: true, matricule: true, blocageSaisiePaie: true, createdAt: true } },
             rubriqueBases: { orderBy: [{ key: "asc" }, { id: "asc" }] },
             rubriqueRetenus: { orderBy: [{ key: "asc" }, { id: "asc" }] },
             rubriquesImposables: { orderBy: [{ name: "asc" }, { id: "asc" }] },

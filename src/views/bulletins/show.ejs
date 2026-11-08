@@ -967,7 +967,7 @@
     const standardMonthlyDays = Number(values.standardMonthlyDays || emp.company?.standardMonthlyDays || 26);
     const standardMonthlyHours = Number(values.standardMonthlyHours || emp.company?.standardMonthlyHours || 191);
     const bulletinStatus = bulletin?.status || 'draft';
-    const payrollBlocked = Boolean(!emp.actif || emp.blocageSaisiePaie);
+    const payrollBlocked = Boolean(emp.blocageSaisiePaie);
     const locked = payrollBlocked || Boolean(bulletin && ['validated', 'closed'].includes(bulletinStatus));
     const closed = bulletinStatus === 'closed';
     const canManageIndemnity = !payrollBlocked && (!bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus));
@@ -981,7 +981,7 @@
         validated: 'Validé',
         closed: 'Clôturé',
     }[bulletinStatus] || bulletinStatus;
-    const employeeStatusLabel = !emp.actif ? 'Inactif · Bloqué' : statusLabel;
+    const employeeStatusLabel = emp.blocageSaisiePaie ? 'Bloqué' : statusLabel;
     const employeeName = emp.nomComplet;
     const dateValue = value => value ? new Date(value).toLocaleDateString('fr-MA') : '—';
     const money = value => `${fmt(value)} DH`;
@@ -1110,8 +1110,8 @@
     data-locked="<%= locked %>">
     <% if (month && year) {
     %>
-        <% if (!emp.actif) { %>
-            <p class="bulletin-status" role="status" style="border-color:#f87171;border-left-color:#b42318;background:#fff1f2;color:#991b1b;"><strong>Statut : Inactif · Bloqué</strong><span style="color:#991b1b;">Cet employé est inactif. Le bulletin est affiché en lecture seule.</span></p>
+        <% if (emp.blocageSaisiePaie) { %>
+            <p class="bulletin-status" role="status" style="border-color:#f87171;border-left-color:#b42318;background:#fff1f2;color:#991b1b;"><strong>Statut : Bloqué</strong><span style="color:#991b1b;">La saisie de paie est bloquée. Le bulletin est affiché en lecture seule.</span></p>
         <% } else if (!bulletin) { %>
             <p class="bulletin-status" role="status">Aucun bulletin enregistré pour cette période. Les montants affichés sont un aperçu calculé avec les données actuelles.</p>
         <% } %>

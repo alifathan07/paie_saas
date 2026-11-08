@@ -34,8 +34,8 @@
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">Information Contractuelle & Civil</h2>
-                    <span class="badge <%= employee.actif ? 'badge-actif' : 'badge-draft' %>">
-                        <%= employee.actif ? 'Actif' : 'Inactif' %>
+                <span class="badge <%= employee.blocageSaisiePaie ? 'badge-draft' : 'badge-actif' %>">
+                        <%= employee.blocageSaisiePaie ? 'Bloqué' : 'Actif' %>
                     </span>
                 </div>
 
@@ -58,6 +58,13 @@
                             <%= new Date(employee.dateEmbauche).toLocaleDateString('fr-FR') %>
                         </strong>
                     </div>
+                    <% if (employee.dateSortie) { %>
+                        <div>
+                            <span style="color: var(--color-text-subtle); display: block;">Date de sortie:</span>
+                            <strong><%= new Date(employee.dateSortie).toLocaleDateString('fr-FR') %></strong>
+                            <% if (employee.motifSortie) { %><small style="display:block; color:var(--color-text-subtle);">Motif: <%= employee.motifSortie %></small><% } %>
+                        </div>
+                    <% } %>
                     <div>
                         <span style="color: var(--color-text-subtle); display: block;">Ancienneté (Calculée):</span>
                         <strong>

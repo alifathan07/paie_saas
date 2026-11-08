@@ -22,6 +22,40 @@ const cleanRepresentationRate = rate => {
     return value / 100;
 };
 
+const BDS_BLOCK_REASONS = new Set(['CS', 'MS', 'IL', 'AT', 'IT', 'MP', 'SO']);
+
+const validatePayrollBlockData = ({ blocked, reason, dateSortie, motifSortie }) => {
+    if (!blocked) return;
+    const cleanReason = String(reason || '').trim().toUpperCase();
+    if (!BDS_BLOCK_REASONS.has(cleanReason)) throw new Error('INVALID_PAYROLL_BLOCK_REASON');
+    if (cleanReason !== 'SO') return;
+    const cleanDate = String(dateSortie || '').trim();
+    const parsedDate = new Date(cleanDate);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate) || Number.isNaN(parsedDate.getTime())
+        || parsedDate.toISOString().slice(0, 10) !== cleanDate) {
+        throw new Error('EXIT_DATE_REQUIRED_FOR_PAYROLL_BLOCK');
+    }
+    if (!String(motifSortie || '').trim()) throw new Error('EXIT_REASON_REQUIRED_FOR_PAYROLL_BLOCK');
+};
+
+async function clearOpenBulletinMasks(tx, employeeId) {
+    const [closedPayslips, masks] = await Promise.all([
+        tx.payslip.findMany({
+            where: { employeeId, status: 'CLOSED' },
+            select: { month: true, year: true },
+        }),
+        tx.bulletinMask.findMany({
+            where: { employeeId },
+            select: { id: true, month: true, year: true },
+        }),
+    ]);
+    const closedPeriods = new Set(closedPayslips.map(row => `${row.year}-${row.month}`));
+    const openMaskIds = masks
+        .filter(row => !closedPeriods.has(`${row.year}-${row.month}`))
+        .map(row => row.id);
+    if (openMaskIds.length) await tx.bulletinMask.deleteMany({ where: { id: { in: openMaskIds } } });
+}
+
 export const getEmployeeCategories = async (companyId) => {
     const cId = Number(companyId);
     if (!Number.isInteger(cId) || cId <= 0) throw new Error('NO_ACTIVE_COMPANY');
@@ -275,13 +309,14 @@ export const createEmployee = async (data) => {
         contratDateDebut, contratDateFin,
         categoryId, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
-        banque, agence, rib, actif, baseSalary, companyId, bonusList,
+        banque, agence, rib, baseSalary, companyId, bonusList,
         cimrRate, cimrReduitBaseImposable,
         indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie, blocageSaisiePaieMotif
     } = data;
 
     const targetCompanyId = Number(companyId);
     if (!Number.isInteger(targetCompanyId) || targetCompanyId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    validatePayrollBlockData({ blocked: Boolean(blocageSaisiePaie), reason: blocageSaisiePaieMotif, dateSortie, motifSortie });
     const chantiersEnabled = await getCompanyChantiersEnabled(targetCompanyId);
     const category = await getOrCreateEmployeeCategory(targetCompanyId, categoryId);
     const employeeFunction = await getOrCreateEmployeeFunction(targetCompanyId, functionId, fonction);
@@ -318,7 +353,6 @@ export const createEmployee = async (data) => {
             banque,
             agence,
             rib: rib === undefined || rib === null ? null : String(rib).trim() || null,
-            actif: actif === undefined ? true : Boolean(actif),
             baseSalary: Number(baseSalary || 0),
             cimrRate: cimrRate !== undefined && cimrRate !== null && cimrRate !== ''
                 ? Number(cimrRate)
@@ -349,7 +383,7 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         contratDateDebut, contratDateFin,
         categoryId, natureEmploi, situationFam, nbPersonacharge, nbEnfantCharge,
         adresse, ville, numeroCNSS, dateAffiliationCnss, modePaiement,
-        banque, agence, rib, actif, baseSalary, companyId, bonusList,
+        banque, agence, rib, baseSalary, companyId, bonusList,
         cimrRate, cimrReduitBaseImposable,
         indemniteRepresentationName, indemniteRepresentationRate, blocageSaisiePaie, blocageSaisiePaieMotif,
         replaceNonTaxableBonuses
@@ -368,9 +402,10 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
         : undefined;
     const existing = await prisma.employee.findFirst({
         where: { id: empId, companyId: targetCompanyId },
-        select: { companyId: true, blocageSaisiePaie: true }
+        select: { companyId: true, blocageSaisiePaie: true, blocageSaisiePaieMotif: true }
     });
     if (!existing) throw new Error('EMPLOYEE_NOT_FOUND');
+    validatePayrollBlockData({ blocked: Boolean(blocageSaisiePaie), reason: blocageSaisiePaieMotif, dateSortie, motifSortie });
     const isUnblockingPayroll = existing.blocageSaisiePaie
         && blocageSaisiePaie !== undefined
         && !Boolean(blocageSaisiePaie);
@@ -423,7 +458,6 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
             banque,
             agence,
             rib: rib === undefined ? undefined : (rib === null ? null : String(rib).trim() || null),
-            actif: actif !== undefined ? Boolean(actif) : undefined,
             baseSalary: baseSalary !== undefined ? Number(baseSalary) : undefined,
             cimrRate: cimrRate !== undefined
                 ? (cimrRate === '' || cimrRate === null ? null : Number(cimrRate))
@@ -457,10 +491,47 @@ export const updateEmployee = async (id, data, activeCompanyId) => {
                 bonuses: { include: { bonus: true } }
             }
         });
+        if (isUnblockingPayroll) await clearOpenBulletinMasks(tx, empId);
         // Employee edits affect only open bulletins. The refresh service limits
         // itself to DRAFT/GENERATED records, so validated and closed bulletins
         // remain immutable snapshots while the next bulletin uses new data.
         await refreshDraftPayslips(tx, updated, { restoreBlockedZeroWorkTime: isUnblockingPayroll });
+        return updated;
+    });
+};
+
+export const updateEmployeePayrollBlock = async (id, activeCompanyId, data) => {
+    const empId = Number(id);
+    const companyId = Number(activeCompanyId);
+    const blocked = Boolean(data.blocked);
+    const reason = String(data.reason || '').trim().toUpperCase();
+    const dateSortie = String(data.dateSortie || '').trim();
+    const motifSortie = String(data.motifSortie || '').trim();
+
+    if (!Number.isInteger(companyId) || companyId <= 0) throw new Error('NO_ACTIVE_COMPANY');
+    validatePayrollBlockData({ blocked, reason, dateSortie, motifSortie });
+
+    const existing = await prisma.employee.findFirst({
+        where: { id: empId, companyId },
+        select: { id: true, blocageSaisiePaieMotif: true },
+    });
+    if (!existing) throw new Error('EMPLOYEE_NOT_FOUND');
+
+    return prisma.$transaction(async tx => {
+        const updated = await tx.employee.update({
+            where: { id: existing.id },
+            data: {
+                blocageSaisiePaie: blocked,
+                blocageSaisiePaieMotif: blocked ? reason : null,
+                dateSortie: blocked && reason === 'SO' ? new Date(dateSortie) : null,
+                motifSortie: blocked && reason === 'SO' ? motifSortie : null,
+                bulletinMasque: blocked ? undefined : false,
+                bulletinMasqueDepuis: blocked ? undefined : null,
+            },
+            include: { company: true, category: true, employeeFunction: true, bonuses: { include: { bonus: true } } },
+        });
+        if (!blocked) await clearOpenBulletinMasks(tx, existing.id);
+        await refreshDraftPayslips(tx, updated, { restoreBlockedZeroWorkTime: !blocked });
         return updated;
     });
 };

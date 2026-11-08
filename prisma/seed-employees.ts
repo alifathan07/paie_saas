@@ -121,7 +121,6 @@ async function main() {
         categoryId: employeeCategory.id,
         natureEmploi: 'PERMANENT',
         modePaiement: 'VIREMENT',
-        actif: true,
         companyId: company.id,
       },
     });

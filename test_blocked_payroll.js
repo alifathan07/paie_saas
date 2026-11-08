@@ -4,7 +4,7 @@ import { prisma } from './src/lib/db.js';
 import { generateBulkBulletins, generateBulletin, calculateLive } from './src/controllers/bulletins.controller.js';
 
 const employee = {
-    id: 7, companyId: 3, actif: true, blocageSaisiePaie: true,
+    id: 7, companyId: 3, blocageSaisiePaie: true,
     baseSalary: 18000, dateEmbauche: new Date('2010-01-01'), nbPersonacharge: 3,
     cimrRate: 0.06, cimrReduitBaseImposable: true, payslips: [],
     bonuses: [
@@ -47,7 +47,7 @@ const prior = { employeeId: 7, year: 2026, month: 8, status: 'VALIDATED',
     workedDays: 26, sni: 18000, irNet: 4000, cnss: 268.8, sbi: 20000, amo: 452 };
 mock(prisma.payrollConfig, 'findFirst', async () => null);
 mock(prisma.employee, 'findMany', async ({ where }) => {
-    assert.deepEqual(where, { companyId: 3, actif: true });
+    assert.deepEqual(where, { companyId: 3 });
     return [employee, { ...employee, id: 8, payslips: [{ id: 100, status: 'DRAFT' }] }];
 });
 mock(prisma.employee, 'findUnique', async () => employee);
@@ -62,6 +62,7 @@ mock(prisma.payslip, 'create', async ({ data }) => {
     return { id: saved.length, ...data };
 });
 mock(prisma.payslip, 'update', async () => assert.fail('Bulk generation must preserve existing bulletins'));
+mock(prisma.payslipBonus, 'findMany', async () => []);
 mock(prisma.payslipBonus, 'deleteMany', async () => { bonusDeletes++; });
 mock(prisma.payslipBonus, 'createMany', async () => assert.fail('Blocked payroll must have no payable bonuses'));
 mock(prisma, '$transaction', async callback => callback(prisma));
@@ -72,7 +73,12 @@ const response = () => ({
     json(body) { this.body = body; },
 });
 try {
-    const req = { body: inputs, query: inputs, params: { id: '7' }, session: { companyId: 3 } };
+    const req = {
+        body: inputs,
+        query: inputs,
+        params: { id: '7' },
+        session: { user: { activeCompanyId: 3 } },
+    };
     const bulkRes = response();
     await generateBulkBulletins(req, bulkRes);
     assert.equal(saved.length, 1);

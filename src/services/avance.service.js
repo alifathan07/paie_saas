@@ -30,7 +30,7 @@ export async function listAvances(companyId) {
 export async function listCompanyEmployees(companyId) {
     const id = companyKey(companyId);
     return prisma.employee.findMany({
-        where: { companyId: id, actif: true },
+        where: { companyId: id, blocageSaisiePaie: false },
         select: { id: true, matricule: true, nomComplet: true },
         orderBy: [{ nomComplet: "asc" }, { matricule: "asc" }],
     });

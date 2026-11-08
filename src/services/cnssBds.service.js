@@ -14,6 +14,7 @@ export async function generateMonthlyCnssBdsFile(companyId, month, year, templat
     const companyAffiliation = String(company.numeroAffiliationCnss || "").trim();
     if (!companyAffiliation) throw new Error("COMPANY_CNSS_NUMBER_MISSING");
 
+    const payrollConfig = await prisma.payrollConfig.findFirst({ orderBy: { id: "asc" }, select: { cnssPlafond: true } });
     const payslips = await prisma.payslip.findMany({
         where: {
             month: Number(month),
@@ -25,7 +26,7 @@ export async function generateMonthlyCnssBdsFile(companyId, month, year, templat
             workedDays: true,
             sbg: true,
             sbi: true,
-            employee: { select: { matricule: true, numeroCNSS: true, blocageSaisiePaie: true, blocageSaisiePaieMotif: true } },
+            employee: { select: { matricule: true, nomComplet: true, cin: true, numeroCNSS: true, blocageSaisiePaie: true, blocageSaisiePaieMotif: true } },
         },
         orderBy: [{ employee: { matricule: "asc" } }, { id: "asc" }],
     });
@@ -33,12 +34,12 @@ export async function generateMonthlyCnssBdsFile(companyId, month, year, templat
 
     const payrollData = payslips.map(payslip => {
         const cnss = String(payslip.employee.numeroCNSS || "").trim();
-        if (!/^\d{9}$/.test(cnss)) {
-            throw new Error(`EMPLOYEE_CNSS_MISSING:${payslip.employee.matricule}`);
-        }
+        if (!/^\d{9}$/.test(cnss)) throw new Error(`EMPLOYEE_CNSS_MISSING:${payslip.employee.matricule}`);
         const blocked = Boolean(payslip.employee.blocageSaisiePaie);
         return {
             cnss_immatriculation: cnss,
+            employeeName: payslip.employee.nomComplet,
+            cin: payslip.employee.cin,
             days_worked: blocked ? 0 : Number(payslip.workedDays),
             // These are the saved bulletin gross and AMO base used by payroll reports.
             gross_salary: blocked ? 0 : payslip.sbg,
@@ -47,5 +48,9 @@ export async function generateMonthlyCnssBdsFile(companyId, month, year, templat
         };
     });
 
-    return generateCnssBdsFile(templateFile, payrollData);
+    return generateCnssBdsFile(templateFile, payrollData, {
+        affiliation: companyAffiliation,
+        period: `${year}${String(month).padStart(2, "0")}`,
+        salaryCeilingCents: Math.round(Number(payrollConfig?.cnssPlafond ?? 6000) * 100),
+    });
 }

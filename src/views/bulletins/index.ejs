@@ -260,8 +260,8 @@
 
                     <td class="matricule-column">
                         <span style="font-weight: 600;"><%= emp.matricule || '—' %></span>
-                        <% if (!emp.actif) { %>
-                            <span class="bulletin-inactive-label">Employé inactif</span>
+                        <% if (emp.blocageSaisiePaie) { %>
+                            <span class="bulletin-inactive-label">Employé bloqué</span>
                         <% } %>
                         <% (emp.rubriqueVisibilityInputs || []).forEach(input => { %>
                             <input type="hidden" name="<%= input.name %>" value="<%= input.value %>">
@@ -274,7 +274,7 @@
 
                     <% visibleRubriqueColumns.forEach(column => {
                         const component = (emp.bulletinComponents || []).find(item => `${item.code}|${item.label}` === column.key);
-                        const primeRendementEditable = emp.actif && !emp.blocageSaisiePaie
+                        const primeRendementEditable = !emp.blocageSaisiePaie
                             && (!emp.bulletin || ['draft', 'generated'].includes(emp.bulletin.status));
                     %>
                         <td class="rubrique-column-cell" onclick="event.stopPropagation();">
@@ -300,7 +300,7 @@
                         </td>
                         <% if (component?.kind === 'salary') { %>
                             <td>
-                                <% if (emp.bulletin && emp.actif && !emp.blocageSaisiePaie && ['draft', 'generated'].includes(emp.bulletin.status)) { %>
+                                <% if (emp.bulletin && !emp.blocageSaisiePaie && ['draft', 'generated'].includes(emp.bulletin.status)) { %>
                                     <form class="worked-days-form" action="/bulletins/<%= emp.id %>/worked-days" method="POST">
                                         <input type="hidden" name="month" value="<%= month %>">
                                         <input type="hidden" name="year" value="<%= year %>">
@@ -323,8 +323,8 @@
                     <% }); %>
 
                     <td class="status-column">
-                        <% if (emp.bulletinStatus === 'blocked' || emp.blocageSaisiePaie || !emp.actif) { %>
-                            <span class="badge badge-blocked"><%= !emp.actif ? 'Inactif · Bloqué' : 'Bloqué' %></span>
+                        <% if (emp.bulletinStatus === 'blocked' || emp.blocageSaisiePaie) { %>
+                            <span class="badge badge-blocked">Bloqué</span>
                         <% } else if (emp.bulletinStatus === 'none') { %>
                             <span class="badge badge-none">Aucun</span>
                         <% } else if (emp.bulletinStatus === 'draft' || emp.bulletinStatus === 'generated') { %>
@@ -340,7 +340,7 @@
 
                     <td class="actions-column" onclick="event.stopPropagation();">
                         <div class="table-actions">
-                            <% if (!emp.bulletin && emp.actif || emp.bulletinStatus === 'error' && emp.actif) { %>
+                            <% if (!emp.bulletin && !emp.blocageSaisiePaie || emp.bulletinStatus === 'error' && !emp.blocageSaisiePaie) { %>
                                 <form method="POST" action="/bulletins/<%= emp.id %>/generate" style="display:inline;">
                                     <input type="hidden" name="month" value="<%= month %>">
                                     <input type="hidden" name="year" value="<%= year %>">
@@ -368,7 +368,7 @@
                                     <button type="submit" class="btn-secondary" data-confirm="Retourner le bulletin de <%= emp.nomComplet %> en brouillon ? Il pourra à nouveau être modifié." data-confirm-title="Retourner en brouillon" data-confirm-label="Retourner en brouillon" style="padding: 7px 12px; font-size: 12px;">Retourner en brouillon</button>
                                 </form>
                             <% } %>
-                            <% if (!emp.bulletin && emp.actif) { %>
+                            <% if (!emp.bulletin && !emp.blocageSaisiePaie) { %>
                                 <a href="/bulletins/<%= emp.id %>?month=<%= month %>&year=<%= year %>" class="table-link">Voir →</a>
                             <% } %>
                             <% if (emp.blocageSaisiePaie) { %>

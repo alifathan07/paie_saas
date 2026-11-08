@@ -17,6 +17,7 @@
     "test:taxable-prime-zero": "node test_taxable_prime_zero.js",
     "test:overtime-sbi-base": "node test_overtime_sbi_base.js",
     "test:prime-rendement": "node test_prime_rendement.js",
+    "test:cnss-bds": "node test_cnss_bds_generation.js",
     "seed:rubriques": "tsx prisma/seed-rubriques.ts",
     "seed:employees": "tsx prisma/seed-employees.ts",
     "postinstall": "prisma generate && (prisma skills sync || true)"

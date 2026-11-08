@@ -7,8 +7,9 @@
   supplied by the browser.
 - An employee matricule is unique within a company, while CIN, CNSS number
   and RIB are unique across the whole database.
-- Payroll generation is limited to active employees. An employee with
-  `blocageSaisiePaie` is blocked from normal payroll entry/calculation.
+- Payroll generation includes employees in the company. An employee with
+  `blocageSaisiePaie` receives the blocked/zero payroll treatment and is
+  excluded from normal payroll entry/calculation.
 - The schema's `UserCompany @@unique([companyId])` currently limits each
   company to one user membership.
 

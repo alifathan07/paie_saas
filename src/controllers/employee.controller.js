@@ -10,6 +10,7 @@ import {
     ,getEmployeeFunctions
     ,getBanques
     ,setEmployeeTaxablePrime
+    ,updateEmployeePayrollBlock
 } from "../services/employeeService.js";
 import { calculatePayroll } from "../payroll-engine/PayrollEngine.js";
 import { resolveCompanyId } from "../lib/company.js";
@@ -198,9 +199,6 @@ export const handleCreateEmployee = async (req, res) => {
             ...employeeData,
             companyId,
             bonusList,
-            actif: req.body.actif === undefined
-                ? true
-                : (req.body.actif === '1' || req.body.actif === 'true'),
             cimrReduitBaseImposable: Boolean(req.body.cimrReduitBaseImposable),
             indemniteRepresentationName: req.body.representationEnabled === '1' ? 'Indemnité de représentation' : '',
             indemniteRepresentationRate: req.body.representationEnabled === '1'
@@ -394,6 +392,26 @@ export const handleEmployeeIndemniteToggle = async (req, res) => {
     }
 };
 
+export const handleEmployeePayrollBlock = async (req, res) => {
+    try {
+        const employee = await updateEmployeePayrollBlock(req.params.id, await getSessionCompanyId(req), {
+            blocked: req.body.blocked === 'true' || req.body.blocked === '1',
+            reason: req.body.reason,
+            dateSortie: req.body.dateSortie,
+            motifSortie: req.body.motifSortie,
+        });
+        return res.json({ ok: true, blocked: employee.blocageSaisiePaie, reason: employee.blocageSaisiePaieMotif });
+    } catch (error) {
+        console.error("Error saving employee payroll block:", error);
+        const messages = {
+            INVALID_PAYROLL_BLOCK_REASON: "Sélectionnez un motif CNSS valide.",
+            EXIT_DATE_REQUIRED_FOR_PAYROLL_BLOCK: "La date de sortie est obligatoire pour le motif SO.",
+            EXIT_REASON_REQUIRED_FOR_PAYROLL_BLOCK: "Le motif de sortie est obligatoire pour le motif SO.",
+        };
+        return res.status(400).json({ ok: false, error: messages[error.message] || "Impossible d'enregistrer le blocage." });
+    }
+};
+
 // POST /employees/:id/edit — Update employee
 export const handleUpdateEmployee = async (req, res) => {
     const { id } = req.params;
@@ -465,7 +483,6 @@ export const handleUpdateEmployee = async (req, res) => {
             ...normalizedEmployeeData,
             ...(bonusFieldsProvided ? { bonusList } : {}),
             replaceNonTaxableBonuses: bonusFieldsProvided && (bonusIds !== undefined || bonusAmounts !== undefined),
-            actif: req.body.actif === '1' || req.body.actif === 'true',
             cimrReduitBaseImposable: Boolean(req.body.cimrReduitBaseImposable),
             indemniteRepresentationName: req.body.representationEnabled === '1' || req.body.representationEnabled === 'true'
                 ? 'Indemnité de représentation'

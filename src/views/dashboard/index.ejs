@@ -71,8 +71,8 @@
                             <td><%= emp.cin %></td>
                             <td style="font-weight: 600;"><%= Number(emp.baseSalary).toLocaleString('fr-MA', { minimumFractionDigits: 2 }) %> DH</td>
                             <td>
-                                <span class="badge <%= emp.actif ? 'badge-actif' : 'badge-draft' %>">
-                                    <%= emp.actif ? 'Actif' : 'Inactif' %>
+                                <span class="badge <%= emp.blocageSaisiePaie ? 'badge-draft' : 'badge-actif' %>">
+                                    <%= emp.blocageSaisiePaie ? 'Bloqué' : 'Actif' %>
                                 </span>
                             </td>
                             <td>

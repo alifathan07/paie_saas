@@ -11,6 +11,7 @@ import {
     handleRemoveEmployeeIndemnite,
     handleEmployeeTaxablePrime,
     handleEmployeeIndemniteToggle,
+    handleEmployeePayrollBlock,
     syncEmployeeChantiers,
 
 } from "../controllers/employee.controller.js";
@@ -50,5 +51,6 @@ employee.post("/:id/indemnites", handleEmployeeIndemnites);
 employee.post("/:id/indemnites/:bonusId/delete", handleRemoveEmployeeIndemnite);
 employee.post("/:id/primes/taxable", handleEmployeeTaxablePrime);
 employee.post("/:id/indemnites/toggle", handleEmployeeIndemniteToggle);
+employee.post("/:id/payroll-block", handleEmployeePayrollBlock);
 employee.post("/:id/delete", handleDeleteEmployee);
 employee.delete("/:id", handleDeleteEmployee);

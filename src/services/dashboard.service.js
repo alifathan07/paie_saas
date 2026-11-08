@@ -5,7 +5,7 @@ export const getDashboardStats = async (companyId) => {
         const normalizedCompanyId = Number(companyId);
         if (!Number.isInteger(normalizedCompanyId) || normalizedCompanyId <= 0) throw new Error("NO_ACTIVE_COMPANY");
         const where = { companyId: normalizedCompanyId };
-        const activeWhere = { ...where, actif: true };
+        const activeWhere = { ...where, blocageSaisiePaie: false };
 
         const totalEmployees = await prisma.employee.count({ where });
         const activeEmployees = await prisma.employee.count({

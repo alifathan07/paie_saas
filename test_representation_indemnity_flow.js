@@ -43,7 +43,6 @@ try {
         natureEmploi: "PERMANENT",
         modePaiement: "VIREMENT",
         baseSalary: 5000,
-        actif: true,
         bonusList: [],
     });
 

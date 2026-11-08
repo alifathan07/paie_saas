@@ -47,7 +47,7 @@ export const calculatePayroll = (employee, overrides = {}) => {
   }
 
   // Blocking payroll removes payable inputs before running the normal calculation.
-  const payrollBlocked = Boolean(employee.blocageSaisiePaie || employee.actif === false);
+  const payrollBlocked = Boolean(employee.blocageSaisiePaie);
   if (payrollBlocked) {
     employee = { ...employee, bonuses: [] };
     overrides = {
