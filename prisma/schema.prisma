@@ -213,6 +213,7 @@ model Employee {
   cimrReduitBaseImposable     Boolean         @default(false)
   bonuses                     EmployeeBonus[]
   avances                     Avance[]
+  prets                        Pret[]
   payslips                    Payslip[]
   bulletinMasks               BulletinMask[]
   baseSalary                  Decimal         @db.Decimal(12, 2)
@@ -312,6 +313,7 @@ model Avance {
   id         Int      @id @default(autoincrement())
   employeeId Int
   amount     Decimal  @db.Decimal(12, 2)
+  monthlyAmount Decimal @default(0) @db.Decimal(12, 2)
   solde      Decimal  @default(0) @db.Decimal(12, 2)
   date       DateTime @db.Date
   createdAt  DateTime @default(now())
@@ -337,6 +339,37 @@ model AvanceDeduction {
   @@unique([avanceId, payslipId])
   @@index([payslipId])
   @@map("avance_deductions")
+}
+
+model Pret {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  amount     Decimal  @db.Decimal(12, 2)
+  solde      Decimal  @default(0) @db.Decimal(12, 2)
+  date       DateTime @db.Date
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employee   Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  deductions PretDeduction[]
+
+  @@index([employeeId, date])
+  @@map("prets")
+}
+
+model PretDeduction {
+  id        Int      @id @default(autoincrement())
+  pretId    Int
+  payslipId Int
+  amount    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+
+  pret    Pret   @relation(fields: [pretId], references: [id], onDelete: Cascade)
+  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  @@unique([pretId, payslipId])
+  @@index([payslipId])
+  @@map("pret_deductions")
 }
 
 // ================================
@@ -393,6 +426,8 @@ model Payslip {
   netAPayer                 Decimal @db.Decimal(12, 2) // Net à payer
   avanceDeduction           Decimal @default(0.00) @db.Decimal(12, 2)
   avanceDeductionConfigured Boolean @default(false)
+  pretDeduction             Decimal @default(0.00) @db.Decimal(12, 2)
+  pretDeductionConfigured   Boolean @default(false)
 
   absenceDays      Int     @default(0)
   absenceDeduction Decimal @default(0.00) @db.Decimal(12, 2)
@@ -416,6 +451,7 @@ model Payslip {
   bonuses          PayslipBonus[]
   retenus          PayslipRetenu[]
   avanceDeductions AvanceDeduction[]
+  pretDeductions   PretDeduction[]
 
   @@unique([employeeId, month, year])
   @@index([employeeId])

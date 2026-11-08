@@ -33,6 +33,7 @@ import {
     deleteManualRetenu,
     addAvanceDeduction,
     deleteAvanceDeduction,
+    addPretDeduction,
 } from "../controllers/bulletins.controller.js";
 
 export const bulletins = express.Router();
@@ -71,6 +72,7 @@ bulletins.post("/:id/retenus", addManualRetenu);
 bulletins.post("/:id/retenus/delete", deleteManualRetenu);
 bulletins.post("/:id/avances", addAvanceDeduction);
 bulletins.post("/:id/avances/delete", deleteAvanceDeduction);
+bulletins.post("/:id/prets", addPretDeduction);
 
 // PDF Download route
 bulletins.get("/:id/pdf", downloadPdfBulletin);

@@ -121,6 +121,9 @@ function drawPayrollTable(doc, data, startY) {
     if (amount(data.avanceDeduction) > 0) {
         push(rubriqueCodes['Avance sur salaire'] || 'AV', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avanceDeduction);
     }
+    if (amount(data.pretDeduction) > 0) {
+        push('PR', 'REMBOURSEMENT PRÊT', '', '', '', 0, data.pretDeduction);
+    }
     if (amount(data.arrondi) > 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', data.arrondi, 0, 'retenu', 'rounding');
     if (amount(data.arrondi) < 0) push(rubriqueCodes.Arrondi || '', 'ARRONDI', '', '', '', 0, Math.abs(data.arrondi), 'retenu', 'rounding');
 

@@ -592,7 +592,7 @@
         document.querySelectorAll('[data-result="periode"]').forEach(element => {
             element.textContent = result.periode;
         });
-        const deductions = Number(result.cnss || 0) + Number(result.amo || 0) + Number(result.cimr || 0) + Number(result.irNet || 0) + Number(result.avanceDeduction || 0) + Number(result.manualRetenusTotal || 0) + Math.max(0, -Number(result.arrondi || 0));
+        const deductions = Number(result.cnss || 0) + Number(result.amo || 0) + Number(result.cimr || 0) + Number(result.irNet || 0) + Number(result.avanceDeduction || 0) + Number(result.pretDeduction || 0) + Number(result.manualRetenusTotal || 0) + Math.max(0, -Number(result.arrondi || 0));
         document.querySelectorAll('[data-result="deductionsTotal"]').forEach(node => { node.textContent = money(deductions); });
         document.querySelectorAll('[data-result="totalGains"]').forEach(node => { node.textContent = money(Number(result.sbg || 0) + Math.max(0, Number(result.arrondi || 0))); });
         setResult('cnssBase', Math.min(Number(result.sbi || 0), 6000));

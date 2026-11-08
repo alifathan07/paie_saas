@@ -22,6 +22,7 @@ import { generateBulletinPdf } from "../pdf/bulletinPdf.js";
 import { getBulletinRubriqueCodes } from "../services/bulletinRubrique.service.js";
 import { getRubriqueMaps } from "../services/rubrique.service.js";
 import { listEmployeeAvances, removeAvanceDeduction, setAvanceDeduction } from "../services/avance.service.js";
+import { listEmployeePrets, setPretDeduction } from "../services/pret.service.js";
 import { createPrimes } from "../services/primeService.js";
 import { createIndemnite, listIndemnites } from "../services/indemniteService.js";
 import { listChantiers } from "../services/chantier.service.js";
@@ -603,6 +604,14 @@ async function buildPayslipData(emp, calc, month, year, rates, status = BULLETIN
             calc.netAPayer = Math.max(0, Number((Number(calc.netAPayer || 0) - savedAdvance).toFixed(2)));
         }
     }
+    if (!Number(calc.pretDeduction || 0)) {
+        const savedPayslip = await prisma.payslip.findUnique({ where: { employeeId_month_year: { employeeId: emp.id, month, year } }, select: { pretDeduction: true } });
+        const savedPret = Number(savedPayslip?.pretDeduction || 0);
+        if (savedPret > 0) {
+            calc.pretDeduction = savedPret;
+            calc.netAPayer = Math.max(0, Number((Number(calc.netAPayer || 0) - savedPret).toFixed(2)));
+        }
+    }
     const irFields = calc.irCumulative;
     return {
         employeeId: emp.id,
@@ -648,6 +657,7 @@ async function buildPayslipData(emp, calc, month, year, rates, status = BULLETIN
         irNet: calc.irNet,
         netAPayer: calc.netAPayer,
         avanceDeduction: calc.avanceDeduction || 0,
+        pretDeduction: calc.pretDeduction || 0,
         absenceDays: 0,
         absenceDeduction: 0,
         heuresSup25: calc.heuresSup25,
@@ -712,14 +722,17 @@ async function runEmployeeCalculation(emp, overrides = {}) {
         },
         select: {
             avanceDeduction: true,
+            pretDeduction: true,
             retenus: { select: { amount: true } },
         },
     });
     const avanceDeduction = overrides.avanceDeduction ?? savedDeductions?.avanceDeduction ?? 0;
+    const pretDeduction = overrides.pretDeduction ?? savedDeductions?.pretDeduction ?? 0;
     const manualRetenues = overrides.manualRetenuesTotal
         ?? manualRetenueTotal(savedDeductions?.retenus || []);
     const netAPayerBeforePrime = Math.max(0, Number(beforePrimeCumulative.netAPayer || 0)
         - Math.max(0, Number(avanceDeduction || 0))
+        - Math.max(0, Number(pretDeduction || 0))
         - Math.max(0, Number(manualRetenues || 0)));
     const primeRendementAmount = calculatePrimeRendement(netAPayerBeforePrime, primeRendementInput);
     return calculate({
@@ -851,6 +864,12 @@ export function mapPayslipToViewModel(p, representationRate = null) {
         amount: Number(row.amount || 0),
         avanceSolde: row.avance ? Number(row.avance.solde || 0) : null,
     }));
+    const pretDeductions = (p.pretDeductions || []).map(row => ({
+        id: row.id,
+        pretId: row.pretId,
+        amount: Number(row.amount || 0),
+        pretSolde: row.pret ? Number(row.pret.solde || 0) : null,
+    }));
     // An exclusion marker can mean two things: the indemnity was removed from
     // this bulletin, or its recurring amount was overridden here. Only the
     // former should offer a "restore" action; an override already has an
@@ -963,7 +982,9 @@ export function mapPayslipToViewModel(p, representationRate = null) {
         arrondi,
         avanceDeduction: Number(p.avanceDeduction || 0),
         avanceDeductionConfigured: Boolean(p.avanceDeductionConfigured || Number(p.avanceDeduction || 0) > 0),
-        netAPayer: Number((exactNetAPayer + arrondi - Number(p.avanceDeduction || 0)).toFixed(2)),
+        pretDeduction: Number(p.pretDeduction || 0),
+        pretDeductionConfigured: Boolean(p.pretDeductionConfigured || Number(p.pretDeduction || 0) > 0),
+        netAPayer: Number((exactNetAPayer + arrondi - Number(p.avanceDeduction || 0) - Number(p.pretDeduction || 0)).toFixed(2)),
         absenceDays: 0,
         absenceDeduction: 0,
         heuresSup25: hs25,
@@ -979,6 +1000,7 @@ export function mapPayslipToViewModel(p, representationRate = null) {
         nimpLines,
         retenus,
         avanceDeductions,
+        pretDeductions,
         manualRetenusTotal: manualRetenueTotal(retenus),
         excludedNimpLines,
         createdAt: p.createdAt ? p.createdAt.toISOString() : null,
@@ -1574,6 +1596,11 @@ export const generateBulletin = async (req, res) => {
         const submittedAvanceDeduction = req.body.avanceDeduction !== undefined
             ? Math.max(0, Number(req.body.avanceDeduction) || 0)
             : Number(existing?.avanceDeduction || initialAvanceDeduction);
+        const employeePretsForDefault = existing ? [] : await listEmployeePrets(emp.id);
+        const automaticPretDeduction = employeePretsForDefault.reduce((total, pret) => total + Math.min(Number(pret.monthlyAmount || 0), Number(pret.solde || 0)), 0);
+        const submittedPretDeduction = req.body.pretDeduction !== undefined
+            ? Math.max(0, Number(req.body.pretDeduction) || 0)
+            : Number(existing?.pretDeduction ?? automaticPretDeduction);
 
         // Parse variable primes submitted from workspace
         const rawLabels = req.body.primesLabels ?? req.query.primesLabels;
@@ -1612,6 +1639,7 @@ export const generateBulletin = async (req, res) => {
             monthlyNimpLines,
             niimpOverrides,
             avanceDeduction: submittedAvanceDeduction,
+            pretDeduction: submittedPretDeduction,
             
         };
 
@@ -1628,7 +1656,8 @@ export const generateBulletin = async (req, res) => {
         const monthlyCalc = await runEmployeeCalculation(emp, overrides);
         const calc = await applyCumulativeIR(emp.id, month, year, monthlyCalc, overrides.dependents ?? emp.nbPersonacharge);
         calc.avanceDeduction = submittedAvanceDeduction;
-        calc.netAPayer = Math.max(0, Number((Number(calc.netAPayer || 0) - calc.avanceDeduction).toFixed(2)));
+        calc.pretDeduction = submittedPretDeduction;
+        calc.netAPayer = Math.max(0, Number((Number(calc.netAPayer || 0) - calc.avanceDeduction - calc.pretDeduction).toFixed(2)));
         const submittedBaseSalary = overrides.baseSalary !== undefined && overrides.baseSalary !== null && overrides.baseSalary !== ''
             ? Number(overrides.baseSalary)
             : Number(emp.baseSalary);
@@ -1666,6 +1695,7 @@ export const generateBulletin = async (req, res) => {
             year,
             amount: submittedAvanceDeduction,
         });
+        await setPretDeduction({ companyId: resolveCompanyId(req), employeeId: empId, month, year, amount: submittedPretDeduction });
 
         await persistPayslipBonuses(payslip.id, calc);
         await applyManualRetenuesToNet(payslip.id, calc.netAPayer);
@@ -1713,6 +1743,22 @@ export const deleteAvanceDeduction = async (req, res) => {
         return res.redirect(`/bulletins/${empId}?month=${month}&year=${year}`);
     } catch (error) {
         return res.status(400).send(error.message === "BULLETIN_LOCKED" ? "Ce bulletin est verrouillé." : "Impossible de supprimer la déduction.");
+    }
+};
+
+export const addPretDeduction = async (req, res) => {
+    const empId = Number(req.params.id);
+    const month = Number(req.body.month || req.query.month);
+    const year = Number(req.body.year || req.query.year);
+    try {
+        await setPretDeduction({ companyId: resolveCompanyId(req), employeeId: empId, month, year, amount: req.body.amount });
+        if (String(req.headers.accept || '').includes('application/json')) return res.json({ ok: true });
+        return res.redirect(`/bulletins/${empId}?month=${month}&year=${year}`);
+    } catch (error) {
+        const messages = { PAYSLIP_REQUIRED: "Générez le bulletin avant d'ajouter un prêt.", BULLETIN_LOCKED: "Ce bulletin est verrouillé.", PRET_BALANCE_TOO_LOW: "Le montant dépasse le solde disponible du prêt.", INVALID_PRET_AMOUNT: "Saisissez un montant de prêt valide." };
+        const message = messages[error.message] || "Impossible d'ajouter la déduction du prêt.";
+        if (String(req.headers.accept || '').includes('application/json')) return res.status(400).json({ ok: false, error: message });
+        return res.status(400).send(message);
     }
 };
 
@@ -2654,6 +2700,7 @@ export const calculateLive = async (req, res) => {
                 standardMonthlyDays: true,
                 standardMonthlyHours: true,
                 avanceDeduction: true,
+                pretDeduction: true,
                 primeRendementInput: true,
                 bonuses: { select: { name: true, amount: true, baseAmount: true, taxable: true } },
                 retenus: { select: { amount: true } },
@@ -2673,6 +2720,9 @@ export const calculateLive = async (req, res) => {
         overrides.avanceDeduction = req.query.avanceDeduction !== undefined
             ? Math.max(0, Number(req.query.avanceDeduction) || 0)
             : Number(savedPayslip?.avanceDeduction || 0);
+        overrides.pretDeduction = req.query.pretDeduction !== undefined
+            ? Math.max(0, Number(req.query.pretDeduction) || 0)
+            : Number(savedPayslip?.pretDeduction || 0);
         overrides.manualRetenuesTotal = manualRetenueTotal(savedPayslip?.retenus);
         overrides.monthlyNimpLines = prorateMonthlyNimpLines(
             enteredMonthlyNimpLines,
@@ -2687,6 +2737,9 @@ export const calculateLive = async (req, res) => {
         const avanceDeduction = req.query.avanceDeduction !== undefined
             ? Math.max(0, Number(req.query.avanceDeduction) || 0)
             : Number(savedPayslip?.avanceDeduction || 0);
+        const pretDeduction = req.query.pretDeduction !== undefined
+            ? Math.max(0, Number(req.query.pretDeduction) || 0)
+            : Number(savedPayslip?.pretDeduction || 0);
 
         res.json({
             ok: true,
@@ -2734,7 +2787,8 @@ export const calculateLive = async (req, res) => {
             chargesDeFamille: result.chargesDeFamille,
             irNet: result.irNet,
             avanceDeduction,
-            netAPayer: Math.max(0, Number((Number(result.netAPayer || 0) - manualRetenusTotal - avanceDeduction).toFixed(2))),
+            pretDeduction,
+            netAPayer: Math.max(0, Number((Number(result.netAPayer || 0) - manualRetenusTotal - avanceDeduction - pretDeduction).toFixed(2))),
             manualRetenusTotal,
             annualCumulative: result.annualCumulative,
             periode: result.periode,
@@ -2860,7 +2914,7 @@ export const showBulletin = async (req, res) => {
             const dbHistory = await prisma.payslip.findMany({
                 where: { employeeId: empId },
                 orderBy: [{ year: 'desc' }, { month: 'desc' }],
-                include: { bonuses: true, retenus: true, avanceDeductions: { include: { avance: true } } }
+                include: { bonuses: true, retenus: true, avanceDeductions: { include: { avance: true } }, pretDeductions: { include: { pret: true } } }
             });
 
             const history = dbHistory.map(payslip => filterInvisibleRubriqueLines(
@@ -2903,13 +2957,14 @@ export const showBulletin = async (req, res) => {
                 taxableRubriques: rubriqueMaps.imposableRows.filter(row => row.active),
                 manualRetenuRubriques: rubriqueMaps.retenuRows.filter(row => row.entryType === 'MANUAL' && row.active && row.visible !== false),
                 employeeAvances: [],
+                employeePrets: [],
             });
         }
 
         // Single bulletin mode
         const dbPayslip = await prisma.payslip.findFirst({
             where: { employeeId: empId, month, year, employee: { companyId: resolveCompanyId(req) } },
-            include: { bonuses: true, retenus: true, avanceDeductions: { include: { avance: true } } }
+            include: { bonuses: true, retenus: true, avanceDeductions: { include: { avance: true } }, pretDeductions: { include: { pret: true } } }
         });
         console.info("[bulletin-show] payslip.loaded", { requestId, employeeId: empId, month, year, found: Boolean(dbPayslip) });
 
@@ -3003,6 +3058,8 @@ export const showBulletin = async (req, res) => {
         }
 
         const employeeAvances = await listEmployeeAvances(emp.id);
+        const employeePrets = await listEmployeePrets(emp.id);
+        const automaticPretDeduction = employeePrets.reduce((total, pret) => total + Math.min(Number(pret.monthlyAmount || 0), Number(pret.solde || 0)), 0);
 
         // Pre-compute preview result if no payslip exists yet in DB
         let previewResult = null;
@@ -3013,6 +3070,8 @@ export const showBulletin = async (req, res) => {
                 const initialAvanceDeduction = employeeAvances.reduce((total, avance) => total + Number(avance.solde || 0), 0);
                 previewResult.avanceDeduction = Number(initialAvanceDeduction.toFixed(2));
                 previewResult.netAPayer = Math.max(0, Number((Number(previewResult.netAPayer || 0) - previewResult.avanceDeduction).toFixed(2)));
+                previewResult.pretDeduction = Number(automaticPretDeduction.toFixed(2));
+                previewResult.netAPayer = Math.max(0, Number((Number(previewResult.netAPayer || 0) - previewResult.pretDeduction).toFixed(2)));
             } catch (e) {
                 previewResult = null;
             }
@@ -3070,6 +3129,7 @@ export const showBulletin = async (req, res) => {
             taxableRubriques: rubriqueMaps.imposableRows.filter(row => row.active),
             manualRetenuRubriques: rubriqueMaps.retenuRows.filter(row => row.entryType === 'MANUAL' && row.active && row.visible !== false),
             employeeAvances,
+            employeePrets,
         });
     } catch (err) {
         console.error("[bulletin-show] request.failed", {

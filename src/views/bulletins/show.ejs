@@ -1059,12 +1059,16 @@
         + Number(values.cimr || 0)
         + Number(values.irNet || 0)
         + Number(values.avanceDeduction || 0)
+        + Number(values.pretDeduction || 0)
         + Number(values.manualRetenusTotal || manualRetenus.reduce((sum, row) => sum + Number(row.amount || 0), 0))
         + Math.max(0, -arrondi);
     const totalAvanceSolde = (employeeAvances || []).reduce((sum, avance) => sum + Number(avance.solde || 0), 0);
     // A saved bulletin owns its deduction amount, including an explicit 0.
     // The available advance balance is only the initial value for a preview.
     const avanceInputValue = bulletin?.avanceDeductionConfigured ? Number(values.avanceDeduction || 0) : totalAvanceSolde;
+    const totalPretSolde = (employeePrets || []).reduce((sum, pret) => sum + Number(pret.solde || 0), 0);
+    const automaticPretDeduction = (employeePrets || []).reduce((sum, pret) => sum + Math.min(Number(pret.monthlyAmount || 0), Number(pret.solde || 0)), 0);
+    const pretInputValue = bulletin?.pretDeductionConfigured ? Number(values.pretDeduction || 0) : automaticPretDeduction;
 %>
 
 <% if (month && year) { %>
@@ -1425,6 +1429,17 @@
                         <% } else { %><%= fmt(values.avanceDeduction || 0) %><% } %>
                     </td>
                     <td class="num">—</td>
+                </tr>
+                <% } %>
+                <% if (totalPretSolde > 0 || Number(values.pretDeduction || 0) > 0) { %>
+                <tr class="manual-retenu-row pret-deduction-row">
+                    <td class="rubrique-code">PR</td><td class="description">Prêt employé</td>
+                    <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+                    <td class="num">
+                        <% if (bulletin && !locked) { %>
+                            <input class="live-input pret-deduction-input" name="pretDeduction" type="number" min="0" step="0.01" max="<%= (totalPretSolde + Number(values.pretDeduction || 0)).toFixed(2) %>" value="<%= pretInputValue.toFixed(2) %>" data-saved-value="<%= pretInputValue.toFixed(2) %>" title="Montant libre à retenir ce mois-ci" aria-label="Montant du prêt à retenir">
+                        <% } else { %><%= fmt(values.pretDeduction || 0) %><% } %>
+                    </td><td class="num">—</td>
                 </tr>
                 <% } %>
                 <% if (isRubriqueVisible('retenu', 'rounding')) { %><tr>

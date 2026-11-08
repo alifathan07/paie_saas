@@ -49,6 +49,7 @@
         </a>
         <a href="/rubriques" class="sidebar-link rubriques-standalone <%= typeof currentPage !== 'undefined' && currentPage === 'rubriques' ? 'active' : '' %>"><span class="sidebar-link-icon">#</span><span>Rubriques de paie</span></a>
         <a href="/avances" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'avances' ? 'active' : '' %>"><span class="sidebar-link-icon">↘</span><span>Avances sur salaire</span></a>
+        <a href="/prets" class="sidebar-link <%= typeof currentPage !== 'undefined' && currentPage === 'prets' ? 'active' : '' %>"><span class="sidebar-link-icon">↘</span><span>Prêts employés</span></a>
         <details class="sidebar-dropdown" <%= typeof currentPage !== 'undefined' && (currentPage === 'employees' || currentPage === 'employeeCategories' || currentPage === 'banques') ? 'open' : '' %>>
             <summary class="sidebar-dropdown-toggle">
                 <svg class="sidebar-nav-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
