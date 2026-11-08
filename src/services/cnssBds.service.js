@@ -51,9 +51,9 @@ export async function generateMonthlyCnssBdsFile(companyId, month, year, templat
             employeeName: payslip.employee.nomComplet,
             cin: payslip.employee.cin,
             days_worked: blocked ? 0 : Number(payslip.workedDays),
-            // These are the saved bulletin gross and AMO base used by payroll reports.
-            gross_salary: blocked ? 0 : payslip.sbg,
-            amo_salary_base: blocked ? 0 : payslip.sbi,
+            // CNSS BDS real salary is the taxable gross base. Non-taxable
+            // indemnities included in brut global must not be declared here.
+            gross_salary: blocked ? 0 : payslip.sbi,
             bds_situation: blocked ? (payslip.employee.blocageSaisiePaieMotif || "MS") : undefined,
         };
     });

@@ -38,7 +38,8 @@ with control field `0000000000143034188`.
 - Seven record types are emitted in CNSS order and every record is exactly 260
   characters.
 - B00/B01 preserve the pre-established payload, changing only the record type.
-- B02 real salary is sourced from `Payslip.sbg` and capped using the existing
+- B02/B04 real salary is sourced from taxable gross `Payslip.sbi`, excluding
+  non-taxable indemnities, and capped using the existing
   `PayrollConfig.cnssPlafond` value.
 - B03/B05/B06 totals are recomputed from emitted details.
 - No entrants still emits an empty B04 and a zero B05.

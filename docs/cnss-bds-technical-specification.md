@@ -40,7 +40,7 @@ partial company data.
 | affiliation/period | `Company.numeroAffiliationCnss`, selected payroll period | Must match the A01/template values |
 | existing employee membership | A02 CNSS number + monthly `Payslip` employee | Every A02 must match exactly one payroll record |
 | B02 days | `Payslip.workedDays` | Integer, 0–26; blocked payroll uses zero and its stored situation |
-| B02 real salary | `Payslip.sbg` | Converted from DH to centimes; no payroll rule is changed |
+| B02/B04 real salary | `Payslip.sbi` | Taxable gross salary, excluding non-taxable indemnities; converted from DH to centimes |
 | B02 capped salary | `min(real salary, PayrollConfig.cnssPlafond)` | Ceiling is read from existing payroll configuration |
 | B02 identity/AF fields | A02 template row | Must remain identical to the CNSS pre-established declaration |
 | B04 entrant data | monthly payroll record not present in A02 | Requires a valid 9-digit CNSS number, name and CIN supplied by caller |
