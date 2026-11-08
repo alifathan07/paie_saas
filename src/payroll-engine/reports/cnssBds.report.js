@@ -176,6 +176,7 @@ export function generateCnssBdsFile(templateFile, payrollData, options = {}) {
         throw new Error("BDS_TEMPLATE_PERIOD_MISMATCH");
     }
     const context = { affiliation, period, salaryCeilingCents: BigInt(options.salaryCeilingCents ?? 600000) };
+    const excludedPreEstablishedCnss = new Set((options.excludedPreEstablishedCnss || []).map(value => String(value).trim()));
     const records = Array.isArray(payrollData) ? payrollData : [];
     const payrollByCnss = new Map();
     for (const record of records) {
@@ -189,7 +190,10 @@ export function generateCnssBdsFile(templateFile, payrollData, options = {}) {
     const knownCnss = new Set(template.byCnss.keys());
     for (const [cnss, source] of template.byCnss) {
         const record = payrollByCnss.get(cnss);
-        if (!record) throw new Error(`BDS_PREESTABLISHED_EMPLOYEE_MISSING:${cnss}`);
+        if (!record) {
+            if (excludedPreEstablishedCnss.has(cnss)) continue;
+            throw new Error(`BDS_PREESTABLISHED_EMPLOYEE_MISSING:${cnss}`);
+        }
         preEstablished.push(calculateSummary(record, source, context, "B02"));
     }
     preEstablished.sort((a, b) => a.cnss_immatriculation.localeCompare(b.cnss_immatriculation));

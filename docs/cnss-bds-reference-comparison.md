@@ -43,8 +43,9 @@ with control field `0000000000143034188`.
 - B03/B05/B06 totals are recomputed from emitted details.
 - No entrants still emits an empty B04 and a zero B05.
 - Missing/invalid payroll CNSS numbers, duplicate payroll numbers, missing
-  pre-established employees, period mismatch and affiliation mismatch fail
-  explicitly.
+  non-blocked pre-established employees, period mismatch and affiliation
+  mismatch fail explicitly. Blocked employees are excluded without an export
+  error, including when they are absent from the uploaded pre-established file.
 
 The local workspace does not contain a separate raw
 `AFFEBDS_7425342_202610.txt` file, so the raw-A-file-to-completed-file byte

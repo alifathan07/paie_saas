@@ -73,8 +73,11 @@ zero. In that case one empty B04 row is emitted with blank identity fields,
   with the existing download path.
 - The source must contain valid 260-character A00/A01 and A02 records.
 - Affiliation is seven digits and period is `AAAAMM`.
-- Every pre-established A02 employee must be present in the period payroll;
-  otherwise export fails with `BDS_PREESTABLISHED_EMPLOYEE_MISSING`.
+- Every non-blocked pre-established A02 employee must be present in the period
+  payroll; otherwise export fails with `BDS_PREESTABLISHED_EMPLOYEE_MISSING`.
+- Employees marked `blocageSaisiePaie` are excluded from the BDS. This applies
+  both when their A02 row is absent from the period payroll and when their
+  blocked payroll row would otherwise be treated as a B04 entrant.
 - Payroll CNSS numbers must be unique and nine digits.
 - Days must be integer 0–26. For a normal blank situation, days and salary
   values are required; CS/MS requires zero days and zero salaries.

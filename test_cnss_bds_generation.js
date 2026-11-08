@@ -55,5 +55,11 @@ assert.equal(noEntrant[12].slice(16, 22), "000000");
 assert.throws(() => generateCnssBdsFile(reference, referenceRecords.slice(0, 1), { affiliation: "7425342", period: "202610" }), /BDS_PREESTABLISHED_EMPLOYEE_MISSING/);
 assert.throws(() => generateCnssBdsFile(reference, [{ ...referenceRecords[0], cnss_immatriculation: "bad" }], { affiliation: "7425342", period: "202610" }), /INVALID_BDS_CNSS_NUMBER/);
 assert.throws(() => generateCnssBdsFile(reference, referenceRecords, { affiliation: "1234567", period: "202610" }), /BDS_COMPANY_AFFILIATION_MISMATCH/);
+const blockedMissing = generateCnssBdsFile(reference, referenceRecords.slice(0, 7), {
+    affiliation: "7425342",
+    period: "202610",
+    excludedPreEstablishedCnss: [referenceRecords[7].cnss_immatriculation],
+});
+assert.equal(blockedMissing.split("\r\n").filter(Boolean)[9].slice(16, 22), "000007");
 
 console.log("CNSS BDS golden and dynamic generation checks passed.");

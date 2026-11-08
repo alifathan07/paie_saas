@@ -32,7 +32,17 @@ export async function generateMonthlyCnssBdsFile(companyId, month, year, templat
     });
     if (!payslips.length) throw new Error("NO_MONTHLY_PAYROLL");
 
-    const payrollData = payslips.map(payslip => {
+    const blockedEmployees = await prisma.employee.findMany({
+        where: {
+            companyId: Number(companyId),
+            blocageSaisiePaie: true,
+            numeroCNSS: { not: null },
+        },
+        select: { numeroCNSS: true },
+    });
+    const blockedCnss = new Set(blockedEmployees.map(employee => String(employee.numeroCNSS).trim()));
+
+    const payrollData = payslips.filter(payslip => !payslip.employee.blocageSaisiePaie).map(payslip => {
         const cnss = String(payslip.employee.numeroCNSS || "").trim();
         if (!/^\d{9}$/.test(cnss)) throw new Error(`EMPLOYEE_CNSS_MISSING:${payslip.employee.matricule}`);
         const blocked = Boolean(payslip.employee.blocageSaisiePaie);
@@ -51,6 +61,7 @@ export async function generateMonthlyCnssBdsFile(companyId, month, year, templat
     return generateCnssBdsFile(templateFile, payrollData, {
         affiliation: companyAffiliation,
         period: `${year}${String(month).padStart(2, "0")}`,
+        excludedPreEstablishedCnss: [...blockedCnss],
         salaryCeilingCents: Math.round(Number(payrollConfig?.cnssPlafond ?? 6000) * 100),
     });
 }
