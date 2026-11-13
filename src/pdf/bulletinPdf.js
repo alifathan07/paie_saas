@@ -89,6 +89,7 @@ function drawPayrollTable(doc, data, startY) {
     const baseSalary = amount(data.rawBaseSalary ?? data.baseSalary);
     const seniority = amount(data.primeAnciennete);
     const rubriqueCodes = data.rubriqueCodes || {};
+    let avancePlacedWithOvertime = false;
 
     push(rubriqueCodes['Salaire de base'] || '', 'SALAIRE DE BASE EN NBR J / H TRAV.', '', `${workedDays.toFixed(2)} J / ${workedHours.toFixed(2)} H`, '', data.effectiveBaseSalary ?? data.baseSalary, 0, 'base', 'base_salary');
     if (seniority > 0) push(rubriqueCodes["Prime d'ancienneté"] || '', 'ANCIENNETÉ LÉGALE', '', money(baseSalary), percent(data.ancienneteRate), seniority, 0, 'base', 'seniority_bonus');
@@ -98,7 +99,16 @@ function drawPayrollTable(doc, data, startY) {
     (data.taxableAdditions || [])
         .filter(line => (data.overtimeEnabled !== false || !String(line.calculationKey || '').startsWith('overtime_'))
             && isImposableRubriqueVisible(data.rubriqueVisibility, line))
-        .forEach(line => push(line.code || '', line.label, '', line.base ?? '', '', line.amount, 0));
+        .forEach(line => {
+            push(line.code || '', line.label, '', line.base ?? '', '', line.amount, 0);
+            if (line.calculationKey === 'overtime_50' && amount(data.avanceDeduction) > 0) {
+                push(rubriqueCodes['Avance sur salaire'] || 'AV', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avanceDeduction);
+                avancePlacedWithOvertime = true;
+            }
+        });
+    if (!avancePlacedWithOvertime && amount(data.avanceDeduction) > 0) {
+        push(rubriqueCodes['Avance sur salaire'] || 'AV', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avanceDeduction);
+    }
     push(rubriqueCodes['Salaire brut imposable'] || '', 'SALAIRE BRUT IMPOSABLE', '', money(data.sbi), '', 0, 0, 'base', 'taxable_gross_salary');
     if (amount(data.paidLeaveDays) > 0 || amount(data.paidLeaveAmount) > 0) {
         push('', 'CONGÉ PAYÉ', '', `${amount(data.paidLeaveDays).toFixed(2)} J / ${money(data.baseConge)}`, '', data.paidLeaveAmount, 0, 'base', 'paid_leave_days');
@@ -118,9 +128,6 @@ function drawPayrollTable(doc, data, startY) {
         .filter(line => line.rubriqueRetenuId === null || line.rubriqueRetenuId === undefined
             || isRubriqueVisible(data.rubriqueVisibility, 'retenu', `id:${line.rubriqueRetenuId}`))
         .forEach(line => push(line.code || '', line.label, '', '', '', 0, line.amount));
-    if (amount(data.avanceDeduction) > 0) {
-        push(rubriqueCodes['Avance sur salaire'] || 'AV', 'AVANCE SUR SALAIRE', '', '', '', 0, data.avanceDeduction);
-    }
     if (amount(data.pretDeduction) > 0) {
         push('PR', 'REMBOURSEMENT PRÊT', '', '', '', 0, data.pretDeduction);
     }

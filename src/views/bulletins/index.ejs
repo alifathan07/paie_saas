@@ -53,6 +53,9 @@
     <div>
         Génération terminée —
         <strong><%= bulkResult.created %> bulletin<%= bulkResult.created > 1 ? 's' : '' %> créé<%= bulkResult.created > 1 ? 's' : '' %></strong>
+        <% if (bulkResult.pretDeductionsApplied > 0) { %>
+            · mensualité de prêt appliquée sur <strong><%= bulkResult.pretDeductionsApplied %></strong> bulletin<%= bulkResult.pretDeductionsApplied > 1 ? 's' : '' %>
+        <% } %>
         <% if (bulkResult.skipped > 0) { %>
             · <strong><%= bulkResult.skipped %></strong> ignoré<%= bulkResult.skipped > 1 ? 's' : '' %> (bulletin déjà existant)
         <% } %>
@@ -246,6 +249,7 @@
                     <th class="rubrique-column-header"><%= ['CNSS', 'AMO', 'CIMR'].includes(column.label) ? 'Retenue · ' : '' %><%= column.label %></th>
                     <% if (column.label === 'Salaire de base') { %><th>Nbr j/h</th><% } %>
                 <% }); %>
+                <% if (hasPretColumn) { %><th class="pret-column">Prêt</th><% } %>
                 <th class="status-column">Statut bulletin</th>
                 <th class="actions-column">Actions</th>
                 <th class="net-column" style="font-variant-numeric: tabular-nums;">
@@ -321,6 +325,15 @@
                             </td>
                         <% } %>
                     <% }); %>
+
+                    <% if (hasPretColumn) { %>
+                        <td class="pret-column" style="font-variant-numeric: tabular-nums;">
+                            <% if (emp.pretDeduction > 0) { %>
+                                <strong><%= fmt(emp.pretDeduction) %> DH</strong>
+                                <small><%= emp.pretDeductionSource === 'applied' ? 'déduite' : 'mensualité prévue' %></small>
+                            <% } else { %>—<% } %>
+                        </td>
+                    <% } %>
 
                     <td class="status-column">
                         <% if (emp.bulletinStatus === 'blocked' || emp.blocageSaisiePaie) { %>

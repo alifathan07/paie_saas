@@ -962,13 +962,24 @@
 
 </style>
 <%
-    const values = bulletin || previewResult || {};
-    const workingTimeMode = values.workingTimeMode || emp.company?.workingTimeMode || 'DAYS';
-    const standardMonthlyDays = Number(values.standardMonthlyDays || emp.company?.standardMonthlyDays || 26);
-    const standardMonthlyHours = Number(values.standardMonthlyHours || emp.company?.standardMonthlyHours || 191);
+    const automaticPretDeduction = (employeePrets || []).reduce((total, pret) => total + Math.min(Number(pret.monthlyAmount || 0), Number(pret.solde || 0)), 0);
     const bulletinStatus = bulletin?.status || 'draft';
     const payrollBlocked = Boolean(emp.blocageSaisiePaie);
     const locked = payrollBlocked || Boolean(bulletin && ['validated', 'closed'].includes(bulletinStatus));
+    const autoPretDeductionPending = Boolean(bulletin && !locked
+        && Number(bulletin.pretDeduction || 0) <= 0.005
+        && automaticPretDeduction > Number(bulletin.pretDeduction || 0) + 0.005);
+    const values = autoPretDeductionPending
+        ? {
+            ...bulletin,
+            pretDeduction: automaticPretDeduction,
+            netAPayer: Math.max(0, Number((Number(bulletin.netAPayer || 0)
+                - automaticPretDeduction + Number(bulletin.pretDeduction || 0)).toFixed(2))),
+        }
+        : bulletin || previewResult || {};
+    const workingTimeMode = values.workingTimeMode || emp.company?.workingTimeMode || 'DAYS';
+    const standardMonthlyDays = Number(values.standardMonthlyDays || emp.company?.standardMonthlyDays || 26);
+    const standardMonthlyHours = Number(values.standardMonthlyHours || emp.company?.standardMonthlyHours || 191);
     const closed = bulletinStatus === 'closed';
     const canManageIndemnity = !payrollBlocked && (!bulletin || ['draft', 'generated', 'validated', 'closed'].includes(bulletinStatus));
     // Non-taxable indemnities are the one bulletin-level exception: their
@@ -1067,7 +1078,6 @@
     // The available advance balance is only the initial value for a preview.
     const avanceInputValue = bulletin?.avanceDeductionConfigured ? Number(values.avanceDeduction || 0) : totalAvanceSolde;
     const totalPretSolde = (employeePrets || []).reduce((sum, pret) => sum + Number(pret.solde || 0), 0);
-    const automaticPretDeduction = (employeePrets || []).reduce((sum, pret) => sum + Math.min(Number(pret.monthlyAmount || 0), Number(pret.solde || 0)), 0);
     const pretInputValue = bulletin?.pretDeductionConfigured ? Number(values.pretDeduction || 0) : automaticPretDeduction;
 %>
 
@@ -1111,6 +1121,7 @@
     data-month="<%= month || '' %>"
     data-year="<%= year || '' %>"
     data-saved="<%= Boolean(bulletin) %>"
+    data-auto-pret-pending="<%= autoPretDeductionPending %>"
     data-locked="<%= locked %>">
     <% if (month && year) {
     %>
@@ -1355,7 +1366,27 @@
                         <td class="num">—</td>
                         <td class="num">—</td>
                     </tr>
+                    <% if (row.field === 'heuresSup50' && (totalAvanceSolde > 0 || Number(values.avanceDeduction || 0) > 0)) { %>
+                    <tr class="manual-retenu-row avance-deduction-row">
+                        <td class="rubrique-code">AV</td><td class="description">Avance sur salaire</td>
+                        <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+                        <td class="num">
+                            <% if (bulletin && !locked) { %>
+                                <input class="live-input avance-deduction-input" name="avanceDeduction" type="number" min="0" step="0.01" max="<%= (bulletin ? totalAvanceSolde + Number(values.avanceDeduction || 0) : totalAvanceSolde).toFixed(2) %>" value="<%= avanceInputValue.toFixed(2) %>" data-saved-value="<%= avanceInputValue.toFixed(2) %>" title="Tab, Entrée ou clic ailleurs pour enregistrer" aria-label="Montant de l'avance à retenir">
+                            <% } else { %><%= fmt(values.avanceDeduction || 0) %><% } %>
+                        </td>
+                        <td class="num">—</td>
+                    </tr>
+                    <% } %>
                 <% }); %>
+                <% if (!overtimeRows.some(row => row.field === 'heuresSup50') && (totalAvanceSolde > 0 || Number(values.avanceDeduction || 0) > 0)) { %>
+                <tr class="manual-retenu-row avance-deduction-row">
+                    <td class="rubrique-code">AV</td><td class="description">Avance sur salaire</td>
+                    <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+                    <td class="num"><% if (bulletin && !locked) { %><input class="live-input avance-deduction-input" name="avanceDeduction" type="number" min="0" step="0.01" max="<%= (bulletin ? totalAvanceSolde + Number(values.avanceDeduction || 0) : totalAvanceSolde).toFixed(2) %>" value="<%= avanceInputValue.toFixed(2) %>" data-saved-value="<%= avanceInputValue.toFixed(2) %>" title="Tab, Entrée ou clic ailleurs pour enregistrer" aria-label="Montant de l'avance à retenir"><% } else { %><%= fmt(values.avanceDeduction || 0) %><% } %></td>
+                    <td class="num">—</td>
+                </tr>
+                <% } %>
                 <% if (isRubriqueVisible('base', 'taxable_gross_salary')) { %><tr class="gross" id="taxable-gross-row">
                     <td class="rubrique-code"><%= rubriqueCodes['Salaire brut imposable'] || '' %></td><td colspan="3" class="description">SALAIRE BRUT IMPOSABLE <br></td>
                     <td class="num"><span data-result="sbi"><%= fmt(values.sbi) %></span></td>
@@ -1419,25 +1450,13 @@
                     <td class="num">—</td>
                 </tr>
                 <% } %>
-        <% if (totalAvanceSolde > 0 || Number(values.avanceDeduction || 0) > 0) { %>
-                <tr class="manual-retenu-row avance-deduction-row">
-                    <td class="rubrique-code">AV</td><td class="description">Avance sur salaire</td>
-                    <td class="num">—</td><td class="num">—</td><td class="num">—</td>
-                    <td class="num">
-                        <% if (bulletin && !locked) { %>
-                            <input class="live-input avance-deduction-input" name="avanceDeduction" type="number" min="0" step="0.01" max="<%= (bulletin ? totalAvanceSolde + Number(values.avanceDeduction || 0) : totalAvanceSolde).toFixed(2) %>" value="<%= avanceInputValue.toFixed(2) %>" data-saved-value="<%= avanceInputValue.toFixed(2) %>" title="Tab, Entrée ou clic ailleurs pour enregistrer" aria-label="Montant de l'avance à retenir">
-                        <% } else { %><%= fmt(values.avanceDeduction || 0) %><% } %>
-                    </td>
-                    <td class="num">—</td>
-                </tr>
-                <% } %>
                 <% if (totalPretSolde > 0 || Number(values.pretDeduction || 0) > 0) { %>
                 <tr class="manual-retenu-row pret-deduction-row">
                     <td class="rubrique-code">PR</td><td class="description">Prêt employé</td>
                     <td class="num">—</td><td class="num">—</td><td class="num">—</td>
                     <td class="num">
                         <% if (bulletin && !locked) { %>
-                            <input class="live-input pret-deduction-input" name="pretDeduction" type="number" min="0" step="0.01" max="<%= (totalPretSolde + Number(values.pretDeduction || 0)).toFixed(2) %>" value="<%= pretInputValue.toFixed(2) %>" data-saved-value="<%= pretInputValue.toFixed(2) %>" title="Montant libre à retenir ce mois-ci" aria-label="Montant du prêt à retenir">
+                            <input class="live-input pret-deduction-input" name="pretDeduction" type="number" min="0" step="0.01" max="<%= (totalPretSolde + Number(bulletin?.pretDeduction || 0)).toFixed(2) %>" value="<%= pretInputValue.toFixed(2) %>" data-saved-value="<%= Number(bulletin?.pretDeduction || 0).toFixed(2) %>" title="Montant libre à retenir ce mois-ci" aria-label="Montant du prêt à retenir">
                         <% } else { %><%= fmt(values.pretDeduction || 0) %><% } %>
                     </td><td class="num">—</td>
                 </tr>

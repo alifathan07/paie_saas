@@ -744,6 +744,14 @@
     const panelStorageKey = employeePanel ? `bulletin-panel:${employeePanel.dataset.period}` : null;
     const formSignature = () => JSON.stringify([...new FormData(form).entries()]);
     let savedFormSignature = formSignature();
+    const pretDeductionInput = form.querySelector('.pret-deduction-input');
+    const automaticPretPending = page.dataset.autoPretPending === 'true';
+    if (automaticPretPending && pretDeductionInput) {
+        const persistedPretDeduction = pretDeductionInput.dataset.savedValue || '0';
+        savedFormSignature = JSON.stringify([...new FormData(form).entries()].map(([name, value]) =>
+            name === 'pretDeduction' ? [name, persistedPretDeduction] : [name, value]
+        ));
+    }
     let switchingEmployee = false;
 
     if (employeePanel && panelStorageKey) {
@@ -908,5 +916,5 @@
         if (await saveBeforeSwitch()) window.location.assign(link.href);
         link.removeAttribute('aria-busy');
     }));
-    if (page.dataset.saved !== 'true') calculate();
+    if (page.dataset.saved !== 'true' || automaticPretPending) calculate();
 })();

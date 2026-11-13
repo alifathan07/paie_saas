@@ -1,6 +1,6 @@
 import { resolveCompanyId } from "../lib/company.js";
 import {
-    listRubriques, updateFixedRubrique, createFixedRubrique, createImposableRubrique, updateImposableRubrique, deleteRubrique,
+    listRubriques, updateFixedRubrique, updateImposableRubrique,
 } from "../services/rubrique.service.js";
 
 const companyId = req => resolveCompanyId(req);
@@ -29,24 +29,16 @@ export async function updateFixed(req, res) {
     }
 }
 
+function lockedRubriqueResponse(res) {
+    return res.status(403).send("Les rubriques sont gérées par le système. Seul le code peut être modifié pour votre société.");
+}
+
 export async function createFixed(req, res) {
-    try {
-        await createFixedRubrique(req.params.category, companyId(req), req.body);
-        return res.redirect("/rubriques?success=created");
-    } catch (error) {
-        console.error("Error creating fixed rubrique:", error);
-        return renderPage(req, res, { error: error.code === "P2002" ? "Ce code, cette clé ou ce libellé existe déjà." : "Code ou libellé invalide." });
-    }
+    return lockedRubriqueResponse(res);
 }
 
 export async function createImposable(req, res) {
-    try {
-        await createImposableRubrique(companyId(req), req.body);
-        return res.redirect("/rubriques?success=created");
-    } catch (error) {
-        console.error("Error creating taxable rubrique:", error);
-        return renderPage(req, res, { error: error.code === "P2002" ? "Ce code ou ce libellé existe déjà." : "Code ou libellé invalide." });
-    }
+    return lockedRubriqueResponse(res);
 }
 
 export async function updateImposable(req, res) {
@@ -60,11 +52,5 @@ export async function updateImposable(req, res) {
 }
 
 export async function remove(req, res) {
-    try {
-        await deleteRubrique(req.params.category, req.params.id, companyId(req));
-        return res.redirect("/rubriques?success=deleted");
-    } catch (error) {
-        console.error("Error deleting rubrique:", error);
-        return renderPage(req, res, { error: error.code === "P2003" ? "Cette rubrique est utilisée par des bulletins et ne peut pas être supprimée." : "Impossible de supprimer la rubrique." });
-    }
+    return lockedRubriqueResponse(res);
 }

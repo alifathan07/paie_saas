@@ -3,7 +3,8 @@ import { changeUserPassword, updateUserProfile } from "../services/auth.service.
 import { recordAudit } from "../services/audit.service.js";
 
 const messages = {
-    INVALID_NAME: "Le nom est obligatoire et doit contenir au maximum 191 caractères.",
+    INVALID_USERNAME: "Le nom d’utilisateur est invalide.",
+    USERNAME_ALREADY_EXISTS: "Ce nom d’utilisateur est déjà utilisé.",
     INVALID_EMAIL: "Veuillez renseigner une adresse e-mail valide.",
     EMAIL_ALREADY_EXISTS: "Cette adresse e-mail est déjà utilisée.",
     CURRENT_PASSWORD_INVALID: "Votre mot de passe actuel est incorrect.",
@@ -19,24 +20,24 @@ const pageData = (req, overrides = {}) => ({
 });
 
 export const profilePage = async (req, res) => {
-    const account = await prisma.users.findUnique({ where: { id: Number(req.session.user.id) }, select: { id: true, name: true, email: true } });
+    const account = await prisma.users.findUnique({ where: { id: Number(req.session.user.id) }, select: { id: true, username: true, email: true } });
     return res.render("profile/index", pageData(req, { account, profileError: null, profileSuccess: null, passwordError: null, passwordSuccess: null }));
 };
 
 export const updateProfile = async (req, res) => {
     try {
         const account = await updateUserProfile(req.session.user.id, req.body);
-        req.session.user.name = account.name;
+        req.session.user.username = account.username || account.email;
         req.session.user.email = account.email;
         await recordAudit(req, { action: "UPDATE_PROFILE", targetType: "USER", targetId: account.id });
         return res.render("profile/index", pageData(req, { account, profileError: null, profileSuccess: "Votre profil a été mis à jour.", passwordError: null, passwordSuccess: null }));
     } catch (error) {
-        return res.status(400).render("profile/index", pageData(req, { account: { id: req.session.user.id, name: req.body.name, email: req.body.email }, profileError: messages[error.message] || "Impossible de mettre à jour le profil.", profileSuccess: null, passwordError: null, passwordSuccess: null }));
+        return res.status(400).render("profile/index", pageData(req, { account: { id: req.session.user.id, username: req.body.username, email: req.body.email }, profileError: messages[error.message] || "Impossible de mettre à jour le profil.", profileSuccess: null, passwordError: null, passwordSuccess: null }));
     }
 };
 
 export const changePassword = async (req, res) => {
-    const account = await prisma.users.findUnique({ where: { id: Number(req.session.user.id) }, select: { id: true, name: true, email: true } });
+    const account = await prisma.users.findUnique({ where: { id: Number(req.session.user.id) }, select: { id: true, username: true, email: true } });
     try {
         await changeUserPassword(req.session.user.id, req.body.currentPassword, req.body.password, req.body.passwordConfirmation);
         await recordAudit(req, { action: "CHANGE_PASSWORD", targetType: "USER", targetId: account.id });

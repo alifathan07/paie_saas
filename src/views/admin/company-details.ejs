@@ -42,7 +42,7 @@
         </button>
     </form>
 </section>
-<section class="admin-section-card"><h2>Propriétaire</h2><% if (owner) { %><p><a href="/admin/users/<%= owner.id %>"><strong><%= owner.name %></strong></a> · <%= owner.email %></p><p>Statut : <%= owner.isBlocked ? 'Bloqué' : 'Actif' %></p><% if (!owner.isAdmin) { %><form method="POST" action="/admin/clients/<%= owner.id %>/mode" style="margin-top:12px"><input type="hidden" name="companyId" value="<%= company.id %>"><button class="btn-primary">Entrer en support</button></form><% } %><% } else { %><p>Propriétaire introuvable.</p><% } %></section>
+<section class="admin-section-card"><h2>Propriétaire</h2><% if (owner) { %><p><a href="/admin/users/<%= owner.id %>"><strong><%= owner.username || owner.email %></strong></a> · <%= owner.email %></p><p>Statut : <%= owner.isBlocked ? 'Bloqué' : 'Actif' %></p><% if (!owner.isAdmin) { %><form method="POST" action="/admin/clients/<%= owner.id %>/mode" style="margin-top:12px"><input type="hidden" name="companyId" value="<%= company.id %>"><button class="btn-primary">Entrer en support</button></form><% } %><% } else { %><p>Propriétaire introuvable.</p><% } %></section>
 <section class="admin-section-card" id="company-overtime-settings" aria-labelledby="company-overtime-title">
     <h2 id="company-overtime-title">Heures supplémentaires</h2>
     <p id="company-overtime-status">Fonctionnalité actuellement <strong><%= overtimeEnabled ? 'activée' : 'désactivée' %></strong> pour cette société.</p>

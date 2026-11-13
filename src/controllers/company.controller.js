@@ -1,4 +1,5 @@
 import prisma from "../../db.ts";
+import { initializeCompanyRubriques } from "../services/defaultRubrique.service.js";
 
 const DEFAULT_SMIG = 3422.72;
 const DEFAULT_STANDARD_DAYS = 26;
@@ -61,6 +62,7 @@ export async function createCompany(req, res) {
 
             const created = await tx.company.create({ data: { name, adresse, ville, ice, ifNumber, rc, numeroAffiliationCnss, smig, numeroAssurance } });
             await tx.userCompany.create({ data: { userId, companyId: created.id } });
+            await initializeCompanyRubriques(created.id, tx);
             return created;
         });
 
@@ -221,6 +223,10 @@ export async function updateSettings(req, res) {
                 } : {}),
             },
         });
+        if (req.session?.user?.needsCompanySetup) {
+            delete req.session.user.needsCompanySetup;
+            await new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
+        }
         return res.render("parametrage/index", page(req, { title: "Paramétrage", currentPage: "parametrage", company, form: companyForm(company), success: "Les informations de la société ont été enregistrées." }));
     } catch (error) {
         if (error.code === "P2002") return res.status(409).render("parametrage/index", page(req, { title: "Paramétrage", currentPage: "parametrage", company: current, form, error: "Cet IF, ICE ou RC est déjà utilisé par une autre société." }));

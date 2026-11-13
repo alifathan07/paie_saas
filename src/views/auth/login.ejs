@@ -1,73 +1,65 @@
 <!DOCTYPE html>
 <html lang="fr">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>
-        <%= typeof title !=='undefined' ? title : 'Connexion' %> — Paie Software
-    </title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <title><%= typeof title !== 'undefined' ? title : 'Connexion' %> — Enmae Paie</title>
     <link rel="stylesheet" href="/css/custom.css?v=20261101-sticky-columns">
-    <!-- IBM Plex Sans loaded via custom.css @import -->
-    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <link rel="stylesheet" href="/css/auth-register.css?v=20261110">
 </head>
-
-<body class="login-page">
-    <div class="login-container">
-        <div class="login-card">
-            <div class="login-logo">
-                <div class="logo-placeholder">P</div>
+<body class="signup-page">
+    <main class="signup-shell">
+        <aside class="signup-aside">
+            <div class="signup-brand">
+                <img class="signup-brand-image" src="/logo.png" alt="Enmae Solutions">
             </div>
-            <h1 class="login-title">Connexion</h1>
-            <p class="login-subtitle">Connectez-vous à votre espace Paie Software</p>
+            <div class="signup-aside-content">
+                <div class="signup-eyebrow">Accès à votre espace</div>
+                <h2 id="login-welcome-title">Connexion sécurisée</h2>
+                <p>Identifiez-vous pour accéder à votre espace de gestion de la paie.</p>
+            </div>
+        </aside>
+        <section class="signup-main" aria-labelledby="login-title">
+            <div class="signup-eyebrow" style="color:#5270cc">Bon retour</div>
+            <h1 id="login-title">Se connecter</h1>
+            <p class="signup-intro">Accédez à votre espace entreprise Enmae Paie.</p>
 
             <div id="login-error">
                 <% if (typeof error !== 'undefined' && error) { %>
-                    <div class="alert alert-error"><%= error %></div>
+                    <div class="signup-error" role="alert"><%= error %></div>
                 <% } %>
             </div>
 
-            <form action="/auth/login" method="POST" hx-post="/auth/login" hx-target="#login-error"
-                hx-swap="innerHTML" hx-indicator="#login-btn">
-                <div class="form-group">
-                    <label for="email">Adresse e-mail</label>
-                    <input type="email" id="email" name="email" class="form-input" placeholder="exemple@paie.ma"
-                        required autofocus>
+            <form class="signup-form" action="/auth/login" method="POST">
+                <div class="signup-field">
+                    <label for="identifier">Nom d’utilisateur</label>
+                    <input type="text" id="identifier" name="identifier" maxlength="64" placeholder="votre.identifiant" required autofocus autocomplete="username">
                 </div>
-                <div class="form-group">
+                <div class="signup-field">
                     <label for="password">Mot de passe</label>
-                    <input type="password" id="password" name="password" class="form-input" placeholder="••••••••"
-                        required>
+                    <input type="password" id="password" name="password" placeholder="Votre mot de passe" required autocomplete="current-password">
                 </div>
-                <div class="form-row">
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="remember" value="1"> Se souvenir de moi
-                    </label>
-                    <a href="#" class="forgot-link">Mot de passe oublié ?</a>
-                </div>
-                <button type="submit" class="btn-primary" id="login-btn">
-                    <span class="btn-text">Se connecter</span>
-                    <span class="htmx-indicator">Connexion en cours…</span>
+                <button class="signup-submit" type="submit" id="login-btn">
+                    Se connecter
                 </button>
             </form>
-        </div>
-        <% if (typeof blockedReason !== 'undefined' && blockedReason) { %>
-        <div class="blocked-login-modal" role="alertdialog" aria-modal="true">
-            <div class="blocked-login-dialog">
-                <button type="button" class="blocked-login-close" aria-label="Fermer" onclick="this.closest('.blocked-login-modal').remove()">×</button>
-                <div class="blocked-login-icon">!</div>
-                <p class="blocked-login-eyebrow">ACCÈS SUSPENDU</p>
-                <h2>Votre compte est bloqué</h2>
-                <p><%= blockedReason %></p>
-                <small>Si vous pensez qu’il s’agit d’une erreur, contactez votre administrateur.</small>
-                <button type="button" class="btn-primary blocked-login-dismiss" onclick="this.closest('.blocked-login-modal').remove()">J’ai compris</button>
-            </div>
-        </div>
-        <% } %>
-        <div class="login-footer">© 2026 Paie Software</div>
-    </div>
-</body>
 
+            <p class="signup-login">Vous n’avez pas encore de compte ? <a href="/auth/register">Créer un espace entreprise</a></p>
+            <div class="signup-foot">© 2026 Enmae Paie · Vos données restent privées</div>
+        </section>
+    </main>
+    <% if (typeof blockedReason !== 'undefined' && blockedReason) { %>
+    <div class="blocked-login-modal" role="alertdialog" aria-modal="true">
+        <div class="blocked-login-dialog">
+            <button type="button" class="blocked-login-close" aria-label="Fermer" onclick="this.closest('.blocked-login-modal').remove()">×</button>
+            <div class="blocked-login-icon">!</div>
+            <p class="blocked-login-eyebrow">ACCÈS SUSPENDU</p>
+            <h2>Votre compte est bloqué</h2>
+            <p><%= blockedReason %></p>
+            <small>Si vous pensez qu’il s’agit d’une erreur, contactez votre administrateur.</small>
+            <button type="button" class="signup-submit blocked-login-dismiss" onclick="this.closest('.blocked-login-modal').remove()">J’ai compris</button>
+        </div>
+    </div>
+    <% } %>
+</body>
 </html>

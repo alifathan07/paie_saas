@@ -52,13 +52,14 @@ model Company {
 
 model Users {
   id           Int      @id @default(autoincrement())
-  name         String
+  username      String?
   email        String   @unique
   password     String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   isAdmin      Boolean  @default(false)
   isBlocked    Boolean  @default(false)
+  twoFactorEnabled Boolean @default(true)
   blockReason  String?
   maxCompanies Int      @default(1)
 
@@ -345,6 +346,7 @@ model Pret {
   id         Int      @id @default(autoincrement())
   employeeId Int
   amount     Decimal  @db.Decimal(12, 2)
+  monthlyAmount Decimal @default(0) @db.Decimal(12, 2)
   solde      Decimal  @default(0) @db.Decimal(12, 2)
   date       DateTime @db.Date
   createdAt  DateTime @default(now())

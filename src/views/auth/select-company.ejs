@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= typeof title !== 'undefined' ? title : 'Sélectionner une entreprise' %> — Paie Software</title>
+    <title><%= typeof title !== 'undefined' ? title : 'Sélectionner une entreprise' %> — Enmae Paie</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="/css/custom.css?v=20261101-sticky-columns">
@@ -14,12 +14,12 @@
     <main class="login-container company-selection-container">
         <section class="login-card company-selection-card" aria-labelledby="company-selection-title">
             <div class="login-logo" aria-hidden="true">
-                <div class="logo-placeholder">P</div>
+                <img class="login-logo-image" src="/logo.png" alt="Enmae Solutions">
             </div>
 
             <h1 class="login-title" id="company-selection-title">Sélectionner une entreprise</h1>
             <p class="login-subtitle">
-                <% if (user?.name) { %>Bonjour <strong><%= user.name %></strong>. <% } %>
+                <% if (user?.username) { %>Bonjour <strong><%= user.username %></strong>. <% } %>
                 Choisissez l’entreprise à gérer.
             </p>
 
@@ -51,7 +51,7 @@
             </div>
         </section>
 
-        <p class="login-footer">© 2026 Paie Software</p>
+        <p class="login-footer">© 2026 Enmae Paie</p>
     </main>
 </body>
 

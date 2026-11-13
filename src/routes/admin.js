@@ -5,7 +5,7 @@ import {
     updateCompanyOvertimeFeature, updateCompanyPrimeRendementFeature, updateCompanyChantiersFeature, updateCompanyRubriqueVisibility, deleteCompanyBulletins,
     adminAuditLogs, adminUsage, adminSystem, updateClientBilling, blockClient, unblockClient,
     createClientCompany, enterClientMode, exitClientMode, adminReports, updateReport,
-    adminUpdateUserProfile, adminSetUserPassword, updateGlobalPayrollConfig,
+    adminUpdateUserProfile, adminSetUserPassword, adminUpdateTwoFactor, updateGlobalPayrollConfig,
 } from "../controllers/admin.controller.js";
 
 export const admin = express.Router();
@@ -17,6 +17,7 @@ admin.post("/users", adminCreateUser);
 admin.get("/users/:id", adminUserDetails);
 admin.post("/users/:id/profile", adminUpdateUserProfile);
 admin.post("/users/:id/password", adminSetUserPassword);
+admin.post("/users/:id/two-factor", adminUpdateTwoFactor);
 admin.get("/clients", adminClients);
 admin.get("/companies", adminCompanies);
 admin.get("/companies/:id", adminCompanyDetails);

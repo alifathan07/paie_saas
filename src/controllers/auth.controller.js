@@ -1,4 +1,6 @@
-import { authenticateUser } from "../services/auth.service.js";
+import crypto from "node:crypto";
+import { authenticateUser, registerCompanyAccount } from "../services/auth.service.js";
+import { sendTwoFactorCode } from "../services/email.service.js";
 import prisma from "../../db.ts";
 import { clearLoginAttempts } from "../../middlewares/security.js";
 
@@ -6,10 +8,59 @@ function loginLog(event, details = {}) {
     console.info(`[auth.login] ${event}`, details);
 }
 
-function safeEmail(email) {
-    const value = String(email || "").trim().toLowerCase();
-    const at = value.indexOf("@");
-    return at > 1 ? `${value.slice(0, 2)}***${value.slice(at)}` : "<missing>";
+function safeIdentifier(identifier) {
+    const value = String(identifier || "").trim();
+    return value.length > 2 ? `${value.slice(0, 2)}***` : "<missing>";
+}
+
+function codeDigest(code) {
+    return crypto.createHash("sha256").update(String(code)).digest("hex");
+}
+
+function saveSession(req) {
+    return new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
+}
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>\"']/g, character => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
+    })[character]);
+}
+
+function loginError(req, res, message, status = 400) {
+    if (req.headers["hx-request"]) {
+        return res.status(status).send(`<div class="alert alert-error" role="alert">${escapeHtml(message)}</div>`);
+    }
+    return res.status(status).render("auth/login", { title: "Connexion", error: message });
+}
+
+function establishSession(req, user, companies) {
+    const activeCompanyId = companies.length === 1 ? companies[0].companyId : null;
+    req.session.user = {
+        id: user.id,
+        username: user.username || user.email,
+        email: user.email,
+        isAdmin: Boolean(user.isAdmin || (
+            String(process.env.ADMIN_EMAIL || "").trim().toLowerCase() === String(user.email || "").trim().toLowerCase()
+            && String(process.env.ADMIN_EMAIL || "").trim() !== ""
+        )),
+        isBlocked: Boolean(user.isBlocked),
+        activeCompanyId,
+    };
+    return activeCompanyId;
+}
+
+function loginRedirect(req, res, user, companies, activeCompanyId) {
+    if (req.session.user.isAdmin) {
+        if (req.headers["hx-request"]) res.setHeader("HX-Redirect", "/admin");
+        return req.headers["hx-request"] ? res.status(200).send() : res.redirect("/admin");
+    }
+    const destination = companies.length === 0 || companies.length > 1 ? "/auth/select-company" : "/";
+    if (req.headers["hx-request"]) {
+        res.setHeader("HX-Redirect", destination);
+        return res.status(200).send();
+    }
+    return res.redirect(destination);
 }
 
 export const loginPage = (req, res) => {
@@ -22,19 +73,128 @@ export const loginPage = (req, res) => {
     });
 };
 
+export const registerPage = (req, res) => {
+    if (req.session?.user) return res.redirect("/");
+    return res.render("auth/register", { title: "Créer un compte", error: null, form: { companyName: "", username: "", email: "" } });
+};
+
+export const register = async (req, res) => {
+    const form = {
+        companyName: String(req.body?.companyName || "").trim(),
+        username: String(req.body?.username || "").trim().toLowerCase(),
+        email: String(req.body?.email || "").trim().toLowerCase(),
+    };
+    try {
+        const { user, company } = await registerCompanyAccount({
+            ...form,
+            password: req.body?.password,
+            passwordConfirmation: req.body?.passwordConfirmation,
+        });
+        req.session.user = {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            isAdmin: false,
+            isBlocked: false,
+            activeCompanyId: company.id,
+            needsCompanySetup: true,
+        };
+        await saveSession(req);
+        return res.redirect("/");
+    } catch (error) {
+        const messages = {
+            INVALID_COMPANY_NAME: "Veuillez renseigner un nom d’entreprise valide.",
+            INVALID_USERNAME: "Le nom d’utilisateur doit contenir 3 à 64 caractères : lettres minuscules, chiffres, point, tiret ou underscore.",
+            INVALID_EMAIL: "Veuillez renseigner une adresse e-mail valide.",
+            EMAIL_ALREADY_EXISTS: "Cette adresse e-mail est déjà utilisée.",
+            USERNAME_ALREADY_EXISTS: "Ce nom d’utilisateur est déjà utilisé.",
+            PASSWORD_TOO_SHORT: "Le mot de passe doit contenir au moins 8 caractères.",
+            PASSWORD_MISMATCH: "Les mots de passe ne correspondent pas.",
+        };
+        return res.status(400).render("auth/register", {
+            title: "Créer un compte",
+            error: messages[error.message] || "Impossible de créer le compte.",
+            form,
+        });
+    }
+};
+
+async function companySetupData(req, error = null, form = null) {
+    const userId = Number(req.session?.user?.id);
+    const companyId = Number(req.session?.user?.activeCompanyId);
+    const membership = Number.isInteger(userId) && Number.isInteger(companyId)
+        ? await prisma.userCompany.findUnique({ where: { companyId_userId: { companyId, userId } }, include: { company: true } })
+        : null;
+    const company = membership?.company;
+    return {
+        title: "Configuration de l’entreprise",
+        error,
+        form: form || {
+            name: company?.name || "",
+            adresse: company?.adresse || "",
+            ville: company?.ville || "",
+            ifNumber: company?.ifNumber || "",
+            numeroAffiliationCnss: company?.numeroAffiliationCnss || "",
+            smig: company?.smig ? String(company.smig) : "3422.72",
+            ice: company?.ice || "",
+            rc: company?.rc || "",
+            numeroAssurance: company?.numeroAssurance || "",
+        },
+    };
+}
+
+export const companySetupPage = async (req, res) => {
+    if (!req.session?.user) return res.redirect("/auth");
+    if (!req.session.user.needsCompanySetup) return res.redirect("/");
+    return res.render("auth/company-setup", await companySetupData(req));
+};
+
+export const completeCompanySetup = async (req, res) => {
+    if (!req.session?.user?.needsCompanySetup) return res.redirect("/");
+    if (req.body?.skip === "1") return res.redirect("/");
+    const userId = Number(req.session.user.id);
+    const companyId = Number(req.session.user.activeCompanyId);
+    const form = {
+        name: String(req.body?.name || "").trim().slice(0, 191),
+        adresse: String(req.body?.adresse || "").trim().slice(0, 191),
+        ville: String(req.body?.ville || "").trim().slice(0, 191),
+        ifNumber: String(req.body?.ifNumber || "").trim().slice(0, 191),
+        numeroAffiliationCnss: String(req.body?.numeroAffiliationCnss || "").trim().slice(0, 191),
+        smig: String(req.body?.smig || "").trim(),
+        ice: String(req.body?.ice || "").trim().slice(0, 191),
+        rc: String(req.body?.rc || "").trim().slice(0, 191),
+        numeroAssurance: String(req.body?.numeroAssurance || "").trim().slice(0, 191),
+    };
+    const smig = Number(form.smig);
+    if (!Number.isInteger(userId) || !Number.isInteger(companyId) || companyId <= 0 || !form.name || !form.adresse || !form.ville || !form.ifNumber || !form.numeroAffiliationCnss || !Number.isFinite(smig) || smig <= 0) {
+        return res.status(400).render("auth/company-setup", await companySetupData(req, "Veuillez renseigner tous les champs obligatoires et un SMIG valide.", form));
+    }
+    const membership = await prisma.userCompany.findUnique({ where: { companyId_userId: { companyId, userId } }, select: { companyId: true } });
+    if (!membership) return res.status(403).send("Société active introuvable.");
+    try {
+        await prisma.company.update({ where: { id: companyId }, data: { ...form, smig } });
+        delete req.session.user.needsCompanySetup;
+        await saveSession(req);
+        return res.redirect("/");
+    } catch (error) {
+        if (error?.code === "P2002") return res.status(409).render("auth/company-setup", await companySetupData(req, "Cet IF, ICE ou RC est déjà utilisé par une autre société.", form));
+        throw error;
+    }
+};
+
 export const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { identifier, username, email, password } = req.body;
+        const loginIdentifier = identifier || username || email;
         loginLog("request", {
-            email: safeEmail(email),
+            identifier: safeIdentifier(loginIdentifier),
             hasPassword: Boolean(password),
             method: req.method,
             path: req.originalUrl,
             htmx: Boolean(req.headers["hx-request"]),
         });
-        const user = await authenticateUser(email, password);
+        const user = await authenticateUser(loginIdentifier, password);
         const companies = user.userCompanies ?? [];
-        const activeCompanyId = companies.length === 1 ? companies[0].companyId : null;
 
         if (user.isBlocked && !user.isAdmin) {
             const blockedReason = user.blockReason || "Votre compte est temporairement bloqué. Contactez l’administrateur pour obtenir de l’aide.";
@@ -50,77 +210,100 @@ export const login = async (req, res) => {
             userId: user.id,
             companyCount: companies.length,
             companyIds: companies.map((membership) => membership.companyId),
-            initialActiveCompanyId: activeCompanyId,
+            initialActiveCompanyId: companies.length === 1 ? companies[0].companyId : null,
         });
 
-        req.session.user = {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            isAdmin: Boolean(user.isAdmin || (
-                String(process.env.ADMIN_EMAIL || "").trim().toLowerCase() === String(user.email || "").trim().toLowerCase()
-                && String(process.env.ADMIN_EMAIL || "").trim() !== ""
-            )),
-            isBlocked: Boolean(user.isBlocked),
-            activeCompanyId,
-        };
         clearLoginAttempts(req);
 
-        // Administrators manage companies from the admin dashboard and do not
-        // need an active company just to sign in.
-        if (req.session.user.isAdmin) {
-            loginLog("redirect.admin_dashboard", { userId: user.id });
+        if (user.twoFactorEnabled) {
+            delete req.session.user;
+            const code = String(crypto.randomInt(100000, 1000000));
+            req.session.pendingTwoFactor = {
+                userId: user.id,
+                codeDigest: codeDigest(code),
+                expiresAt: Date.now() + 10 * 60 * 1000,
+                attempts: 0,
+            };
+            await saveSession(req);
+            try {
+                await sendTwoFactorCode({ to: user.email, code });
+            } catch (error) {
+                delete req.session.pendingTwoFactor;
+                await saveSession(req);
+                if (error.message === "EMAIL_NOT_CONFIGURED") {
+                    return loginError(req, res, "La vérification à deux facteurs est activée, mais l’envoi d’e-mails n’est pas configuré. Contactez l’administrateur.", 503);
+                }
+                if (error.message === "SMTP_CERTIFICATE_HOSTNAME_MISMATCH") {
+                    return loginError(req, res, "La configuration SMTP utilise un nom d’hôte qui ne correspond pas au certificat TLS. Contactez l’administrateur.", 503);
+                }
+                console.error("Two-factor email delivery failed:", error);
+                return loginError(req, res, "Impossible d’envoyer le code de vérification. Vérifiez votre adresse e-mail ou réessayez plus tard.", 503);
+            }
+            loginLog("two_factor.sent", { userId: user.id });
             if (req.headers["hx-request"]) {
-                res.setHeader("HX-Redirect", "/admin");
+                res.setHeader("HX-Redirect", "/auth/verify");
                 return res.status(200).send();
             }
-            return res.redirect("/admin");
+            return res.redirect("/auth/verify");
         }
 
-        if (companies.length === 0) {
-            loginLog("success.no_company", { userId: user.id });
-            if (req.headers["hx-request"]) {
-                res.setHeader("HX-Redirect", "/auth/select-company");
-                return res.status(200).send();
-            }
-            return res.redirect("/auth/select-company");
-        }
-
-        if (companies.length > 1) {
-            loginLog("redirect.company_selection", { userId: user.id, companyCount: companies.length });
-            if (req.headers["hx-request"]) {
-                res.setHeader("HX-Redirect", "/auth/select-company");
-                return res.status(200).send();
-            }
-            return res.redirect("/auth/select-company");
-        }
-
-        // If request is from HTMX, tell HTMX to redirect the whole page
-        if (req.headers["hx-request"]) {
-            loginLog("success.htmx_redirect", { userId: user.id, activeCompanyId });
-            res.setHeader("HX-Redirect", "/");
-            return res.status(200).send();
-        }
-
+        const activeCompanyId = establishSession(req, user, companies);
         loginLog("success.redirect", { userId: user.id, activeCompanyId });
-        return res.redirect("/");
+        return loginRedirect(req, res, user, companies, activeCompanyId);
     } catch (error) {
         loginLog("failed", {
             error: error.message,
             code: error.code,
-            email: safeEmail(req.body?.email),
+            identifier: safeIdentifier(req.body?.identifier || req.body?.username || req.body?.email),
         });
 
-        let errorMsg = "Adresse e-mail ou mot de passe incorrect.";
+        let errorMsg = "Nom d’utilisateur ou mot de passe incorrect.";
+        let errorStatus = 401;
         if (error.message === "MISSING_CREDENTIALS") {
-            errorMsg = "Veuillez renseigner votre e-mail et mot de passe.";
+            errorMsg = "Veuillez renseigner votre nom d’utilisateur et votre mot de passe.";
+            errorStatus = 400;
         }
-
-        if (req.headers["hx-request"]) {
-            return res.send(`<div class="alert alert-error">${errorMsg}</div>`);
-        }
-        return res.render("auth/login", { title: "Connexion", error: errorMsg });
+        return loginError(req, res, errorMsg, errorStatus);
     }
+};
+
+async function verificationPageData(req, error = null) {
+    const pending = req.session?.pendingTwoFactor;
+    const user = pending
+        ? await prisma.users.findUnique({ where: { id: Number(pending.userId) }, select: { email: true } })
+        : null;
+    return { title: "Vérification", error, email: user?.email || "votre adresse e-mail" };
+}
+
+export const verifyTwoFactorPage = async (req, res) => {
+    if (!req.session?.pendingTwoFactor) return res.redirect("/auth");
+    return res.render("auth/verify", await verificationPageData(req));
+};
+
+export const verifyTwoFactor = async (req, res) => {
+    const pending = req.session?.pendingTwoFactor;
+    const code = String(req.body?.code || "").trim();
+    if (!pending || Date.now() > Number(pending.expiresAt)) {
+        delete req.session.pendingTwoFactor;
+        await saveSession(req);
+        return res.status(400).render("auth/verify", await verificationPageData(req, "Le code a expiré. Recommencez la connexion."));
+    }
+    pending.attempts = Number(pending.attempts || 0) + 1;
+    if (pending.attempts > 5 || !/^\d{6}$/.test(code) || codeDigest(code) !== pending.codeDigest) {
+        if (pending.attempts >= 5) delete req.session.pendingTwoFactor;
+        await saveSession(req);
+        return res.status(403).render("auth/verify", await verificationPageData(req, pending.attempts >= 5 ? "Trop de tentatives. Recommencez la connexion." : "Code incorrect."));
+    }
+    const user = await prisma.users.findUnique({ where: { id: Number(pending.userId) }, include: { userCompanies: true } });
+    delete req.session.pendingTwoFactor;
+    if (!user || user.isBlocked && !user.isAdmin) {
+        await saveSession(req);
+        return res.status(403).render("auth/verify", await verificationPageData(req, "Ce compte n’est plus autorisé à se connecter."));
+    }
+    const companies = user.userCompanies ?? [];
+    establishSession(req, user, companies);
+    await saveSession(req);
+    return loginRedirect(req, res, user, companies, req.session.user.activeCompanyId);
 };
 
 export const selectCompanyPage = async (req, res) => {

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vérification — Enmae Paie</title>
+    <link rel="stylesheet" href="/css/custom.css?v=20261101-sticky-columns">
+    <link rel="stylesheet" href="/css/auth-register.css?v=20261110">
+    <link rel="stylesheet" href="/css/auth-verify.css?v=20261110">
+</head>
+<body class="signup-page">
+    <main class="signup-shell">
+        <aside class="signup-aside"><div class="signup-brand"><img class="signup-brand-image" src="/logo.png" alt="Enmae Solutions"></div><div class="signup-aside-content"><div class="signup-eyebrow">Protection du compte</div><h2>Une dernière étape.</h2><p>Nous vérifions votre identité pour protéger l’accès à votre espace entreprise.</p><ul class="signup-benefits"><li><span class="signup-benefit-icon">✓</span><span>Le code est valable pendant 10 minutes.</span></li><li><span class="signup-benefit-icon">✓</span><span>Ne partagez jamais ce code.</span></li><li><span class="signup-benefit-icon">✓</span><span>Votre compte reste protégé.</span></li></ul></div></aside>
+        <section class="signup-main" aria-labelledby="verification-title"><div class="signup-eyebrow" style="color:#5270cc">Vérification sécurisée</div><h1 id="verification-title">Vérification du compte</h1><p class="signup-intro">Ouvrez votre boîte e-mail <strong><%= email %></strong>, puis saisissez le code de vérification reçu.</p>
+            <% if (error) { %><div class="signup-error" role="alert"><%= error %></div><% } %>
+            <form class="signup-form" action="/auth/verify" method="POST"><div class="signup-field"><label for="code">Code de vérification</label><input type="text" id="code" name="code" class="verification-code-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="000000" required autofocus><small>Le code contient 6 chiffres et expire dans 10 minutes.</small></div><button class="signup-submit" type="submit">Valider le code</button></form>
+            <p class="signup-login">Vous n’avez pas reçu le code ? Vérifiez vos courriers indésirables.</p><div class="signup-foot">© 2026 Enmae Paie · Vos données restent privées</div>
+        </section>
+    </main>
+</body>
+</html>

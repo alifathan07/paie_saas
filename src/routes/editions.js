@@ -4,6 +4,7 @@ import { TextDecoder } from "node:util";
 import PDFDocument from "pdfkit";
 import { prisma } from "../lib/db.js";
 import { resolveCompanyId } from "../lib/company.js";
+import { getActiveBulletinPeriod, isAfterActivePeriod } from "../lib/bulletinPeriod.js";
 import { hideOvertimeFromView, isOvertimeEnabled } from "../lib/overtimeFeature.js";
 import { isImposableRubriqueVisible, isRubriqueVisible } from "../lib/rubriqueVisibility.js";
 import { generateBulletinPdf } from "../pdf/bulletinPdf.js";
@@ -11,9 +12,13 @@ import { mapPayslipToViewModel, getBulletinPdfCumulative } from "../controllers/
 import { getRubriqueMaps } from "../services/rubrique.service.js";
 import { getMonthlyContributionReports } from "../services/monthlyContributionReports.service.js";
 import { getMonthlyPayrollJournal } from "../services/monthlyPayrollJournal.service.js";
+import { getMonthlyPayrollBook } from "../services/monthlyPayrollBook.service.js";
+import { extractPayrollBook, matchPayrollBookEmployees } from "../services/payrollBookImport.service.js";
 import { getMonthlyIrReport } from "../services/monthlyIrReport.service.js";
 import { generateAmoReportPdf, generateContributionReportsPdf, generatePayrollJournalPdf } from "../pdf/contributionReportsPdf.js";
+import { generatePayrollBookPdf } from "../pdf/payrollBookPdf.js";
 import { generateIrReportPdf } from "../pdf/irReportPdf.js";
+import { generateBulletinsFromPayrollBook } from "../controllers/bulletins.controller.js";
 import { generateMonthlyCnssBdsFile } from "../services/cnssBds.service.js";
 
 export const editions = express.Router();
@@ -40,6 +45,17 @@ const bdsTemplateUpload = multer({
         callback(null, true);
     },
 }).single("template");
+
+const payrollBookUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    fileFilter: (req, file, callback) => {
+        const name = String(file.originalname || "").toLowerCase();
+        const accepted = file.mimetype === "application/pdf" || file.mimetype === "image/jpeg" || file.mimetype === "image/png" || /\.(pdf|jpe?g|png)$/.test(name);
+        if (!accepted) return callback(new Error("PAYROLL_BOOK_INVALID_FILE"));
+        callback(null, true);
+    },
+}).single("payrollBook");
 
 function parseBdsDeclarationDate(value) {
     if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -222,6 +238,194 @@ const contributionError = error => ({
 const journalError = error => ({
     NO_MONTHLY_PAYROLL: "Aucun bulletin généré, validé ou clôturé pour cette période.",
 }[error.message] || "Impossible de générer le journal de paie.");
+
+const payrollBookError = error => ({
+    NO_MONTHLY_PAYROLL: "Aucun bulletin généré, validé ou clôturé pour cette période.",
+}[error.message] || "Impossible de générer le livre de paie.");
+
+const payrollBookImportError = error => ({
+    PAYROLL_BOOK_EMPTY_FILE: "Sélectionnez un fichier Livre de paie.",
+    PAYROLL_BOOK_INVALID_FILE: "Le fichier doit être un PDF, JPG, JPEG ou PNG.",
+    PAYROLL_BOOK_PDF_READ_FAILED: "Le PDF ne peut pas être lu. Vérifiez qu’il n’est pas corrompu.",
+    PAYROLL_BOOK_NO_READABLE_CONTENT: "Aucune donnée lisible n’a été trouvée dans ce fichier.",
+    PAYROLL_BOOK_PERIOD_NOT_FOUND: "La période du Livre de paie n’a pas été trouvée. Elle doit être visible dans le document.",
+    PAYROLL_BOOK_NO_EMPLOYEES: "Aucun salarié n’a été trouvé dans le Livre de paie.",
+    PAYROLL_BOOK_INVALID_RESPONSE: "Le document n’a pas pu être interprété correctement. Réessayez avec une image plus nette.",
+    DEEPSEEK_NOT_CONFIGURED: "Le service DeepSeek n’est pas configuré.",
+    DEEPSEEK_EMPTY_RESPONSE: "DeepSeek n’a pas retourné de résultat exploitable.",
+    DEEPSEEK_INVALID_JSON: "DeepSeek a retourné un résultat invalide. Réessayez.",
+    PAYROLL_BOOK_AI_EXTRACTION_FAILED: "DeepSeek n’a pas pu extraire les données du document. Consultez les détails techniques du serveur ou importez une image plus nette.",
+    DEEPSEEK_JSON_REPAIR_HTTP_401: "La clé DeepSeek est refusée pendant la réparation de la réponse.",
+    DEEPSEEK_JSON_REPAIR_HTTP_429: "DeepSeek est temporairement limité pendant la réparation. Réessayez plus tard.",
+    DEEPSEEK_JSON_REPAIR_EMPTY: "DeepSeek n’a pas retourné de réponse pendant la réparation.",
+    DEEPSEEK_HTTP_401: "La clé DeepSeek est refusée. Vérifiez la configuration du serveur.",
+    DEEPSEEK_HTTP_429: "DeepSeek est temporairement limité. Réessayez dans quelques instants.",
+    PAYROLL_BOOK_NIMP_TOTAL_INVALID: "Le total des primes non imposables doit être un montant compris entre 0,00 et 999 999,99.",
+    PAYROLL_BOOK_NIMP_TOTAL_COUNT_INVALID: "Les montants saisis ne correspondent pas aux lignes du Livre importé. Réessayez.",
+    PAYROLL_BOOK_PERIOD_AFTER_ACTIVE: "La période du Livre de paie est postérieure à la période active. Clôturez d’abord la période active.",
+}[error.message] || "Impossible d’analyser le Livre de paie. Vérifiez le document et réessayez.");
+
+function parseImportedNimpTotal(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const normalized = raw.replace(/[\s\u00a0]/g, "").replace(",", ".");
+    if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) throw new Error("PAYROLL_BOOK_NIMP_TOTAL_INVALID");
+    const amount = Number(normalized);
+    if (!Number.isFinite(amount) || amount > 999999.99) throw new Error("PAYROLL_BOOK_NIMP_TOTAL_INVALID");
+    return Number(amount.toFixed(2));
+}
+
+async function assertPayrollBookPeriodAllowed(companyId, period) {
+    const payslips = await prisma.payslip.findMany({
+        where: { employee: { companyId: Number(companyId) } },
+        select: { month: true, year: true, status: true },
+    });
+    const activePeriod = getActiveBulletinPeriod(payslips);
+    if (isAfterActivePeriod(period, activePeriod)) throw new Error("PAYROLL_BOOK_PERIOD_AFTER_ACTIVE");
+}
+
+function renderPayrollBookImport(req, res, options = {}) {
+    return res.status(options.status || 200).render("editions/payroll-book-import", {
+        title: "Importer un Livre de paie",
+        currentPage: "editions",
+        user: req.session.user,
+        error: options.error || null,
+        success: options.success || null,
+        preview: options.preview || null,
+    });
+}
+
+editions.get("/livre/import", (req, res) => renderPayrollBookImport(req, res));
+
+editions.post("/livre/import", (req, res, next) => {
+    payrollBookUpload(req, res, error => { req.payrollBookUploadError = error || null; next(); });
+}, async (req, res) => {
+    try {
+        if (req.payrollBookUploadError) throw req.payrollBookUploadError;
+        if (!req.file) throw new Error("PAYROLL_BOOK_EMPTY_FILE");
+        const companyId = await resolveCompanyId(req);
+        const extracted = await extractPayrollBook({ buffer: req.file.buffer, mimeType: req.file.mimetype, originalName: req.file.originalname });
+        const rows = await matchPayrollBookEmployees(companyId, extracted.rows);
+        const unmatched = rows.filter(row => !row.employeeId);
+        const missingInputs = rows.filter(row => !row.baseSalary);
+        const preview = { ...extracted, companyId, rows, unmatchedCount: unmatched.length, missingInputCount: missingInputs.length };
+        if (unmatched.length || missingInputs.length) {
+            return renderPayrollBookImport(req, res, { status: 422, preview, error: `${unmatched.length} salarié(s) non identifié(s), ${missingInputs.length} salaire(s) de base manquant(s). Aucun bulletin n’a été généré.` });
+        }
+
+        try {
+            await assertPayrollBookPeriodAllowed(companyId, extracted.period);
+        } catch (error) {
+            if (error.message !== "PAYROLL_BOOK_PERIOD_AFTER_ACTIVE") throw error;
+            return renderPayrollBookImport(req, res, {
+                status: 400,
+                preview,
+                error: payrollBookImportError(error),
+            });
+        }
+
+        const generationRows = rows.map(row => ({
+            ...row,
+            totalPrimeNonImposable: parseImportedNimpTotal(row.totalPrimeNonImposable),
+        }));
+        const result = await generateBulletinsFromPayrollBook({
+            companyId,
+            month: extracted.period.month,
+            year: extracted.period.year,
+            rows: generationRows,
+        });
+        req.session.payrollBookImportResult = {
+            companyId: Number(companyId),
+            month: extracted.period.month,
+            year: extracted.period.year,
+            ...result,
+        };
+        return res.redirect(`/editions/livre?month=${extracted.period.month}&year=${extracted.period.year}&imported=1`);
+    } catch (error) {
+        console.error("Payroll book import error:", error);
+        return renderPayrollBookImport(req, res, { status: 400, error: payrollBookImportError(error) });
+    }
+});
+
+editions.post("/livre/import/generate", async (req, res) => {
+    const imported = req.session.payrollBookImport;
+    let preview = imported || null;
+    try {
+        const companyId = await resolveCompanyId(req);
+        if (!imported || Number(imported.companyId) !== Number(companyId)) throw new Error("PAYROLL_BOOK_IMPORT_EXPIRED");
+        await assertPayrollBookPeriodAllowed(companyId, imported.period);
+        const submittedTotals = req.body?.totalPrimeNonImposable;
+        const hasSubmittedTotals = submittedTotals !== undefined;
+        const values = Array.isArray(submittedTotals) ? submittedTotals : hasSubmittedTotals ? [submittedTotals] : [];
+        if (hasSubmittedTotals && values.length !== imported.rows.length) throw new Error("PAYROLL_BOOK_NIMP_TOTAL_COUNT_INVALID");
+        preview = {
+            ...imported,
+            rows: imported.rows.map((row, index) => ({
+                ...row,
+                totalPrimeNonImposable: hasSubmittedTotals ? values[index] : row.totalPrimeNonImposable,
+            })),
+        };
+        const rows = preview.rows.map(row => ({ ...row, totalPrimeNonImposable: parseImportedNimpTotal(row.totalPrimeNonImposable) }));
+        preview = { ...preview, rows };
+        const result = await generateBulletinsFromPayrollBook({ companyId, month: imported.period.month, year: imported.period.year, rows });
+        delete req.session.payrollBookImport;
+        const summary = `created=${result.created}&updated=${result.updated}&skipped=${result.skipped}`;
+        return res.redirect(`/editions/livre?month=${imported.period.month}&year=${imported.period.year}&imported=1&${summary}`);
+    } catch (error) {
+        console.error("Payroll book bulletin generation error:", error);
+        const message = error.message === "PAYROLL_BOOK_IMPORT_EXPIRED"
+            ? "L’import a expiré. Analysez de nouveau le document."
+            : error.message === "PAYROLL_BOOK_PERIOD_AFTER_ACTIVE"
+                ? payrollBookImportError(error)
+            : error.message.startsWith("PAYROLL_BOOK_NIMP_TOTAL_")
+                ? payrollBookImportError(error)
+                : "Les bulletins n’ont pas pu être générés. Aucun montant technique n’a été affiché.";
+        return renderPayrollBookImport(req, res, { status: 400, preview, error: message });
+    }
+});
+
+async function renderPayrollBookPage(req, res) {
+    const month = Number(req.query.month) || new Date().getMonth() + 1;
+    const year = Number(req.query.year) || new Date().getFullYear();
+    const fmt = value => Number(value || 0).toLocaleString("fr-MA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const date = value => value ? new Date(value).toLocaleDateString("fr-MA") : "—";
+    const companyId = await resolveCompanyId(req);
+    let importResult = req.session.payrollBookImportResult || null;
+    if (importResult) {
+        if (Number(importResult.companyId) !== Number(companyId)
+            || Number(importResult.month) !== month
+            || Number(importResult.year) !== year) {
+            importResult = null;
+        }
+        delete req.session.payrollBookImportResult;
+    }
+    const querySuccess = importResult
+        ? `Import terminé : ${Number(importResult.created || 0)} créé(s), ${Number(importResult.updated || 0)} mis à jour, ${Number(importResult.skipped || 0)} ignoré(s), ${Number(importResult.errors?.length || 0)} erreur(s).`
+        : req.query.imported === "1"
+            ? `Import terminé : ${Number(req.query.created || 0)} créé(s), ${Number(req.query.updated || 0)} mis à jour, ${Number(req.query.skipped || 0)} ignoré(s).`
+            : null;
+    const importErrors = importResult?.errors || [];
+    try {
+        const book = await getMonthlyPayrollBook(companyId, month, year);
+        return res.render("editions/payroll-book", { title: "Livre de paie", currentPage: "editions", user: req.session.user, book, month, year, monthName: MONTH_NAMES_FR[month], fmt, date, error: null, querySuccess, importErrors });
+    } catch (error) {
+        const company = await prisma.company.findUnique({ where: { id: companyId } });
+        return res.render("editions/payroll-book", { title: "Livre de paie", currentPage: "editions", user: req.session.user, book: { company: company || { name: "Entreprise" }, rows: [], totals: {} }, month, year, monthName: MONTH_NAMES_FR[month], fmt, date, error: payrollBookError(error), querySuccess, importErrors });
+    }
+}
+
+editions.get("/livre", renderPayrollBookPage);
+
+editions.get("/livre/pdf", async (req, res) => {
+    try {
+        const book = await getMonthlyPayrollBook(await resolveCompanyId(req), Number(req.query.month), Number(req.query.year));
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="LIVRE_DE_PAIE_${book.month}-${book.year}.pdf"`);
+        return generatePayrollBookPdf(book, res);
+    } catch (error) {
+        return res.status(error.message === "NO_MONTHLY_PAYROLL" ? 404 : 400).send(payrollBookError(error));
+    }
+});
 
 async function renderPayrollJournalPage(req, res) {
     const month = Number(req.query.month) || new Date().getMonth() + 1;

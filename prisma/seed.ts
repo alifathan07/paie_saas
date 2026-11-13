@@ -13,6 +13,7 @@ async function main() {
     return value;
   };
   const adminEmail = requiredEnv("ADMIN_EMAIL").toLowerCase();
+  const adminUsername = (process.env.ADMIN_USERNAME?.trim().toLowerCase() || "admin");
   const adminPassword = requiredEnv("ADMIN_PASSWORD");
   const demoPassword = process.env.SEED_DEMO_PASSWORD?.trim() || adminPassword;
   const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
@@ -39,20 +40,20 @@ async function main() {
   // 3. Seed Users
   const userAdmin = await prisma.users.upsert({
     where: { email: adminEmail },
-    update: { password: adminPasswordHash, isAdmin: true, isBlocked: false },
-    create: { name: "Super Admin", email: adminEmail, password: adminPasswordHash, isAdmin: true, maxCompanies: 0 },
+    update: { username: adminUsername, password: adminPasswordHash, isAdmin: true, isBlocked: false },
+    create: { username: adminUsername, email: adminEmail, password: adminPasswordHash, isAdmin: true, maxCompanies: 0 },
   });
 
   const userAli = await prisma.users.upsert({
     where: { email: "ali.fathi@techsolutions.ma" },
-    update: { password: demoPasswordHash },
-    create: { name: "Ali Fathi", email: "ali.fathi@techsolutions.ma", password: demoPasswordHash },
+    update: { username: "ali.fathi", password: demoPasswordHash },
+    create: { username: "ali.fathi", email: "ali.fathi@techsolutions.ma", password: demoPasswordHash },
   });
 
   const userSara = await prisma.users.upsert({
     where: { email: "sara.mansouri@atlaslogistics.ma" },
-    update: { password: demoPasswordHash },
-    create: { name: "Sara Mansouri", email: "sara.mansouri@atlaslogistics.ma", password: demoPasswordHash },
+    update: { username: "sara.mansouri", password: demoPasswordHash },
+    create: { username: "sara.mansouri", email: "sara.mansouri@atlaslogistics.ma", password: demoPasswordHash },
   });
 
   console.log("✅ Users seeded.");

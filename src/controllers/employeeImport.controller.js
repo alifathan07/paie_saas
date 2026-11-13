@@ -12,6 +12,45 @@ export const importPage = (req, res) => {
     });
 };
 
+function prismaTarget(error) {
+    const target = error?.meta?.target;
+    return Array.isArray(target) ? target.join(" ").toLowerCase() : String(target || "").toLowerCase();
+}
+
+function friendlyImportError(error) {
+    const target = prismaTarget(error);
+
+    if (error?.code === "P2002" && (target.includes("cin") || target.includes("employee_cin"))) {
+        return "Import failed: one or more CIN numbers are already registered. Check the CIN column in your file and remove or correct the duplicates.";
+    }
+    if (error?.code === "P2002" && (target.includes("matricule") || target.includes("employee_matricule"))) {
+        return "Import failed: one or more employee numbers are already registered. Check the Matricule column in your file and remove or correct the duplicates.";
+    }
+    if (error?.code === "P2002") {
+        return "Import failed: some information in the file already exists. Check the employee identifiers and try again.";
+    }
+    if (error?.code === "P2003") {
+        return "Import failed: one of the referenced categories or functions is not available for this company.";
+    }
+    if (error?.code === "P2025") {
+        return "Import failed: a required record could not be found. Refresh the page and try again.";
+    }
+
+    const messages = {
+        NO_ACTIVE_COMPANY: "Import failed: no active company was selected. Select a company and try again.",
+        EMPTY_FILE: "Import failed: the uploaded file is empty.",
+        NO_WORKSHEET: "Import failed: the workbook does not contain a worksheet.",
+        NO_EMPLOYEE_ROWS: "Import failed: no employee rows were found in the file.",
+        IMPORT_VALIDATION_FAILED: "Import failed: some rows contain missing or invalid employee information. Review the details below.",
+        IMPORT_DUPLICATES: "Import failed: the file contains duplicate employee identifiers. Review the details below.",
+        DEEPSEEK_HTTP_401: "Import failed: the document analysis service rejected its credentials. Contact an administrator.",
+        DEEPSEEK_HTTP_429: "Import failed: the document analysis service is temporarily busy. Please try again later.",
+        DEEPSEEK_EMPTY_RESPONSE: "Import failed: the document could not be analyzed. Check the file and try again.",
+        DEEPSEEK_INVALID_JSON: "Import failed: the document analysis returned an invalid result. Please try again.",
+    };
+    return messages[error?.message] || "Import failed: the file could not be imported. Check the file format and employee information, then try again.";
+}
+
 export const importEmployees = async (req, res) => {
     const requestId = req.importRequestId || "missing-request-id";
     const log = (level, event, details = {}) => console[level](`[employee-import] ${event}`, {
@@ -75,12 +114,12 @@ export const importEmployees = async (req, res) => {
             stack: error.stack
         });
         const messages = error.details || [];
-        const errorMessages = error.message === "NO_FILE" ? ["Aucun fichier n’a atteint le serveur. Consultez les logs [employee-import] pour voir le Content-Type et le nombre de fichiers reçus."]
+        const errorMessages = error.message === "NO_FILE" ? ["No file reached the server. Select an Excel file and try again."]
             : error.message === "INVALID_EXCEL_FILE" ? ["Le fichier reçu n’est pas un Excel .xlsx ou .xls."]
             : error.message === "LIMIT_FILE_SIZE" ? ["Le fichier dépasse la limite de 5 Mo."]
             : error.message === "DEEPSEEK_NOT_CONFIGURED" ? ["Ajoutez votre clé DeepSeek dans DEEPSEEK_API_KEY et le modèle dans DEEPSEEK_MODEL dans .env."]
             : error.message === "TOO_MANY_ROWS" ? ["Le fichier ne peut pas dépasser 500 lignes."]
-            : [`Import impossible (${error.message}).`, ...messages];
+            : [friendlyImportError(error), ...messages];
         return res.status(400).render("employees/import", {
             title: "Importer les employés",
             currentPage: "employees",

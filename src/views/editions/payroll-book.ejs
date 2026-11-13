@@ -1,0 +1,42 @@
+<%- include('../partials/header') %>
+<div class="page-header editions-header">
+    <div class="header-title-area"><div class="eyebrow">État mensuel</div><h1 class="page-title">Livre de paie</h1><p class="page-subtitle"><%= book.company.name %> · bulletins de <%= monthName %> <%= year %></p></div>
+    <div class="header-actions"><a class="button secondary" href="/editions/livre/import">Importer un Livre</a><a class="button secondary" href="/editions/livre/pdf?month=<%= month %>&year=<%= year %>" data-pdf-export>Télécharger le PDF</a></div>
+</div>
+<% if (error) { %><div class="bulk-summary editions-error" role="alert"><%= error %></div><% } %>
+<% if (typeof querySuccess !== 'undefined' && querySuccess) { %><div class="bulk-summary editions-notice" role="status"><%= querySuccess %></div><% } %>
+<% if (typeof importErrors !== 'undefined' && importErrors.length) { %>
+<div class="bulk-summary editions-error" role="alert">
+    <strong>Bulletins ignorés ou en erreur :</strong>
+    <ul><% importErrors.slice(0, 10).forEach(item => { %><li>Ligne <%= item.sourceRow %> — <%= item.message %></li><% }); %></ul>
+    <% if (importErrors.length > 10) { %><span>Et <%= importErrors.length - 10 %> autre(s) ligne(s).</span><% } %>
+</div>
+<% } %>
+<section class="payroll-book-toolbar">
+    <div class="payroll-book-brand"><% if (book.company.logoData) { %><img src="<%= book.company.logoData %>" alt="Logo de <%= book.company.name %>"><% } else { %><span class="payroll-book-logo-fallback">EP</span><% } %><div><strong><%= book.company.name %></strong><span><%= book.company.adresse || 'Adresse non renseignée' %><%= book.company.ville ? ` · ${book.company.ville}` : '' %></span></div></div>
+    <div class="payroll-book-period"><span>Période</span><strong><%= String(month).padStart(2, '0') %>/<%= year %></strong><small><%= book.rows.length %> salarié(s)</small></div>
+</section>
+<% if (book.rows.length) { %>
+<section class="payroll-book-card">
+    <div class="payroll-book-heading"><div><h2>LIVRE DE PAIE</h2><p>Valeurs issues des bulletins enregistrés pour la période</p></div><span>Faites défiler horizontalement pour consulter les 19 colonnes</span></div>
+    <% const columns = [
+        ['N°', '', 'numero', null], ['NOM & PRÉNOM', 'N° CNSS', 'nomPrenom', 'numeroCNSS'], ['EMPLOI', 'TX HR', 'emploi', 'tauxHoraire'],
+        ['DT. NAIS.', 'EMBAUCH.', 'dateNaissance', 'dateEmbauche'], ['S', 'F', 'situationFamiliale', 'enfants'], ['H.N', 'NBR. JR. CHOM.', 'heuresNormales', 'joursChomage'],
+        ['HS 25%', 'REMB. MUT.', 'hs25', 'remboursementMutuelle'], ['HS 50%', 'AVANCE AC.', 'hs50', 'avanceAc'], ['HS 100%', 'IND. DIVERS', 'hs100', 'indemniteDivers'],
+        ['JR', 'PLF CNS', 'jours', 'plfCns'], ['JR CONG.', 'MONTANT', 'joursConge', 'montantConge'], ['SAL. BASE', 'MT. ANC.', 'salaireBase', 'anciennete'],
+        ['ANC %', 'IPE', 'ancienneteRate', 'ipe'], ['PRIMES', 'I.R.', 'primesImposables', 'ir'], ['TAHFIZ', 'CNSS', 'tahfiz', 'cnss'],
+        ['SAL. BRUT', 'IND. N. IMP', 'salaireBrut', 'primesNonImposables'], ['RETRAITE', 'AVANCES', 'retraite', 'avances'], ['MUTUELLE', 'AMO (CSS)', 'mutuelle', 'amo'],
+        ['SL IMP', 'PAYE NET', 'salaireNetImposable', 'net']
+    ];
+    const monetary = new Set(['tauxHoraire','heuresNormales','hs25','hs50','hs100','montantConge','salaireBase','anciennete','primesImposables','ir','tahfiz','cnss','salaireBrut','primesNonImposables','retraite','avances','mutuelle','amo','salaireNetImposable','net']);
+    const display = (value, key) => value === null || value === undefined || value === '' ? '' : ['dateNaissance','dateEmbauche'].includes(key) ? new Date(value).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }) : key === 'ancienneteRate' ? `${fmt(value)}%` : key && monetary.has(key) ? fmt(value) : String(value);
+    const bottom = key => ['numeroCNSS','nomPrenom','emploi','situationFamiliale','tauxHoraire'].includes(key);
+    const totalFor = key => ['ancienneteRate','enfants','joursChomage','remboursementMutuelle','avanceAc','indemniteDivers','ipe','situationFamiliale','numeroCNSS','nomPrenom','emploi','dateNaissance','dateEmbauche','numero','tahfiz','mutuelle'].includes(key) ? '' : fmt(book.totals[key]); %>
+    <div class="payroll-book-scroll"><table class="payroll-book-table payroll-book-table-19">
+        <thead><tr><% columns.forEach((column, index) => { %><th class="<%= [1,2].includes(index) ? 'text-left' : '' %>"><span class="top-label"><%= column[0] %></span><span class="bottom-label"><%= column[1] %></span></th><% }); %></tr></thead>
+        <tbody><% book.rows.forEach(row => { %><tr><% columns.forEach((column, index) => { const topKey = column[2], bottomKey = column[3]; %><td class="<%= [1,2].includes(index) ? 'text-left' : 'numeric' %> <%= [15,18].includes(index) ? 'emphasis' : '' %>"><span class="top-value"><%= display(row[topKey], topKey) %></span><span class="bottom-value"><%= display(bottomKey ? row[bottomKey] : '', bottomKey) %></span></td><% }); %></tr><% }); %>
+        <tr class="payroll-book-total"><% columns.forEach((column, index) => { const topKey = column[2], bottomKey = column[3]; %><th class="<%= [1,2].includes(index) ? 'text-left' : '' %> <%= [15,18].includes(index) ? 'emphasis' : '' %>"><span class="top-value"><%= index === 0 ? 'TOTAL' : totalFor(topKey) %></span><span class="bottom-value"><%= index === 0 ? `${book.rows.length} salarié(s)` : totalFor(bottomKey) %></span></th><% }); %></tr></tbody>
+    </table></div>
+</section>
+<% } %>
+<%- include('../partials/footer') %>

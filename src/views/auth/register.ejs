@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Créer un compte — Enmae Paie</title>
+    <link rel="stylesheet" href="/css/custom.css?v=20261101-sticky-columns">
+    <link rel="stylesheet" href="/css/auth-register.css?v=20261110">
+</head>
+<body class="signup-page">
+    <main class="signup-shell">
+        <aside class="signup-aside"><div class="signup-brand"><img class="signup-brand-image" src="/logo.png" alt="Enmae Solutions"></div><div class="signup-aside-content"><div class="signup-eyebrow">Création de votre espace</div><h2>Configuration sécurisée</h2><p>Renseignez vos informations pour créer votre espace entreprise.</p></div></aside>
+        <section class="signup-main" aria-labelledby="signup-title"><div class="signup-eyebrow" style="color:#5270cc">Commencer maintenant</div><h1 id="signup-title">Créer votre compte</h1><p class="signup-intro">Configurez votre premier espace entreprise Enmae Paie.</p>
+            <% if (error) { %><div class="signup-error" role="alert"><%= error %></div><% } %>
+            <form class="signup-form" action="/auth/register" method="POST">
+                <div class="signup-field"><label for="companyName">Nom de l’entreprise</label><input type="text" id="companyName" name="companyName" maxlength="191" value="<%= form.companyName %>" placeholder="Ex. Atlas Consulting" required autofocus></div>
+                <div class="signup-field"><label for="email">E-mail professionnel</label><input type="email" id="email" name="email" maxlength="191" value="<%= form.email %>" placeholder="vous@entreprise.ma" required><small>Cette adresse servira pour la connexion et la récupération des codes de sécurité.</small></div>
+                <div class="signup-field"><label for="username">Nom d’utilisateur</label><input type="text" id="username" name="username" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{2,63}" value="<%= form.username %>" placeholder="votre.identifiant" required></div>
+                <div class="signup-row"><div class="signup-field"><label for="password">Mot de passe</label><input type="password" id="password" name="password" minlength="8" autocomplete="new-password" placeholder="8 caractères minimum" required></div><div class="signup-field"><label for="passwordConfirmation">Confirmation</label><input type="password" id="passwordConfirmation" name="passwordConfirmation" minlength="8" autocomplete="new-password" placeholder="Répétez le mot de passe" required></div></div>
+                <button class="signup-submit" type="submit">Créer mon espace entreprise</button>
+            </form>
+            <p class="signup-login">Vous avez déjà un compte ? <a href="/auth">Se connecter</a></p><div class="signup-foot">© 2026 Enmae Paie · Vos données restent privées</div>
+        </section>
+    </main>
+</body>
+</html>

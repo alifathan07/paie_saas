@@ -4,10 +4,24 @@
 
 Authentication is implemented by `src/routes/auth.js`,
 `src/controllers/auth.controller.js` and `src/services/auth.service.js`.
-Passwords are hashed with `bcryptjs` using cost 10; the login path normalizes email,
+Public registration creates a username-based account and its first company in
+one transaction; the submitted company email is used as the account email for
+login and verification messages.
+Passwords are hashed with `bcryptjs` using cost 10; the login path accepts the
+normalized username (and retains normalized email as a compatibility identifier),
 checks blocked-account state and stores the signed-in user in an
 `express-session` session. Session data includes user identity/admin flags and
 the active company context.
+
+Users have a unique username and an email-code challenge enabled by default for
+client accounts. An administrator can disable it per account from the admin user
+page. When `twoFactorEnabled` is enabled, password validation
+creates a six-digit code valid for ten minutes and sends it to the user's stored
+email address. The authenticated session is created only after the code succeeds.
+SMTP is configured with `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`,
+`SMTP_PASSWORD` and `EMAIL_FROM`. If the provider's SMTP endpoint uses a
+certificate for a different official hostname, `SMTP_TLS_SERVERNAME` may be
+set to that certificate hostname; certificate verification remains enabled.
 
 `index.js` configures the MySQL session store with a two-hour lifetime,
 `httpOnly`, configurable `sameSite` and a production-only secure cookie.

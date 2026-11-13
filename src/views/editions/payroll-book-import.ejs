@@ -1,0 +1,32 @@
+<%- include('../partials/header') %>
+<div class="page-header editions-header">
+    <div class="header-title-area">
+        <div class="eyebrow">Assistant d’import paie</div>
+        <h1 class="page-title">Générer depuis un Livre de paie</h1>
+        <p class="page-subtitle">Importez un Livre de paie : DeepSeek extrait les données et les bulletins sont générés automatiquement lorsque les salariés sont reconnus.</p>
+    </div>
+</div>
+<% if (error) { %><div class="bulk-summary editions-error" role="alert"><%= error %></div><% } %>
+<% if (success) { %><div class="bulk-summary editions-notice" role="status"><%= success %></div><% } %>
+<section class="edition-form-card payroll-book-import-card">
+    <div class="edition-form-heading"><span class="edition-form-icon">✦</span><div><h2>Importer le document source</h2><p>Formats acceptés : PDF, JPG, JPEG ou PNG · 10 Mo maximum</p></div></div>
+    <form method="POST" action="/editions/livre/import" enctype="multipart/form-data" class="payroll-book-import-form">
+        <label class="payroll-book-dropzone" for="payroll-book-file"><strong>Déposez votre Livre de paie ici</strong><span>ou cliquez pour sélectionner un fichier</span><input id="payroll-book-file" type="file" name="payrollBook" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" required></label>
+        <p class="form-help">DeepSeek extrait la période, les lignes salariés et les indemnités non imposables. Les bulletins utilisent ensuite le moteur de paie existant.</p>
+        <div class="edition-form-actions"><a href="/editions/livre" class="button secondary">Retour</a><button type="submit" class="btn-primary">Importer et générer</button></div>
+    </form>
+</section>
+<% if (preview) { %>
+<section class="payroll-book-import-preview">
+    <div class="payroll-book-heading"><div><h2><%= preview.unmatchedCount || preview.missingInputCount ? 'Lignes à corriger' : 'Données extraites' %></h2><p><%= preview.sourceName %> · période <strong><%= String(preview.period.month).padStart(2, '0') %>/<%= preview.period.year %></strong></p></div><span><%= preview.rows.length %> ligne(s)</span></div>
+        <div class="payroll-book-scroll"><table class="payroll-book-table payroll-book-import-table"><thead><tr><th>Ligne</th><th>Matricule</th><th>CNSS</th><th>Salarié trouvé</th><th>Base salaire</th><th>Jours</th><th>Total primes non imposables <small>Optionnel pour cet import</small></th><th>Statut</th></tr></thead><tbody>
+            <% preview.rows.forEach(row => { %><tr><td><%= row.sourceRow %></td><td><%= row.matricule || '—' %></td><td><%= row.numeroCNSS || '—' %></td><td><%= row.employeeName || 'Non identifié' %></td><td class="numeric"><%= row.baseSalary === null ? 'Non lisible' : row.baseSalary.toFixed(2) %></td><td class="numeric"><%= row.workedDays === null ? '—' : row.workedDays.toFixed(2) %></td><td class="numeric"><%= row.totalPrimeNonImposable === null || row.totalPrimeNonImposable === undefined ? '—' : Number(row.totalPrimeNonImposable).toFixed(2) %></td><td><%= row.locked ? 'Bloqué' : !row.employeeId || !row.baseSalary ? 'À corriger' : 'Prêt' %></td></tr><% }); %>
+        </tbody></table></div>
+        <% if (preview.unmatchedCount || preview.missingInputCount) { %>
+            <p class="form-help">Aucun bulletin n’a été généré. Corrigez les données salariés ou le Livre source, puis importez-le de nouveau.</p>
+        <% } else { %>
+            <p class="form-help">Aucun bulletin n’a été généré. Corrigez le problème indiqué, puis importez de nouveau le document.</p>
+        <% } %>
+</section>
+<% } %>
+<%- include('../partials/footer') %>

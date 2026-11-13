@@ -90,8 +90,6 @@ export async function updateFixedRubrique(category, id, companyId, data) {
         where: { id: existing.id },
         data: {
             code: cleanCode(data.code),
-            name: data.name === undefined ? existing.name : cleanName(data.name),
-            active: data.active !== false,
         },
     });
 }
@@ -131,14 +129,10 @@ export async function createImposableRubrique(companyId, data) {
 export async function updateImposableRubrique(id, companyId, data) {
     const existing = await prisma.rubriqueImposable.findFirst({ where: { id: Number(id), companyId: companyKey(companyId) } });
     if (!existing) throw new Error("RUBRIQUE_NOT_FOUND");
-    const calculationKey = existing.calculationKey || calculationKeyFromName(cleanName(data.name));
     return prisma.rubriqueImposable.update({
         where: { id: existing.id },
         data: {
-            code: cleanCode(data.code), name: cleanName(data.name),
-            entryType: data.entryType === "CALCULATED" ? "CALCULATED" : "MANUAL_AMOUNT",
-            calculationKey,
-            active: data.active !== false,
+            code: cleanCode(data.code),
         },
     });
 }

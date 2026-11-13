@@ -45,6 +45,11 @@ const sessionStore = new MySQLStore({
 });
 
 app.use(express.static('public'));
+app.get('/landing.html', (req, res) => res.sendFile('landing.html', { root: process.cwd() }));
+app.get('/logo.png', (req, res) => res.sendFile('logo.png', { root: process.cwd(), maxAge: '7d' }));
+// Browsers request this before the active company is selected. It is a public
+// asset and must not go through the company-boundary middleware.
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.set('view engine', 'ejs');

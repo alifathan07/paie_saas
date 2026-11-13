@@ -95,7 +95,17 @@ export function loginRateLimit(req, res, next) {
         loginAttempts.set(key, { startedAt: now, count: 1 });
         return next();
     }
-    if (entry.count >= LOGIN_MAX_ATTEMPTS) return res.status(429).send("Trop de tentatives. Réessayez plus tard.");
+    if (entry.count >= LOGIN_MAX_ATTEMPTS) {
+        const retryAfter = Math.max(1, Math.ceil((entry.startedAt + LOGIN_WINDOW_MS - now) / 1000));
+        res.setHeader("Retry-After", String(retryAfter));
+        if (req.path === "/login") {
+            return res.status(429).render("auth/login", {
+                title: "Connexion",
+                error: "Trop de tentatives de connexion. Réessayez dans quelques minutes.",
+            });
+        }
+        return res.status(429).send("Trop de tentatives. Réessayez plus tard.");
+    }
     entry.count += 1;
     return next();
 }

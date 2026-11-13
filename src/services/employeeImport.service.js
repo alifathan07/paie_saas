@@ -44,7 +44,7 @@ export function normalizeAIJsonContent(content) {
     return (fenced ? fenced[1] : trimmed).trim();
 }
 
-function resolveAIProvider() {
+export function resolveAIProvider() {
     if (String(process.env.DEEPSEEK_API_KEY || "").trim()) {
         return {
             provider: "deepseek",
